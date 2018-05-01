@@ -28,6 +28,8 @@ def build_dataset(knowledge_graph, target_triples, config):
     logger.info("Starting dataset build")
     # generate target matrix
     classes = {t[2] for t in target_triples}  # unique classes
+    logger.info("Found {} instances (statements)".format(len(target_triples)))
+    logger.info("Target classes ({}): {}".format(len(classes), classes))
     
     nodes_map = {label:i for i,label in enumerate(knowledge_graph.atoms())}
     classes_map = {label:i for i,label in enumerate(classes)}
@@ -78,6 +80,7 @@ def build_model(X, Y, A, config):
                              activation=layers[-1]['activation'])([H] + A_in)
 
     # Compile model
+    logger.info("Compiling model")
     model = Model(input=[X_in] + A_in, output=Y_out)
     model.compile(loss=config['model']['loss'],
                   optimizer=Adam(lr=config['model']['learning_rate']))

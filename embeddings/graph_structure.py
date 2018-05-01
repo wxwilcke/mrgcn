@@ -37,6 +37,9 @@ def generate_adjacency_matrices(knowledge_graph,
     include_inverse = config['include_inverse_properties']
     normalize = config['normalize']
 
+    logger.info("Generating {} adjacency matrices of size {}".format(
+                                                        len(properties_dict),
+                                                        adj_shape))
     adjacencies = []
     for prop, i in properties_dict.items():
         # create array to hold all edges per property

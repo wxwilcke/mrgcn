@@ -14,15 +14,13 @@ from tasks.node_classification import build_dataset
 from tasks.utils import strip_graph
 
 def run(args, config):
+    logger.info("Generating data structures")
     with KnowledgeGraph(path=config['graph']['file']) as kg:
         targets = strip_graph(kg, config)
         A = graph_structure.generate(kg, config)
         X, Y, X_node_map = build_dataset(kg, targets, config)
 
     return (A, X, Y, X_node_map)
-
-def print_header():
-    print("Multimodal Relational Graph Convolution Network")
 
 def set_logging(args, timestamp):
     log_path = args.log_directory
@@ -33,7 +31,7 @@ def set_logging(args, timestamp):
                     else "{}/{}.log".format(log_path, timestamp)
 
     logging.basicConfig(filename=filename,
-                        format='%(asctime)s %(levelname)s: %(message)s',
+                        format='%(asctime)s %(levelname)s [%(module)s/%(funcName)s]: %(message)s',
                         level=logging.INFO)
 
     if args.verbose:
@@ -51,7 +49,7 @@ if __name__ == "__main__":
 
     assert is_readable(args.config)
     config = toml.load(args.config)
-    
+
     if args.output is None:
         args.output = './' + config['name'] + '{}.tar'.format(timestamp)
     assert is_writable(args.output)
@@ -60,8 +58,9 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info("Arguments:\n{}".format(
         "\n".join(["\t{}: {}".format(arg, getattr(args, arg)) for arg in vars(args)])))
+    logger.info("Configuration:\n{}".format(
+        "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
-    print_header()
     tar.store(args.output, run(args, config), names=['A', 'X', 'Y', 'X_node_map'])
 
     logging.shutdown()

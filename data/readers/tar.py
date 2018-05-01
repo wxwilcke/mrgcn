@@ -57,7 +57,8 @@ def read(path):
                 content.append(_load_py(tf, name))
                 names.append(base)
 
-    return (content, names)
+    logger.info("Found data structures: {}".format(names))
+    return {k:v for k,v in zip(names, content)}
 
 def _load_csr(tf, name):
     loader = _load_nda(tf, name)

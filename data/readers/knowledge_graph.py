@@ -117,7 +117,7 @@ class KnowledgeGraph:
             yield(p)
 
     def triples(self, property=None):
-        self.logger.info("Yielding triples")
+        self.logger.info("Yielding triples (property {})".format(property))
         for s,p,o in self.graph.triples((None, property, None)):
             yield s, p, o
 
