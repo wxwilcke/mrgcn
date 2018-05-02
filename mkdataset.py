@@ -41,7 +41,7 @@ if __name__ == "__main__":
     timestamp = int(time())
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--config", help="Configuration file (toml)", default=None)
+    parser.add_argument("-c", "--config", help="Configuration file (toml)", required=True, default=None)
     parser.add_argument("-o", "--output", help="Output file (tar)", default=None)
     parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
     parser.add_argument("--log_directory", help="Where to save the log file", default="../log/")

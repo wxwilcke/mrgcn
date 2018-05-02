@@ -6,7 +6,6 @@ from os.path import splitext
 from time import time
 
 import toml
-import numpy as np # tmp
 
 from data.readers.knowledge_graph import KnowledgeGraph
 from data.utils import is_readable, is_writable
@@ -41,73 +40,32 @@ def run(args, config):
     # create splits
     dataset = create_splits(X, Y, X_node_map, config['task']['dataset_ratio'])
 
-    train_mask = sample_mask(dataset['train']['X_idx'], Y.shape[0])
-
     # train model
-    Y_hat = None
-    nepoch = config['model']['epoch']
+    nepochs = config['model']['epoch']
     batch_size = X.shape[0]  # number of nodes
 
-    logging.info("Training for {} epoch".format(nepoch))
-    for epoch in range(1, nepoch+1):
-        # Log wall-clock time
-        #t = time()
+    logging.info("Training for {} epoch".format(nepochs))
+    training = model.fit(x=[dataset['train']['X']] + A, 
+                  y=dataset['train']['Y'],
+                  batch_size=batch_size,
+                  nb_epoch=nepochs,
+                  sample_weight=sample_mask(dataset['train']['X_idx'],
+                                            Y.shape[0]),
+                  validation_data=([dataset['val']['X']] + A, 
+                                   dataset['val']['Y']),
+                  verbose=int(args.verbose))
 
-        # Single training iteration
-        model.fit([X] + A, dataset['train']['Y'], sample_weight=train_mask,
-                  batch_size=batch_size, nb_epoch=1, shuffle=False, verbose=0)
+    print(training.history)
 
-        # output progress
-        if epoch % 1 == 0:
-            # Predict on full dataset
-            Y_hat = model.predict([X] + A, batch_size=batch_size)
+    testing = model.evaluate(x=[dataset['test']['X']] + A, 
+                  y=dataset['test']['Y'],
+                  batch_size=batch_size,
+                  verbose=int(args.verbose))
 
-        #    # Train / validation scores
-        #    train_val_loss, train_val_acc = evaluate_preds(Y_hat,
-        #                                                   [dataset['train']['Y'],
-        #                                                    dataset['val']['Y']],
-        #                                                   [dataset['train']['X_idx'],
-        #                                                    dataset['val']['X_idx']])
+    print(model.metrics_names)
+    print(testing)
 
-        #    print("Epoch: {:04d}".format(epoch),
-        #          "train_loss= {:.4f}".format(train_val_loss[0]),
-        #          "train_acc= {:.4f}".format(train_val_acc[0]),
-        #          "val_loss= {:.4f}".format(train_val_loss[1]),
-        #          "val_acc= {:.4f}".format(train_val_acc[1]),
-        #          "time= {:.4f}".format(time() - t))
-
-        #else:
-        #    print("Epoch: {:04d}".format(epoch),
-        #          "time= {:.4f}".format(time() - t))
-
-    # Test
-    test_loss, test_acc = evaluate_preds(Y_hat, [dataset['test']['Y']], 
-                                         [dataset['test']['X_idx']])
-    print("Test set results:",
-          "loss= {:.4f}".format(test_loss[0]),
-          "accuracy= {:.4f}".format(test_acc[0]))
-    
-    print (np.random.get_state()[1][-5:])
-    return (None, None)
-    
-def categorical_crossentropy(preds, labels):
-    return np.mean(-np.log(np.extract(labels, preds)))
-
-def accuracy(preds, labels):
-    return np.mean(np.equal(np.argmax(labels, 1), np.argmax(preds, 1)))
-
-
-def evaluate_preds(preds, labels, indices):
-
-    split_loss = list()
-    split_acc = list()
-
-    for y_split, idx_split in zip(labels, indices):
-        split_loss.append(categorical_crossentropy(preds[idx_split], y_split[idx_split]))
-        split_acc.append(accuracy(preds[idx_split], y_split[idx_split]))
-
-    return split_loss, split_acc
-
+    return (model, testing)
 
 def set_logging(args, timestamp):
     log_path = args.log_directory
