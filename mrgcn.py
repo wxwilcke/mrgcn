@@ -5,17 +5,17 @@ import argparse
 from os.path import splitext
 from time import time
 
+from keras.callbacks import CSVLogger, EarlyStopping, ReduceLROnPlateau
 import toml
 
 from data.readers.knowledge_graph import KnowledgeGraph
 from data.utils import is_readable, is_writable
 from data.readers import tar
-#from data.writers import tsv
 from embeddings import graph_structure
 from tasks.node_classification import build_dataset, build_model
 from tasks.utils import create_splits, sample_mask, set_seed, strip_graph
 
-def run(args, config):
+def run(args, csv_log, config):
     set_seed(config['task']['seed'])
 
     # prep data
@@ -44,7 +44,17 @@ def run(args, config):
     nepochs = config['model']['epoch']
     batch_size = X.shape[0]  # number of nodes
 
-    logging.info("Training for {} epoch".format(nepochs))
+    adapt_lr = ReduceLROnPlateau(monitor='val_loss',
+                                 factor=0.4,
+                                 patience=5,
+                                 min_lr=0.001,
+                                 verbose=int(args.verbose))
+    early_stop = EarlyStopping(monitor='val_loss', 
+                               min_delta=0.0001, 
+                               patience=10, 
+                               verbose=int(args.verbose))
+
+    logging.info("Training for a maximum of {} epoch".format(nepochs))
     training = model.fit(x=[dataset['train']['X']] + A, 
                   y=dataset['train']['Y'],
                   batch_size=batch_size,
@@ -53,19 +63,24 @@ def run(args, config):
                                             Y.shape[0]),
                   validation_data=([dataset['val']['X']] + A, 
                                    dataset['val']['Y']),
+                  callbacks=[adapt_lr, early_stop, csv_log],
                   verbose=int(args.verbose))
 
-    print(training.history)
-
+    # test model
     testing = model.evaluate(x=[dataset['test']['X']] + A, 
                   y=dataset['test']['Y'],
                   batch_size=batch_size,
                   verbose=int(args.verbose))
 
-    print(model.metrics_names)
-    print(testing)
+    results = "Performance on test set:\n{}".format(
+        "\n".join(["\t{}: {:.4f}".format(k,v) for k,v in zip(
+                                                         model.metrics_names,
+                                                         testing)]))
 
-    return (model, testing)
+    logger.info(results)
+    print(results)
+    
+    return model
 
 def set_logging(args, timestamp):
     log_path = args.log_directory
@@ -89,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--config", help="Configuration file (toml)", required=True, default=None)
     parser.add_argument("-i", "--input", help="Prepared input file (tar)", default=None)
     parser.add_argument("-m", "--mode", help="Train or test a model", choices=("train", "test"), default="train")
-    parser.add_argument("-o", "--output", help="Output file (tsv)", default=None)
+    parser.add_argument("-o", "--output", help="Output file (csv)", default=None)
     parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
     parser.add_argument("--log_directory", help="Where to save the log file", default="../log/")
     parser.add_argument("--save_model", help="Save the trained model to file (h5)", action="store_true")
@@ -101,6 +116,7 @@ if __name__ == "__main__":
     if args.output is None:
         args.output = './' + config['name'] + '{}.tsv'.format(timestamp)
     assert is_writable(args.output)
+    csv_log = CSVLogger(args.output, separator=',')
 
     set_logging(args, timestamp)
     logger = logging.getLogger(__name__)
@@ -110,8 +126,7 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     # write results
-    model, results = run(args, config)
-    #tsv.write(args.output, results)
+    model = run(args, csv_log, config)
     
     if args.save_model is True:
         raise NotImplementedError()

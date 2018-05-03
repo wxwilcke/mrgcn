@@ -3,6 +3,7 @@
 import logging
 
 from keras.layers import Input, Dropout
+from keras.metrics import categorical_accuracy
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.regularizers import l2
@@ -83,6 +84,7 @@ def build_model(X, Y, A, config):
     logger.info("Compiling model")
     model = Model(input=[X_in] + A_in, output=Y_out)
     model.compile(loss=config['model']['loss'],
-                  optimizer=Adam(lr=config['model']['learning_rate']))
+                  optimizer=Adam(lr=config['model']['learning_rate']),
+                  metrics=[categorical_accuracy])
 
     return model
