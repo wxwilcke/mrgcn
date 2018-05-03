@@ -6,9 +6,9 @@ from time import time
 
 import toml
 
-from data.readers.knowledge_graph import KnowledgeGraph
+from data.io.knowledge_graph import KnowledgeGraph
+from data.io.tarball import Tarball
 from data.utils import is_readable, is_writable
-from data.writers import tar
 from embeddings import graph_structure
 from tasks.node_classification import build_dataset
 from tasks.utils import strip_graph
@@ -61,6 +61,7 @@ if __name__ == "__main__":
     logger.info("Configuration:\n{}".format(
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
-    tar.store(args.output, run(args, config), names=['A', 'X', 'Y', 'X_node_map'])
+    with Tarball(args.output, 'w') as tb:
+        tb.store(run(args, config), names=['A', 'X', 'Y', 'X_node_map'])
 
     logging.shutdown()

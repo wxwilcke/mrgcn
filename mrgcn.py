@@ -8,9 +8,9 @@ from time import time
 from keras.callbacks import CSVLogger, EarlyStopping, ReduceLROnPlateau
 import toml
 
-from data.readers.knowledge_graph import KnowledgeGraph
+from data.io.knowledge_graph import KnowledgeGraph
+from data.io.tarball import Tarball
 from data.utils import is_readable, is_writable
-from data.readers import tar
 from embeddings import graph_structure
 from tasks.node_classification import build_dataset, build_model
 from tasks.utils import create_splits, sample_mask, set_seed, strip_graph
@@ -28,11 +28,11 @@ def run(args, csv_log, config):
     else:
         assert is_readable(args.input)
         logging.info("Importing prepared tarball")
-        tarball = tar.read(args.input)
-        A = tarball['A']
-        X = tarball['X']
-        Y = tarball['Y']
-        X_node_map = tarball['X_node_map']
+        with Tarball(args.input, 'r') as tb:
+            A = tb.get('A')
+            X = tb.get('X')
+            Y = tb.get('Y')
+            X_node_map = tb.get('X_node_map')
 
     # compile model computation graph
     model = build_model(X, Y, A, config)
