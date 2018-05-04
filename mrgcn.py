@@ -49,10 +49,10 @@ def run(args, csv_log, config):
                                  patience=5,
                                  min_lr=0.001,
                                  verbose=int(args.verbose))
-    early_stop = EarlyStopping(monitor='val_loss', 
-                               min_delta=0.0001, 
-                               patience=10, 
-                               verbose=int(args.verbose))
+    #early_stop = EarlyStopping(monitor='val_loss', 
+    #                           min_delta=0.0001, 
+    #                           patience=10, 
+    #                           verbose=int(args.verbose))
 
     logging.info("Training for a maximum of {} epoch".format(nepochs))
     training = model.fit(x=[dataset['train']['X']] + A, 
@@ -63,14 +63,27 @@ def run(args, csv_log, config):
                                             Y.shape[0]),
                   validation_data=([dataset['val']['X']] + A, 
                                    dataset['val']['Y']),
-                  callbacks=[adapt_lr, early_stop, csv_log],
+                  callbacks=[adapt_lr, csv_log],
                   verbose=int(args.verbose))
-
+    
     # test model
     testing = model.evaluate(x=[dataset['test']['X']] + A, 
                   y=dataset['test']['Y'],
                   batch_size=batch_size,
                   verbose=int(args.verbose))
+
+
+    # output performance
+    print("Performance on training set:\n{}".format(
+        "\n".join(["\t{}: {:.4f}".format(k,v) for k,v in
+                   [('loss', training.history['loss'][-1]),
+                    ('categorical accuracy',
+                     training.history['categorical_accuracy'][-1])]])))
+    print("Performance on validation set:\n{}".format(
+        "\n".join(["\t{}: {:.4f}".format(k,v) for k,v in
+                   [('loss', training.history['val_loss'][-1]),
+                    ('categorical accuracy',
+                     training.history['val_categorical_accuracy'][-1])]])))
 
     results = "Performance on test set:\n{}".format(
         "\n".join(["\t{}: {:.4f}".format(k,v) for k,v in zip(
