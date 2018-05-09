@@ -22,7 +22,7 @@ class Tarball:
 
     def __init__(self, path=None, mode='r'):
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Initiating Tarball")
+        self.logger.debug("Initiating Tarball")
 
         if path is None:
             raise ValueError("::No path supplied")
@@ -30,10 +30,10 @@ class Tarball:
         self.tar = tarfile.open(path, mode)
 
         if 'r' in mode:
-            self.logger.info("Loading from file: {}".format(path))
+            self.logger.debug("Loading from file: {}".format(path))
             self._content = self.read(path)
         else:
-            self.logger.info("Storing to file: {}".format(path))
+            self.logger.debug("Storing to file: {}".format(path))
 
     def read(self, path):
         content = []
@@ -77,7 +77,7 @@ class Tarball:
                 content.append(self._read_py( name))
                 names.append(base)
 
-        self.logger.info("Found data structures: {}".format(names))
+        self.logger.debug("Found data structures: {}".format(names))
         return {k:v for k,v in zip(names, content)}
 
     def store(self, files, names):

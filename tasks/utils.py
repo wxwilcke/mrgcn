@@ -16,9 +16,9 @@ def set_seed(seed=-1):
         random.seed(seed)
         np.random.seed(seed)
 
-        logger.info("Setting seed to {}".format(seed))
+        logger.debug("Setting seed to {}".format(seed))
     else:
-        logger.info("Using random seed")
+        logger.debug("Using random seed")
 
 def strip_graph(knowledge_graph, config):
     target_property = config['task']['target_property'] 
@@ -26,7 +26,7 @@ def strip_graph(knowledge_graph, config):
     #target_classes = config['task']['target_classes']
     
     n = knowledge_graph.__len__()
-    logger.info("Stripping knowledge graph...")
+    logger.debug("Stripping knowledge graph...")
     # list of target triples (entity-class mapping)
     target_triples = list(knowledge_graph.triples(URIRef(target_property)))
     knowledge_graph.graph -= target_triples  # strip targets from source
@@ -37,17 +37,17 @@ def strip_graph(knowledge_graph, config):
                                         URIRef(target_property_inv)))
 
     m = knowledge_graph.__len__()
-    logger.info("Stripped {} statements ({} remain)".format(n-m, m))
+    logger.debug("Stripped {} statements ({} remain)".format(n-m, m))
 
     return target_triples
 
-def create_splits(X, Y, X_nodes_map, dataset_ratio=(.6,.2,.2), shuffle=True): 
-    assert sum(dataset_ratio) == 1.0
-    logger.info("Creating train-test-validation sets with ratio {}".format(dataset_ratio))
+def create_splits(X, Y, X_nodes_map, dataset_ratio=(.6,.2,.2), shuffle=True):
+    assert round(sum(dataset_ratio), 2) == 1.0
+    logger.debug("Creating train-test-validation sets with ratio {}".format(dataset_ratio))
     # indices of targets
     idx = np.array(range(X_nodes_map.shape[0]))
     if shuffle:
-        logger.info("Shuffling dataset")
+        logger.debug("Shuffling dataset")
         np.random.shuffle(idx)
 
     # create splits
@@ -76,8 +76,7 @@ def create_splits(X, Y, X_nodes_map, dataset_ratio=(.6,.2,.2), shuffle=True):
             'test': { 'X': X, 'Y': Y_test, 'X_idx': X_test_idx },
             'val': { 'X': X, 'Y': Y_val, 'X_idx': X_val_idx }}
 
-def sample_mask(idx, l):
-    logger.info("Adding sample mask")
-    mask = np.zeros(l)
+def sample_mask(idx, n):
+    mask = np.zeros(n)
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)

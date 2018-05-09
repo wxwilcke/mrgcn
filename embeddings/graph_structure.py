@@ -21,7 +21,7 @@ def generate(knowledge_graph, config):
                                 adj_shape,
                                 config['graph']['embeddings']['structural'])
 
-    # add identity matrix (why?)
+    # add identity matrix (self-relations)
     ident = sp.identity(len(nodes_dict)).tocsr()
     if config['graph']['embeddings']['structural']['normalize']:
         ident = normalize_adjacency_matrix(ident)
@@ -37,7 +37,7 @@ def generate_adjacency_matrices(knowledge_graph,
     include_inverse = config['include_inverse_properties']
     normalize = config['normalize']
 
-    logger.info("Generating {} adjacency matrices of size {}".format(
+    logger.debug("Generating {} adjacency matrices of size {}".format(
                                                         len(properties_dict),
                                                         adj_shape))
     adjacencies = []

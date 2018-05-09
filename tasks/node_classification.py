@@ -3,7 +3,6 @@
 import logging
 
 from keras.layers import Input, Dropout
-from keras.metrics import categorical_accuracy
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.regularizers import l2
@@ -17,7 +16,7 @@ from layers.input_adj import InputAdj
 logger = logging.getLogger(__name__)
 
 def generate_task(knowledge_graph, A, targets, config):
-    logger.info("Generating node classification task")
+    logger.debug("Generating node classification task")
     X, Y, X_node_idx = build_dataset(knowledge_graph, targets, config)
     model = build_model(X,
                         Y,
@@ -26,11 +25,11 @@ def generate_task(knowledge_graph, A, targets, config):
     return (X, Y, X_node_idx, model)
 
 def build_dataset(knowledge_graph, target_triples, config):
-    logger.info("Starting dataset build")
+    logger.debug("Starting dataset build")
     # generate target matrix
     classes = {t[2] for t in target_triples}  # unique classes
-    logger.info("Found {} instances (statements)".format(len(target_triples)))
-    logger.info("Target classes ({}): {}".format(len(classes), classes))
+    logger.debug("Found {} instances (statements)".format(len(target_triples)))
+    logger.debug("Target classes ({}): {}".format(len(classes), classes))
     
     nodes_map = {label:i for i,label in enumerate(knowledge_graph.atoms())}
     classes_map = {label:i for i,label in enumerate(classes)}
@@ -50,7 +49,7 @@ def build_dataset(knowledge_graph, target_triples, config):
 def build_model(X, Y, A, config):
     layers = config['model']['layers']
     assert len(layers) >= 2
-    logger.info("Starting model build")
+    logger.debug("Starting model build")
 
     support = len(A)
     A_in = [InputAdj(sparse=True) for _ in range(support)]
@@ -81,10 +80,25 @@ def build_model(X, Y, A, config):
                              activation=layers[-1]['activation'])([H] + A_in)
 
     # Compile model
-    logger.info("Compiling model")
+    logger.debug("Compiling model")
     model = Model(input=[X_in] + A_in, output=Y_out)
     model.compile(loss=config['model']['loss'],
-                  optimizer=Adam(lr=config['model']['learning_rate']),
-                  metrics=[categorical_accuracy])
+                  optimizer=Adam(lr=config['model']['learning_rate']))
 
     return model
+
+def evaluate_model(Y_hat, Y, indices):
+    split_loss = []
+    split_acc = []
+
+    for Y_split, idx_split in zip(Y, indices):
+        split_loss.append(categorical_crossentropy(Y_hat[idx_split], Y_split[idx_split]))
+        split_acc.append(categorical_accuracy(Y_hat[idx_split], Y_split[idx_split]))
+
+    return split_loss, split_acc
+
+def categorical_accuracy(Y_hat, Y):
+    return np.mean(np.equal(np.argmax(Y, 1), np.argmax(Y_hat, 1)))
+
+def categorical_crossentropy(Y_hat, Y):
+    return np.mean(-np.log(np.extract(Y, Y_hat)))

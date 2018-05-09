@@ -21,7 +21,7 @@ class KnowledgeGraph:
 
     def __init__(self, graph=None, path=None):
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Initiating Knowledge Graph")
+        self.logger.debug("Initiating Knowledge Graph")
         
         if graph is not None:
             self.graph = graph
@@ -31,7 +31,7 @@ class KnowledgeGraph:
             raise ValueError(":: Constructor missing required argument")
 
         self._property_distribution = Counter(self.graph.predicates())
-        self.logger.info("Knowledge Graph ({} facts) succesfully imported".format(len(self.graph)))
+        self.logger.debug("Knowledge Graph ({} facts) succesfully imported".format(len(self.graph)))
 
     def _read(self, path=None):
         assert is_readable(path) 
@@ -40,7 +40,7 @@ class KnowledgeGraph:
         if not is_gzip(path):
             graph.parse(path, format=guess_format(path))
         else:
-            self.logger.info("Input recognized as gzip file")
+            self.logger.debug("Input recognized as gzip file")
             with gzip.open(path, 'rb') as f:
                 graph.parse(f, format=guess_format(path[:-3]))
 
@@ -59,17 +59,17 @@ class KnowledgeGraph:
     ### Generators ###
 
     def atoms(self):
-        self.logger.info("Yielding atoms")
+        self.logger.debug("Yielding atoms")
         for atom in frozenset(chain(self.graph.subjects(), self.graph.objects())):
             yield(atom)
 
     def non_terminal_atoms(self):
-        self.logger.info("Yielding non-terminal atoms")
+        self.logger.debug("Yielding non-terminal atoms")
         for atom in frozenset(self.graph.subjects()):
             yield(atom)
 
     def terminal_atoms(self):
-        self.logger.info("Yielding terminal atoms")
+        self.logger.debug("Yielding terminal atoms")
         non_terminal_atoms = list(self.non_terminal_atoms())
         for atom in frozenset(self.graph.objects()):
             if atom in non_terminal_atoms:
@@ -78,13 +78,13 @@ class KnowledgeGraph:
             yield(atom)
 
     def attributes(self):
-        self.logger.info("Yielding attributes")
+        self.logger.debug("Yielding attributes")
         for obj in self.graph.objects():
             if type(obj) is Literal:
                 yield(obj)
 
     def entities(self, omit_blank_nodes=False):
-        self.logger.info("Yielding entities")
+        self.logger.debug("Yielding entities")
         for res in self.atoms():
             if (type(res) is Literal or
                (omit_blank_nodes and type(res) is BNode)):
@@ -94,7 +94,7 @@ class KnowledgeGraph:
 
     def objecttype_properties(self):
         attributes = frozenset(self.attributes())
-        self.logger.info("Yielding OT predicates")
+        self.logger.debug("Yielding OT predicates")
         for p in frozenset(self.graph.predicates()):
             if len(set(self.graph.objects(None, p))-attributes) <= 0:
                 # p is only used with a literal as object
@@ -104,7 +104,7 @@ class KnowledgeGraph:
             
     def datatype_properties(self):
         objecttype_properties = set(self.objecttype_properties())
-        self.logger.info("Yielding DT predicates")
+        self.logger.debug("Yielding DT predicates")
         for p in frozenset(self.graph.predicates()):
             if p in objecttype_properties:
                 continue
@@ -112,12 +112,12 @@ class KnowledgeGraph:
             yield(p)
     
     def properties(self):
-        self.logger.info("Yielding properties")
+        self.logger.debug("Yielding properties")
         for p in frozenset(self.graph.predicates()):
             yield(p)
 
     def triples(self, property=None):
-        self.logger.info("Yielding triples (property {})".format(property))
+        self.logger.debug("Yielding triples (property {})".format(property))
         for s,p,o in self.graph.triples((None, property, None)):
             yield s, p, o
 
