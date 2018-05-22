@@ -81,7 +81,7 @@ def build_model(X, Y, A, config):
 
     # Compile model
     logger.debug("Compiling model")
-    model = Model(input=[X_in] + A_in, output=Y_out)
+    model = Model(inputs=[X_in] + A_in, outputs=Y_out)
     model.compile(loss=config['model']['loss'],
                   optimizer=Adam(lr=config['model']['learning_rate']))
 

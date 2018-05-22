@@ -111,7 +111,7 @@ def train_model(A, model, dataset, sample_weights, batch_size, nepoch):
         model.fit(x=[dataset['train']['X']] + A, 
                   y=dataset['train']['Y'],
                   batch_size=batch_size,
-                  nb_epoch=1,
+                  epochs=1,
                   shuffle=False,
                   sample_weight=sample_weights,
                   validation_data=([dataset['val']['X']] + A, 

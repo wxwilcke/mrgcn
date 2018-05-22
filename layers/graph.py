@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-from keras import activations, initializations
+from keras import activations, initializers
 from keras import regularizers
 from keras.engine import Layer
 from keras.layers import Dropout
@@ -13,7 +13,7 @@ class GraphConvolution(Layer):
                  init='glorot_uniform', activation='linear',
                  weights=None, W_regularizer=None, num_bases=-1,
                  b_regularizer=None, bias=False, dropout=0., **kwargs):
-        self.init = initializations.get(init)
+        self.init = initializers.get(init)
         self.activation = activations.get(activation)
         self.output_dim = output_dim  # number of features per node
         self.support = support  # filter support / number of weights
@@ -36,9 +36,9 @@ class GraphConvolution(Layer):
         self.b = None
         self.num_nodes = None
 
-        super(GraphConvolution, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
-    def get_output_shape_for(self, input_shapes):
+    def compute_output_shape(self, input_shapes):
         features_shape = input_shapes[0]
         output_shape = (features_shape[0], self.output_dim)
         return output_shape  # (batch_size, output_dim)
@@ -78,12 +78,15 @@ class GraphConvolution(Layer):
             self.set_weights(self.initial_weights)
             del self.initial_weights
 
+        # set self.built = True
+        #super().build(input_shapes)
+
     def call(self, inputs, mask=None):
         features = inputs[0]
         A = inputs[1:]  # list of basis functions
 
         # convolve
-        supports = list()
+        supports = []
         for i in range(self.support):
             if not self.featureless:
                 supports.append(K.dot(A[i], features))
@@ -106,7 +109,7 @@ class GraphConvolution(Layer):
         if self.featureless:
             tmp = K.ones(self.num_nodes)
             tmp_do = Dropout(self.dropout)(tmp)
-            output = (output.T * tmp_do).T
+            output = K.transpose(K.transpose(output) * tmp_do)
 
         if self.bias:
             output += self.b
