@@ -28,7 +28,7 @@ class KnowledgeGraph:
         elif path is not None:
             self.graph = self._read(path)
         else:
-            raise ValueError(":: Constructor missing required argument")
+            self.graph = Graph()
 
         self._property_distribution = Counter(self.graph.predicates())
         self.logger.debug("Knowledge Graph ({} facts) succesfully imported".format(len(self.graph)))
@@ -121,13 +121,30 @@ class KnowledgeGraph:
         for s,p,o in self.graph.triples((None, property, None)):
             yield s, p, o
 
-    ## Other
+    ## Statistics
     def property_frequency(self, property=None):
         if property is None:
             return self._property_distribution
         elif property in self._property_distribution:
             return self._property_distribution[property]
 
+    def attribute_frequency(self, property, limit=None):
+        attribute_freq = Counter(self.graph.objects(None, property))
+        if limit is None:
+            return attribute_freq.most_common()
+        else:
+            return attribute_freq.most_common(limit)
+
+    ## Operators
+    def sample(self, strategy=None, **kwargs):
+        """ Sample this graph using the given strategy
+        returns a KnowledgeGraph instance
+        """
+        if strategy is None:
+            raise ValueError('Strategy cannot be left undefined')
+
+        self.logger.debug("Sampling graph")
+        return strategy.sample(self, **kwargs)
 
 if __name__ == "__main__":
     print("Knowledge Graph")

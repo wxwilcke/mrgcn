@@ -4,17 +4,27 @@ import logging
 import os
 import random
 
+from keras import backend as K
 import numpy as np
 from rdflib.term import URIRef
+import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
 def set_seed(seed=-1):
-    # Note: this does not work well somehow
+    # https://keras.io/getting-started/faq/#how-can-i-obtain-reproducible-results-using-keras-during-development
     if seed >= 0:
         os.environ['PYTHONHASHSEED'] = str(seed)
         random.seed(seed)
         np.random.seed(seed)
+        tf.set_random_seed(seed)
+
+        # use single thread
+        session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
+                                      inter_op_parallelism_threads=1)
+
+        sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+        K.set_session(sess)
 
         logger.debug("Setting seed to {}".format(seed))
     else:
