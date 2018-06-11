@@ -22,10 +22,11 @@ def greedy_depth_first_sampler(knowledge_graph=None, atom=None, depth=1, allow_l
 
     _visited.add(atom)
     for s, p, o in knowledge_graph.graph.triples((atom, None, None)):
+        _facts.add((s, p, o))
+
         if not allow_loops and o in _visited:
             continue
 
-        _facts.add((s, p, o))
         _facts = _facts.union(greedy_depth_first_sampler(knowledge_graph, o, depth-1, allow_loops, _visited))
 
     return _facts
@@ -46,10 +47,9 @@ def depth_first_sampler(knowledge_graph=None, atom=None, depth=1, allow_loops=Fa
 
     _visited.add(atom)
     for s, p, o in knowledge_graph.graph.triples((atom, None, None)):
-        if not allow_loops and o in _visited:
-            continue
+        if o not in _visited or (o in _visited and allow_loops):
+            _facts = _facts.union(depth_first_sampler(knowledge_graph, o, depth-1, allow_loops, _visited))
 
-        _facts = _facts.union(depth_first_sampler(knowledge_graph, o, depth-1, allow_loops, _visited))
         _facts.add((s, p, o))
 
     return _facts
@@ -75,10 +75,11 @@ def breadth_first_sampler(knowledge_graph=None, atom=None, depth=1, allow_loops=
         for s, p, o in knowledge_graph.graph.triples((vertex, None, None)):
             if (s, p, o) in facts:
                 continue
+            
+            facts.add((s, p, o))
             if not allow_loops and o in visited:
                 continue
 
-            facts.add((s, p, o))
             q.append((o, level+1))
             visited.add(o)
 

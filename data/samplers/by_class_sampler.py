@@ -3,7 +3,7 @@
 import logging
 
 from rdflib.namespace import RDF
-from rdf.term import URIRef
+from rdflib.term import URIRef
 
 from data.io.knowledge_graph import KnowledgeGraph
 from data.samplers.utils import breadth_first_sampler
@@ -33,9 +33,15 @@ def sample(knowledge_graph=None,
         # extend instance list with unspecified matches
         g = knowledge_graph.graph
         for instance in g.subjects(RDF.type, URIRef(instances_type)):
-            if instance not in instances and\
-               g.value(instance, target_property).toPython() in target_classes:
-                instances.append(instance)
+            if instance not in instances:
+                if len(target_classes) == 0:
+                    instances.append(instance)
+                    continue
+
+                instance_class = g.value(instance, target_property)
+                if instance_class is not None\
+                   and instance_class.toPython() in target_classes:
+                    instances.append(instance)
 
     logger.debug("Sampling around {} instance vertices".format(len(instances)))
 

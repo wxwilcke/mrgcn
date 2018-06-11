@@ -19,14 +19,18 @@ class KnowledgeGraph:
     graph = None
     _property_distribution = {}
 
-    def __init__(self, graph=None, path=None):
+    def __init__(self, graph=None):
         self.logger = logging.getLogger(__name__)
         self.logger.debug("Initiating Knowledge Graph")
         
         if graph is not None:
-            self.graph = graph
-        elif path is not None:
-            self.graph = self._read(path)
+            if type(graph) is Graph:
+                self.graph = graph
+            elif type(graph) is str:
+                self.graph = self._read(graph)
+            else:
+                raise TypeError(":: Wrong input type: {}; requires path to RDF"
+                                " graph or rdflib.graph.Graph object".format(type(graph)))
         else:
             self.graph = Graph()
 
