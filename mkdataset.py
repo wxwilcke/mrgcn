@@ -15,7 +15,7 @@ from tasks.utils import strip_graph
 
 def run(args, config):
     logger.info("Generating data structures")
-    with KnowledgeGraph(path=config['graph']['file']) as kg:
+    with KnowledgeGraph(graph=config['graph']['file']) as kg:
         targets = strip_graph(kg, config)
         A = graph_structure.generate(kg, config)
         X, Y, X_node_map = build_dataset(kg, targets, config)

@@ -11,6 +11,26 @@ import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
+def set_tensorflow_device_placement(mode='gpu'):
+    config = tf.ConfigProto()
+
+    config.CopyFrom(K.get_session()._config)
+    config.ClearField('log_device_placement')
+    config.ClearField('allow_soft_placement')
+    
+    if mode == 'gpu':
+        update = tf.ConfigProto(allow_soft_placement=True,
+                                log_device_placement=True)
+        logger.debug("Setting device to GPU only")
+    else:
+        update = tf.ConfigProto(allow_soft_placement=False,
+                                log_device_placement=True)
+        logger.debug("Setting device to system default")
+
+    config.MergeFrom(update)
+    sess = tf.Session(graph=tf.get_default_graph(), config=config)
+    K.set_session(sess)
+
 def set_seed(seed=-1):
     # https://keras.io/getting-started/faq/#how-can-i-obtain-reproducible-results-using-keras-during-development
     if seed >= 0:

@@ -12,7 +12,8 @@ from data.io.tsv import TSV
 from data.utils import is_readable, is_writable
 from embeddings import graph_structure
 from tasks.node_classification import build_dataset, build_model, evaluate_model
-from tasks.utils import mksplits, init_fold, mkfolds, sample_mask, set_seed, strip_graph
+from tasks.utils import mksplits, init_fold, mkfolds, sample_mask, set_seed,\
+        set_tensorflow_device_placement, strip_graph
 
 
 def single_run(A, X, Y, X_node_map, tsv_writer, config):
@@ -162,11 +163,13 @@ def test_model(A, model, dataset, batch_size):
 
 def run(args, tsv_writer, config):
     set_seed(config['task']['seed'])
+    if config['task']['force_gpu']:
+        set_tensorflow_device_placement(mode='gpu')
 
     # prep data
     if args.input is None:
         logging.debug("No tarball supplied - building task prequisites")
-        with KnowledgeGraph(path=config['graph']['file']) as kg:
+        with KnowledgeGraph(graph=config['graph']['file']) as kg:
             targets = strip_graph(kg, config)
             A = graph_structure.generate(kg, config)
             X, Y, X_node_map = build_dataset(kg, targets, config)
