@@ -2,6 +2,7 @@
 
 import logging
 import argparse
+from os import getpid
 from time import time
 
 import toml
@@ -227,8 +228,10 @@ if __name__ == "__main__":
     config = toml.load(args.config)
 
     # set output base filename
-    baseFilename = "{}{}{}".format(args.output, config['name'], timestamp) if args.output.endswith("/") \
-                    else "{}/{}{}".format(args.output, config['name'], timestamp)
+    baseFilename = "{}{}{}_{}".format(args.output, config['name'], timestamp,\
+                                      getpid()) if args.output.endswith("/") \
+                    else "{}/{}{}_{}".format(args.output, config['name'],\
+                                             timestamp, getpid())
     assert is_writable(baseFilename)
 
     init_logger(baseFilename+'.log', args.verbose)

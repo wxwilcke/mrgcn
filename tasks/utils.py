@@ -15,16 +15,13 @@ def set_tensorflow_device_placement(mode='gpu'):
     config = tf.ConfigProto()
 
     config.CopyFrom(K.get_session()._config)
-    config.ClearField('log_device_placement')
     config.ClearField('allow_soft_placement')
     
     if mode == 'gpu':
-        update = tf.ConfigProto(allow_soft_placement=True,
-                                log_device_placement=True)
+        update = tf.ConfigProto(allow_soft_placement=False)
         logger.debug("Setting device to GPU only")
     else:
-        update = tf.ConfigProto(allow_soft_placement=False,
-                                log_device_placement=True)
+        update = tf.ConfigProto(allow_soft_placement=True)
         logger.debug("Setting device to system default")
 
     config.MergeFrom(update)
