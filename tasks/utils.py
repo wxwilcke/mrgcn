@@ -50,20 +50,41 @@ def set_seed(seed=-1):
 def strip_graph(knowledge_graph, config):
     target_property = config['task']['target_property'] 
     target_property_inv = config['task']['target_property_inv'] 
-    #target_classes = config['task']['target_classes']
+    target_classes = config['task']['target_classes']
     
-    n = knowledge_graph.__len__()
+    n = len(knowledge_graph)
     logger.debug("Stripping knowledge graph...")
     # list of target triples (entity-class mapping)
-    target_triples = list(knowledge_graph.triples(URIRef(target_property)))
+    target_triples = set()
+    if len(target_classes) <= 0:
+        for target_class in target_classes:
+            # assume class is entity
+            target_triples.union(knowledge_graph.triples((None,
+                                                          URIRef(target_property), 
+                                                          URIRef(target_class))))
+    else:
+        target_triples.union(knowledge_graph.triples((None,
+                                                      URIRef(target_property),
+                                                      None)))
+
     knowledge_graph.graph -= target_triples  # strip targets from source
 
     # remove inverse target relations to prevent information leakage
     if target_property_inv != '':
-        knowledge_graph.graph -= list(knowledge_graph.triples(
-                                        URIRef(target_property_inv)))
+        inv_target_triples = set()
+        if len(target_classes) <= 0:
+            for target_class in target_classes:
+                # assume class is entity
+                inv_target_triples.union(knowledge_graph.triples((URIRef(target_class),
+                                                                  URIRef(target_property_inv), 
+                                                                  None)))
+        else:
+            inv_target_triples.union(knowledge_graph.triples((None,
+                                                              URIRef(target_property_inv),
+                                                              None)))
+        knowledge_graph.graph -= inv_target_triples
 
-    m = knowledge_graph.__len__()
+    m = len(knowledge_graph)
     logger.debug("Stripped {} statements ({} remain)".format(n-m, m))
 
     return target_triples

@@ -120,9 +120,9 @@ class KnowledgeGraph:
         for p in frozenset(self.graph.predicates()):
             yield(p)
 
-    def triples(self, property=None):
-        self.logger.debug("Yielding triples (property {})".format(property))
-        for s,p,o in self.graph.triples((None, property, None)):
+    def triples(self, triple=(None, None, None)):
+        self.logger.debug("Yielding triples (triple {})".format(triple))
+        for s,p,o in self.graph.triples(triple):
             yield s, p, o
 
     ## Statistics

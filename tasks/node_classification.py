@@ -40,9 +40,13 @@ def build_dataset(knowledge_graph, target_triples, config):
     Y = sp.csr_matrix((np.ones(len(target_labels)), (X_node_idx, Y_class_idx)),
                                shape=(len(nodes_map), len(classes_map)),
                                  dtype=np.int32)
-    
-    # dummy matrix for featureless learning
-    X = sp.csr_matrix((len(nodes_map), len(nodes_map)))
+   
+    if config['task']['features'] == []:
+        # dummy matrix for featureless learning
+        X = sp.csr_matrix((len(nodes_map), len(nodes_map)))
+    else:
+        # X = construct_features(knowledge_graph, target_triples, config['task']['features'])
+        pass
 
     return (X, Y, X_node_idx)
 
