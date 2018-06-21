@@ -2,10 +2,10 @@ from keras.engine.topology import Node, InputLayer
 import keras.backend as K
 
 
-def InputAdj(name=None, dtype=K.floatx(), sparse=False,
+def InputAdj(name=None, shape=(None, None), dtype=K.floatx(), sparse=False,
           tensor=None):
-    shape = (None, None)
-    input_layer = InputLayer(batch_input_shape=shape,
+    input_layer = InputLayer(input_shape=shape,
+                             batch_input_shape=(None, shape[0]),
                              name=name, sparse=sparse, dtype=dtype)
     outputs = input_layer._inbound_nodes[0].output_tensors
     if len(outputs) == 1:

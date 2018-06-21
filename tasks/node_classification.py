@@ -9,6 +9,7 @@ from keras.regularizers import l2
 import numpy as np
 import scipy.sparse as sp
 
+from embeddings.graph_features import construct_features
 from layers.graph import GraphConvolution
 from layers.input_adj import InputAdj
 
@@ -41,12 +42,13 @@ def build_dataset(knowledge_graph, target_triples, config):
                                shape=(len(nodes_map), len(classes_map)),
                                  dtype=np.int32)
    
-    if config['task']['features'] == []:
-        # dummy matrix for featureless learning
-        X = sp.csr_matrix((len(nodes_map), len(nodes_map)))
-    else:
-        # X = construct_features(knowledge_graph, target_triples, config['task']['features'])
-        pass
+    # use only identity matrix if no features are specified
+    X = sp.identity(len(nodes_map), format='csr')
+    if len(config['task']['features']) > 0:
+        # concat features to identity matrix if specified
+        X = sp.hstack((X, 
+                       construct_features(nodes_map, config['task']['features'])),
+                      format='csr')
 
     return (X, Y, X_node_idx)
 
@@ -56,30 +58,31 @@ def build_model(X, Y, A, config):
     logger.debug("Starting model build")
 
     support = len(A)
-    A_in = [InputAdj(sparse=True) for _ in range(support)]
+    A_in = [InputAdj(shape=(adj.shape[1],), sparse=True) for adj in A]
 
     # input layer
     X_in = Input(shape=(X.shape[1],), sparse=True)
-    H = GraphConvolution(layers[0]['hidden_nodes'], 
-                         support, 
+    H = GraphConvolution(output_dim=layers[0]['hidden_nodes'], 
+                         support=support, 
                          num_bases=layers[0]['num_bases'],
-                         featureless=layers[0]['featureless'],
+                         featureless=layers[0]['featureless']==[],
                          activation=layers[0]['activation'],
                          W_regularizer=l2(layers[0]['l2norm']))([X_in] + A_in)
     H = Dropout(layers[0]['dropout'])(H)
 
     # intermediate layers (if any)
     for i, layer in enumerate(layers[1:-1], 1):
-        H = GraphConvolution(layers[i]['hidden_nodes'], 
-                             support, 
+        H = GraphConvolution(output_dim=layers[i]['hidden_nodes'], 
+                             support=support, 
                              num_bases=layers[i]['num_bases'],
-                             featureless=layers[i]['featureless'],
+                             featureless=layers[i]['featureless']==[],
                              activation=layers[i]['activation'],
                              W_regularizer=l2(layers[i]['l2norm']))([H] + A_in)
         H = Dropout(layers[i]['dropout'])(H)
 
     # output layer
-    Y_out = GraphConvolution(Y.shape[1], support, 
+    Y_out = GraphConvolution(output_dim=Y.shape[1], 
+                             support=support, 
                              num_bases=layers[-1]['num_bases'],
                              activation=layers[-1]['activation'])([H] + A_in)
 
