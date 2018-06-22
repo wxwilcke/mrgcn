@@ -28,8 +28,6 @@ def generate_features(nodes_map):
           xsd:dateTime for that purpose.
           b. We consider only years from 9999 BCE to 9999 AD. Hence, we redefine 
           yearFrag as '-'? \d{4}
-          c. All digits are represented as one-hot vectors, as they are more
-          akin to intervals
 
     Embedding
     - a vector v of length C = 4
