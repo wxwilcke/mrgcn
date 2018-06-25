@@ -47,7 +47,9 @@ def generate_adjacency_matrices(knowledge_graph,
                          dtype=np.int32)
 
         # populate edge array with corresponding node URIs
-        for idx, (s, p, o) in enumerate(knowledge_graph.triples(property=prop)):
+        for idx, (s, p, o) in enumerate(knowledge_graph.triples((None, 
+                                                                 prop,
+                                                                 None))):
             edges[idx] = np.array([nodes_dict[s], nodes_dict[o]])
 
         # split subject (row) and object (col) node URIs

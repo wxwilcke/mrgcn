@@ -46,8 +46,8 @@ def build_dataset(knowledge_graph, target_triples, config):
     X = sp.identity(len(nodes_map), format='csr')
     if len(config['task']['features']) > 0:
         # concat features to identity matrix if specified
-        X = sp.hstack((X, 
-                       construct_features(nodes_map, config['task']['features'])),
+        X = sp.hstack([X, 
+                       construct_features(nodes_map, config['task']['features'])],
                       format='csr')
 
     return (X, Y, X_node_idx)

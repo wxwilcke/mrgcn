@@ -56,14 +56,14 @@ def strip_graph(knowledge_graph, config):
     logger.debug("Stripping knowledge graph...")
     # list of target triples (entity-class mapping)
     target_triples = set()
-    if len(target_classes) <= 0:
+    if len(target_classes) > 0:
         for target_class in target_classes:
             # assume class is entity
-            target_triples.union(knowledge_graph.triples((None,
+            target_triples |= frozenset(knowledge_graph.triples((None,
                                                           URIRef(target_property), 
                                                           URIRef(target_class))))
     else:
-        target_triples.union(knowledge_graph.triples((None,
+        target_triples |= frozenset(knowledge_graph.triples((None,
                                                       URIRef(target_property),
                                                       None)))
 
@@ -72,14 +72,14 @@ def strip_graph(knowledge_graph, config):
     # remove inverse target relations to prevent information leakage
     if target_property_inv != '':
         inv_target_triples = set()
-        if len(target_classes) <= 0:
+        if len(target_classes) > 0:
             for target_class in target_classes:
                 # assume class is entity
-                inv_target_triples.union(knowledge_graph.triples((URIRef(target_class),
+                inv_target_triples |= frozenset(knowledge_graph.triples((URIRef(target_class),
                                                                   URIRef(target_property_inv), 
                                                                   None)))
         else:
-            inv_target_triples.union(knowledge_graph.triples((None,
+            inv_target_triples |= frozenset(knowledge_graph.triples((None,
                                                               URIRef(target_property_inv),
                                                               None)))
         knowledge_graph.graph -= inv_target_triples

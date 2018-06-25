@@ -5,6 +5,7 @@ from re import match
 
 import numpy as np
 import scipy.sparse as sp
+from sklearn.preprocessing import normalize
 from rdflib.term import Literal
 from rdflib.namespace import XSD
 
@@ -46,45 +47,58 @@ def generate_features(nodes_map):
                     N :- number of nodes
                     C :- number of columns for this feature embedding
     """
+    logger.debug("Generating gYear features")
     C = 4  # number of items per feature 
 
     rows = []
     data = []
-    for node, i in nodes_map:
+    for node, i in nodes_map.items():
         if type(node) is not Literal:
             continue
-        if node.datatype is not XSD.gYear:
+        if node.datatype is None or node.datatype.neq(XSD.gYear):
             continue
 
+        node._value = node.__str__()  ## empty value bug workaround
         m = validate(node.value)
         if m is None:  # invalid syntax
             continue
 
-        sign = m.group('sign')
+        sign = 0. if m.group('sign') == '' else 1.
         year = m.group('year')
 
         # separate centuries, decades, and individual years
-        c, d, y = separate(year)
+        separated = separate(year)
+        if separated is None:
+            continue
+
+        c = int(separated.group('century'))
+        d = int(separated.group('decade'))
+        y = int(separated.group('year'))
 
         # add to matrix structures
         rows.append(i)
         data.extend([sign, c, d, y])
     
+    cols = np.tile(range(C), len(rows))
     rows = np.repeat(rows, C)  # expand indices
-    cols = np.tile(range(C), C)
+    
+    logger.debug("Generated {} gYear features".format(len(data)))
 
-    return sp.csr_matrix((data, (rows, cols)), 
+    # create matrix
+    features = sp.csr_matrix((data, (rows, cols)), 
                          shape=(len(nodes_map), C), 
                          dtype=np.float32)
+    
+    # inplace L1 normalization over features
+    features = normalize(features, norm='l1', axis=0)
+
+    return features
 
 def separate(year):
-    regex = "(\d\d)(\d)(\d)"
+    regex = "(?P<century>\d\d)(?P<decade>\d)(?P<year>\d)"
     return match(regex, year)
 
 def validate(value):
     return match("{}{}".format(_REGEX_YEAR_FRAG,
                                _REGEX_TIMEZONE_FRAG),
                  value)
-
-def normalize():
-    pass
