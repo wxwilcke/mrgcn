@@ -19,11 +19,11 @@ def generate(knowledge_graph, config):
                                 properties_dict,
                                 nodes_dict, 
                                 adj_shape,
-                                config['graph']['embeddings']['structural'])
+                                config['graph']['structural'])
 
     # add identity matrix (self-relations)
     ident = sp.identity(len(nodes_dict)).tocsr()
-    if config['graph']['embeddings']['structural']['normalize']:
+    if config['graph']['structural']['normalize']:
         ident = normalize_adjacency_matrix(ident)
     adjacencies.append(ident) 
     
@@ -35,13 +35,17 @@ def generate_adjacency_matrices(knowledge_graph,
                                 adj_shape,
                                 config):
     include_inverse = config['include_inverse_properties']
+    exclude_properties = config['exclude_properties']
     normalize = config['normalize']
 
     logger.debug("Generating {} adjacency matrices of size {}".format(
-                                                        len(properties_dict),
+        len([p for p in properties_dict.keys() if p not in exclude_properties]),
                                                         adj_shape))
     adjacencies = []
-    for prop, i in properties_dict.items():
+    for prop, _ in properties_dict.items():
+        if prop in exclude_properties:
+            continue
+
         # create array to hold all edges per property
         edges = np.empty((knowledge_graph.property_frequency(prop), 2),
                          dtype=np.int32)

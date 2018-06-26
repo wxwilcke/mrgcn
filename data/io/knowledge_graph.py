@@ -99,7 +99,7 @@ class KnowledgeGraph:
     def objecttype_properties(self):
         attributes = frozenset(self.attributes())
         self.logger.debug("Yielding OT predicates")
-        for p in frozenset(self.graph.predicates()):
+        for p in self.graph.predicates():
             if len(set(self.graph.objects(None, p))-attributes) <= 0:
                 # p is only used with a literal as object
                 continue
@@ -109,7 +109,7 @@ class KnowledgeGraph:
     def datatype_properties(self):
         objecttype_properties = set(self.objecttype_properties())
         self.logger.debug("Yielding DT predicates")
-        for p in frozenset(self.graph.predicates()):
+        for p in self.graph.predicates():
             if p in objecttype_properties:
                 continue
 
@@ -117,7 +117,7 @@ class KnowledgeGraph:
     
     def properties(self):
         self.logger.debug("Yielding properties")
-        for p in frozenset(self.graph.predicates()):
+        for p in self.graph.predicates():
             yield(p)
 
     def triples(self, triple=(None, None, None)):

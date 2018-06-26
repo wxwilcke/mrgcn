@@ -44,10 +44,10 @@ def build_dataset(knowledge_graph, target_triples, config):
    
     # use only identity matrix if no features are specified
     X = sp.identity(len(nodes_map), format='csr')
-    if len(config['task']['features']) > 0:
+    if 'features' in config['graph'].keys():
         # concat features to identity matrix if specified
         X = sp.hstack([X, 
-                       construct_features(nodes_map, config['task']['features'])],
+                       construct_features(nodes_map, config['graph']['features'])],
                       format='csr')
 
     return (X, Y, X_node_idx)

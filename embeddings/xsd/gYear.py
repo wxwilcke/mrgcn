@@ -15,7 +15,7 @@ _REGEX_TIMEZONE_FRAG = "(?P<timezone>Z|(?:\+|-)(?:(?:0\d|1[0-3]):[0-5]\d|14:00))
 
 logger = logging.getLogger(__name__)
 
-def generate_features(nodes_map):
+def generate_features(nodes_map, config):
     """ Generate features for XSD gYear literals
     
     Definition
@@ -43,6 +43,7 @@ def generate_features(nodes_map):
 
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
+    :param config: configuration dictionary
     :returns: scipy sparse matrix N x C; 
                     N :- number of nodes
                     C :- number of columns for this feature embedding
@@ -82,7 +83,7 @@ def generate_features(nodes_map):
     cols = np.tile(range(C), len(rows))
     rows = np.repeat(rows, C)  # expand indices
     
-    logger.debug("Generated {} gYear features".format(len(data)))
+    logger.debug("Generated {} unique gYear features".format(len(cols)//C))
 
     # create matrix
     features = sp.csr_matrix((data, (rows, cols)), 
@@ -90,7 +91,8 @@ def generate_features(nodes_map):
                          dtype=np.float32)
     
     # inplace L1 normalization over features
-    features = normalize(features, norm='l1', axis=0)
+    if config['normalize']:
+        features = normalize(features, norm='l1', axis=0)
 
     return features
 
