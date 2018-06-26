@@ -53,6 +53,8 @@ def build_dataset(knowledge_graph, target_triples, config):
     return (X, Y, X_node_idx)
 
 def build_model(X, Y, A, config):
+    featureless = 'features' not in config['graph'].keys() or\
+            True not in [feat['include'] for feat in config['graph']['features']]
     layers = config['model']['layers']
     assert len(layers) >= 2
     logger.debug("Starting model build")
@@ -65,7 +67,7 @@ def build_model(X, Y, A, config):
     H = GraphConvolution(output_dim=layers[0]['hidden_nodes'], 
                          support=support, 
                          num_bases=layers[0]['num_bases'],
-                         featureless=layers[0]['featureless']==[],
+                         featureless=featureless,
                          activation=layers[0]['activation'],
                          W_regularizer=l2(layers[0]['l2norm']))([X_in] + A_in)
     H = Dropout(layers[0]['dropout'])(H)
@@ -75,7 +77,7 @@ def build_model(X, Y, A, config):
         H = GraphConvolution(output_dim=layers[i]['hidden_nodes'], 
                              support=support, 
                              num_bases=layers[i]['num_bases'],
-                             featureless=layers[i]['featureless']==[],
+                             featureless=featureless,
                              activation=layers[i]['activation'],
                              W_regularizer=l2(layers[i]['l2norm']))([H] + A_in)
         H = Dropout(layers[i]['dropout'])(H)
