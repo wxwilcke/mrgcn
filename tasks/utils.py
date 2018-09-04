@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 
 import logging
 import os
@@ -11,47 +11,11 @@ import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
-def set_tensorflow_device_placement(mode='gpu'):
-    config = tf.ConfigProto()
-
-    config.CopyFrom(K.get_session()._config)
-    config.ClearField('allow_soft_placement')
-    
-    if mode == 'gpu':
-        update = tf.ConfigProto(allow_soft_placement=False)
-        logger.debug("Setting device to GPU only")
-    else:
-        update = tf.ConfigProto(allow_soft_placement=True)
-        logger.debug("Setting device to system default")
-
-    config.MergeFrom(update)
-    sess = tf.Session(graph=tf.get_default_graph(), config=config)
-    K.set_session(sess)
-
-def set_seed(seed=-1):
-    # https://keras.io/getting-started/faq/#how-can-i-obtain-reproducible-results-using-keras-during-development
-    if seed >= 0:
-        os.environ['PYTHONHASHSEED'] = str(seed)
-        random.seed(seed)
-        np.random.seed(seed)
-        tf.set_random_seed(seed)
-
-        # use single thread
-        session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
-                                      inter_op_parallelism_threads=1)
-
-        sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
-        K.set_session(sess)
-
-        logger.debug("Setting seed to {}".format(seed))
-    else:
-        logger.debug("Using random seed")
-
 def strip_graph(knowledge_graph, config):
-    target_property = config['task']['target_property'] 
-    target_property_inv = config['task']['target_property_inv'] 
+    target_property = config['task']['target_property']
+    target_property_inv = config['task']['target_property_inv']
     target_classes = config['task']['target_classes']
-    
+
     n = len(knowledge_graph)
     logger.debug("Stripping knowledge graph...")
     # list of target triples (entity-class mapping)
@@ -60,7 +24,7 @@ def strip_graph(knowledge_graph, config):
         for target_class in target_classes:
             # assume class is entity
             target_triples |= frozenset(knowledge_graph.triples((None,
-                                                          URIRef(target_property), 
+                                                          URIRef(target_property),
                                                           URIRef(target_class))))
     else:
         target_triples |= frozenset(knowledge_graph.triples((None,
@@ -76,7 +40,7 @@ def strip_graph(knowledge_graph, config):
             for target_class in target_classes:
                 # assume class is entity
                 inv_target_triples |= frozenset(knowledge_graph.triples((URIRef(target_class),
-                                                                  URIRef(target_property_inv), 
+                                                                  URIRef(target_property_inv),
                                                                   None)))
         else:
             inv_target_triples |= frozenset(knowledge_graph.triples((None,
@@ -121,7 +85,7 @@ def init_fold(X, Y, X_nodes_map, idx_dict, dataset_ratio=(.7,.2,.1)):
     X_train_idx = X_nodes_map[idx_dict['train'][:-val_idx]]
     X_test_idx = X_nodes_map[idx_dict['test']]
     X_val_idx = X_nodes_map[idx_dict['train'][-val_idx:]]
- 
+
     # split Y
     Y_train = np.zeros(Y.shape)
     Y_test = np.zeros(Y.shape)
@@ -156,7 +120,7 @@ def mksplits(X, Y, X_nodes_map, dataset_ratio=(.7,.2,.1), shuffle=True):
     X_train_idx = X_nodes_map[train_idx]
     X_test_idx = X_nodes_map[test_idx]
     X_val_idx = X_nodes_map[val_idx]
- 
+
     # split Y
     Y_train = np.zeros(Y.shape)
     Y_test = np.zeros(Y.shape)

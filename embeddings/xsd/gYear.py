@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def generate_features(nodes_map, config):
     """ Generate features for XSD gYear literals
-    
+
     Definition
     - gYear := yearFrag timezoneFrag?
     -- yearFrag := '-'? (([1-9] \d\d\d+)) | ('0' \d\d\d))
@@ -25,17 +25,17 @@ def generate_features(nodes_map, config):
     ---- minuteFrag := [0-5] \d
 
     Note: a. We consider only yearFrag; timezoneFrag is too fine-grained and only
-          makes sense within a time span of days. Consider using xsd:date or 
+          makes sense within a time span of days. Consider using xsd:date or
           xsd:dateTime for that purpose.
-          b. We consider only years from 9999 BCE to 9999 AD. Hence, we redefine 
+          b. We consider only years from 9999 BCE to 9999 AD. Hence, we redefine
           yearFrag as '-'? \d{4}
 
     Embedding
     - a vector v of length C = 4
-    -- v[0] : '-'? : BCE or AD; 1.0 if '-', else 0.0 
+    -- v[0] : '-'? : BCE or AD; 1.0 if '-', else 0.0
                      Note: a. needed to represent difference 0YY AD and 0YY BCE
                            b. mapping assumes majority is AD
-    -- v[1] : \d\d : centuries; numerical and normalized 
+    -- v[1] : \d\d : centuries; numerical and normalized
                      Note: no separation between hundred and thousands as the
                            latter's range is typically limited
     -- v[2] : \d   : decades; numerical and normalized
@@ -44,12 +44,12 @@ def generate_features(nodes_map, config):
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param config: configuration dictionary
-    :returns: scipy sparse matrix N x C; 
+    :returns: scipy sparse matrix N x C;
                     N :- number of nodes
                     C :- number of columns for this feature embedding
     """
     logger.debug("Generating gYear features")
-    C = 4  # number of items per feature 
+    C = 4  # number of items per feature
 
     rows = []
     data = []
@@ -79,17 +79,17 @@ def generate_features(nodes_map, config):
         # add to matrix structures
         rows.append(i)
         data.extend([sign, c, d, y])
-    
+
     cols = np.tile(range(C), len(rows))
     rows = np.repeat(rows, C)  # expand indices
-    
+
     logger.debug("Generated {} unique gYear features".format(len(cols)//C))
 
     # create matrix
-    features = sp.csr_matrix((data, (rows, cols)), 
-                         shape=(len(nodes_map), C), 
+    features = sp.csr_matrix((data, (rows, cols)),
+                         shape=(len(nodes_map), C),
                          dtype=np.float32)
-    
+
     # inplace L1 normalization over features
     if config['normalize']:
         features = normalize(features, norm='l1', axis=0)

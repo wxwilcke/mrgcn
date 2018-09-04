@@ -34,7 +34,7 @@ def init_logger(filename, verbose=0):
         if verbose >= 2:
             level = logging.DEBUG
         stream_handler.setLevel(level)
-        
+
         logging.getLogger().addHandler(stream_handler)
 
 if __name__ == "__main__":
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     init_logger(baseFilename+'.log', args.verbose)
     logger = logging.getLogger(__name__)
-    
+
 
     # log parameters
     logger.info("Arguments:\n{}".format(

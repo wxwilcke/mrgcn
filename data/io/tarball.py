@@ -35,6 +35,23 @@ class Tarball:
         else:
             self.logger.debug("Storing to file: {}".format(path))
 
+    def list_members(self):
+        names = set()
+        members = set(self.tar.getnames())
+
+        # check for structures
+        paths = {member for member in members if '/' in member}
+        for path in paths:
+            names.add(path.split('/')[1])
+
+        # objects
+        members -= paths
+        for name in members:
+            base, ext = os.path.splitext(name)
+            names.add(base)
+
+        return list(names)
+
     def read(self, path):
         content = []
         names = []
@@ -56,6 +73,7 @@ class Tarball:
             top_levels = {path.split('/')[1] for path in lists}
             for top_level in top_levels:
                 l_full = [path for path in lists if path.split('/')[1] == top_level]
+                l_full.sort()  # maintain list order
                 l_base = [path[len(top_level)+1:] for path in l_full]
                 content.append(self._read_list(l_full, l_base))
                 names.append(top_level)

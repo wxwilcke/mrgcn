@@ -6,6 +6,7 @@ from keras.engine import Layer
 from keras.layers import Dropout
 
 import keras.backend as K
+import tensorflow as tf
 
 
 class GraphConvolution(Layer):
@@ -44,17 +45,17 @@ class GraphConvolution(Layer):
         return output_shape  # (batch_size, output_dim)
 
     def build(self, input_shapes):
-        features_shape = input_shapes[0]
-        if self.featureless:
-            self.num_nodes = features_shape[1]  # NOTE: Assumes featureless input (i.e. square identity mx)
-        assert len(features_shape) == 2
-        self.input_dim = features_shape[1]
+        assert len(input_shapes[0]) == 2
+        self.input_dim = input_shapes[0][1]  # number of features
+        self.num_nodes = input_shapes[1][1]  # assume A = n x n
 
+        # generate weights
         if self.num_bases > 0:
-            self.W = K.concatenate([self.add_weight((self.input_dim, self.output_dim),
-                                                    initializer=self.init,
-                                                    name='{}_W'.format(self.name),
-                                                    regularizer=self.W_regularizer) for _ in range(self.num_bases)],
+            # B x f x h  // B := number of basis functions
+            self.W = tf.concat([[self.add_weight((self.input_dim, self.output_dim),
+                                                 initializer=self.init,
+                                                 name='{}_W'.format(self.name),
+                                                 regularizer=self.W_regularizer)] for _ in range(self.num_bases)],
                                    axis=0)
 
             self.W_comp = self.add_weight((self.support, self.num_bases),
@@ -62,10 +63,11 @@ class GraphConvolution(Layer):
                                           name='{}_W_comp'.format(self.name),
                                           regularizer=self.W_regularizer)
         else:
-            self.W = K.concatenate([self.add_weight((self.input_dim, self.output_dim),
-                                                    initializer=self.init,
-                                                    name='{}_W'.format(self.name),
-                                                    regularizer=self.W_regularizer) for _ in range(self.support)],
+            # R x f x h  // R := number of relations
+            self.W = tf.concat([[self.add_weight((self.input_dim, self.output_dim),
+                                                 initializer=self.init,
+                                                 name='{}_W'.format(self.name),
+                                                 regularizer=self.W_regularizer)] for _ in range(self.support)],
                                    axis=0)
 
         if self.bias:
@@ -82,38 +84,36 @@ class GraphConvolution(Layer):
         #super().build(input_shapes)
 
     def call(self, inputs, mask=None):
-        features = inputs[0]
-        A = inputs[1:]  # list of basis functions
+        # inputs = [X, A_0, A_1, ..., A_r]
+        X = inputs[0]  # feature matrix (n x f)
+        if type(X) is tf.SparseTensor:
+            # let X be dense
+            X = tf.sparse_tensor_to_dense(X)
 
-        # convolve
-        supports = []
-        for i in range(self.support):
-            if not self.featureless:
-                supports.append(K.dot(A[i], features))
-            else:
-                supports.append(A[i])
-        supports = K.concatenate(supports, axis=1)
+        # merge adjacency matrices to (n x nR)
+        A = tf.sparse_concat(sp_inputs=inputs[1:], axis=1)
 
-        if self.num_bases > 0:
-            self.W = K.reshape(self.W,
-                               (self.num_bases, self.input_dim, self.output_dim))
-            self.W = K.permute_dimensions(self.W, (1, 0, 2))
-            V = K.dot(self.W_comp, self.W)
-            V = K.reshape(V, (self.support*self.input_dim, self.output_dim))
-            output = K.dot(supports, V)
-        else:
-            output = K.dot(supports, self.W)
+        # reduce weight matrix if bases are used
+        if self.num_bases > 0: # TODO: check:
+            self.W = tf.transpose(self.W, perm=[1, 0, 2])  # transpose to f x B x h
+            self.W = tf.einsum('ij,bjk->bik', self.W_comp, self.W)  # (R x B)*(f x B x h) = f x R x h
+            self.W = tf.transpose(self.W, perm=[1, 0, 2])  # transpose to R x f x h
+
+        # graph convolve
+        XW = tf.einsum('ij,bjk->bik', X, self.W)  # R x n x h
+        XW = tf.reshape(XW, [self.support*self.num_nodes, self.output_dim])  # Rn x h
+        AXW = tf.sparse_tensor_dense_matmul(A, XW)  # n x h
 
         # if featureless add dropout to output, by elementwise multiplying with column vector of ones,
         # with dropout applied to the vector of ones.
         if self.featureless:
             tmp = K.ones(self.num_nodes)
             tmp_do = Dropout(self.dropout)(tmp)
-            output = K.transpose(K.transpose(output) * tmp_do)
+            AXW = K.transpose(K.transpose(AXW) * tmp_do)
 
         if self.bias:
-            output += self.b
-        return self.activation(output)
+            AXW += self.b
+        return self.activation(AXW)
 
     def get_config(self):
         config = {'output_dim': self.output_dim,

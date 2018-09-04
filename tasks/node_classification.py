@@ -31,7 +31,7 @@ def build_dataset(knowledge_graph, target_triples, config):
     classes = {t[2] for t in target_triples}  # unique classes
     logger.debug("Found {} instances (statements)".format(len(target_triples)))
     logger.debug("Target classes ({}): {}".format(len(classes), classes))
-    
+
     nodes_map = {label:i for i,label in enumerate(knowledge_graph.atoms())}
     classes_map = {label:i for i,label in enumerate(classes)}
 
@@ -41,15 +41,13 @@ def build_dataset(knowledge_graph, target_triples, config):
     Y = sp.csr_matrix((np.ones(len(target_labels)), (X_node_idx, Y_class_idx)),
                                shape=(len(nodes_map), len(classes_map)),
                                  dtype=np.int32)
-   
-    # use only identity matrix if no features are specified
+
+    # use identity matrix by default
     X = sp.identity(len(nodes_map), format='csr')
     if 'features' in config['graph'].keys():
-        # concat features to identity matrix if specified
-        X = sp.hstack([X, 
-                       construct_features(nodes_map, config['graph']['features'])],
-                      format='csr')
+        X = construct_features(nodes_map, config['graph']['features'])
 
+    logger.debug("Completed dataset build")
     return (X, Y, X_node_idx)
 
 def build_model(X, Y, A, config):
@@ -64,8 +62,8 @@ def build_model(X, Y, A, config):
 
     # input layer
     X_in = Input(shape=(X.shape[1],), sparse=True)
-    H = GraphConvolution(output_dim=layers[0]['hidden_nodes'], 
-                         support=support, 
+    H = GraphConvolution(output_dim=layers[0]['hidden_nodes'],
+                         support=support,
                          num_bases=layers[0]['num_bases'],
                          featureless=featureless,
                          activation=layers[0]['activation'],
@@ -74,8 +72,8 @@ def build_model(X, Y, A, config):
 
     # intermediate layers (if any)
     for i, layer in enumerate(layers[1:-1], 1):
-        H = GraphConvolution(output_dim=layers[i]['hidden_nodes'], 
-                             support=support, 
+        H = GraphConvolution(output_dim=layers[i]['hidden_nodes'],
+                             support=support,
                              num_bases=layers[i]['num_bases'],
                              featureless=featureless,
                              activation=layers[i]['activation'],
@@ -83,8 +81,8 @@ def build_model(X, Y, A, config):
         H = Dropout(layers[i]['dropout'])(H)
 
     # output layer
-    Y_out = GraphConvolution(output_dim=Y.shape[1], 
-                             support=support, 
+    Y_out = GraphConvolution(output_dim=Y.shape[1],
+                             support=support,
                              num_bases=layers[-1]['num_bases'],
                              activation=layers[-1]['activation'])([H] + A_in)
 
@@ -93,6 +91,8 @@ def build_model(X, Y, A, config):
     model = Model(inputs=[X_in] + A_in, outputs=Y_out)
     model.compile(loss=config['model']['loss'],
                   optimizer=Adam(lr=config['model']['learning_rate']))
+
+    logger.debug("Completed model build")
 
     return model
 

@@ -94,3 +94,4 @@ class InputLayerAdj(InputLayer):
                   'sparse': self.sparse,
                   'name': self.name}
         return config
+

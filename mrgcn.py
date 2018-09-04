@@ -12,10 +12,13 @@ from data.io.tarball import Tarball
 from data.io.tsv import TSV
 from data.utils import is_readable, is_writable
 from embeddings import graph_structure
+from tasks.config import reload_config, set_number_of_threads, set_seed,\
+        set_tensorflow_device_placement
 from tasks.node_classification import build_dataset, build_model, evaluate_model
-from tasks.utils import mksplits, init_fold, mkfolds, sample_mask, set_seed,\
-        set_tensorflow_device_placement, strip_graph
+from tasks.utils import mksplits, init_fold, mkfolds, sample_mask, strip_graph
 
+
+VERSION = 0.1
 
 def single_run(A, X, Y, X_node_map, tsv_writer, config):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
@@ -23,12 +26,12 @@ def single_run(A, X, Y, X_node_map, tsv_writer, config):
                                   "test_loss", "test_accuracy"])
 
     # create splits
-    dataset = mksplits(X, Y, X_node_map, 
+    dataset = mksplits(X, Y, X_node_map,
                             config['task']['dataset_ratio'])
 
     # compile model computation graph
     model = build_model(X, Y, A, config)
-    
+
     # train model
     nepoch = config['model']['epoch']
     batch_size = X.shape[0]  # number of nodes
@@ -37,23 +40,23 @@ def single_run(A, X, Y, X_node_map, tsv_writer, config):
 
     for epoch in train_model(A, model, dataset, sample_weights, batch_size, nepoch):
         # log metrics
-        tsv_writer.writerow([str(epoch[0]), 
+        tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
                              str(epoch[2]),
-                             str(epoch[3]), 
+                             str(epoch[3]),
                              str(epoch[4]),
                              "-1", "-1"])
 
     # test model
     test_loss, test_acc = test_model(A, model, dataset, batch_size)
     # log metrics
-    tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", 
+    tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(test_loss[0]), str(test_acc[0])])
 
     return (test_loss[0], test_acc[0])
 
 def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
-    tsv_writer.writerow(["fold", "epoch", 
+    tsv_writer.writerow(["fold", "epoch",
                          "training_loss", "training_accurary",
                          "validation_loss", "validation_accuracy",
                          "test_loss", "test_accuracy"])
@@ -68,8 +71,8 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
 
         # compile model computation graph
         model = build_model(X, Y, A, config)
-        
-        # initialize fold 
+
+        # initialize fold
         dataset = init_fold(X, Y, X_node_map, folds_idx[fold-1],
                             config['task']['dataset_ratio'])
 
@@ -82,10 +85,10 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
         for epoch in train_model(A, model, dataset, sample_weights, batch_size, nepoch):
             # log metrics
             tsv_writer.writerow([str(fold),
-                                 str(epoch[0]), 
+                                 str(epoch[0]),
                                  str(epoch[1]),
                                  str(epoch[2]),
-                                 str(epoch[3]), 
+                                 str(epoch[3]),
                                  str(epoch[4]),
                                  "-1", "-1"])
 
@@ -94,12 +97,16 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
         results.append((test_loss[0], test_acc[0]))
 
         # log metrics
-        tsv_writer.writerow([str(fold), 
-                             "-1", "-1", "-1", "-1", "-1", 
+        tsv_writer.writerow([str(fold),
+                             "-1", "-1", "-1", "-1", "-1",
                              str(test_loss[0]), str(test_acc[0])])
 
+        # release memory workaround
+        del model
+        reload_config(reset_session=True)
+
     mean_loss, mean_acc = tuple(sum(e)/len(e) for e in zip(*results))
-    tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1", 
+    tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
                          str(mean_loss), str(mean_acc)])
 
     return (mean_loss, mean_acc)
@@ -110,29 +117,29 @@ def train_model(A, model, dataset, sample_weights, batch_size, nepoch):
     t0 = time()
     for epoch in range(1, nepoch+1):
         # Single training iteration
-        model.fit(x=[dataset['train']['X']] + A, 
+        model.fit(x=[dataset['train']['X']] + A,
                   y=dataset['train']['Y'],
                   batch_size=batch_size,
                   epochs=1,
                   shuffle=False,
                   sample_weight=sample_weights,
-                  validation_data=([dataset['val']['X']] + A, 
+                  validation_data=([dataset['val']['X']] + A,
                                     dataset['val']['Y']),
                   callbacks=[],
                   verbose=0)
 
         # Predict on full dataset
-        Y_hat = model.predict(x=[dataset['train']['X']] + A, 
+        Y_hat = model.predict(x=[dataset['train']['X']] + A,
                               batch_size=batch_size,
                               verbose=0)
 
         # Train / validation scores
-        train_val_loss, train_val_acc = evaluate_model(Y_hat, 
+        train_val_loss, train_val_acc = evaluate_model(Y_hat,
                                                        [dataset['train']['Y'],
                                                         dataset['val']['Y']],
                                                        [dataset['train']['X_idx'],
                                                         dataset['val']['X_idx']])
-    
+
         logging.info("{:04d} ".format(epoch) \
                      + "| train loss {:.4f} / acc {:.4f} ".format(train_val_loss[0],
                                                                   train_val_acc[0])
@@ -140,21 +147,21 @@ def train_model(A, model, dataset, sample_weights, batch_size, nepoch):
                                                                train_val_acc[1]))
 
         yield (epoch,
-               train_val_loss[0], train_val_acc[0], 
+               train_val_loss[0], train_val_acc[0],
                train_val_loss[1], train_val_acc[1])
-    
+
     logging.info("training time: {:.2f}s".format(time()-t0))
 
 def test_model(A, model, dataset, batch_size):
     # Predict on full dataset
-    Y_hat = model.predict(x=[dataset['train']['X']] + A, 
+    Y_hat = model.predict(x=[dataset['train']['X']] + A,
                           batch_size=batch_size,
                           verbose=0)
 
-    test_loss, test_acc = evaluate_model(Y_hat, 
+    test_loss, test_acc = evaluate_model(Y_hat,
                                          [dataset['test']['Y']],
                                          [dataset['test']['X_idx']])
-    
+
     logging.info("Performance on test set: loss {:.4f} / accuracy {:.4f}".format(
                   test_loss[0],
                   test_acc[0]))
@@ -163,6 +170,7 @@ def test_model(A, model, dataset, batch_size):
 
 
 def run(args, tsv_writer, config):
+    # set_number_of_threads(n=1)  # needed for reproducability
     set_seed(config['task']['seed'])
     if config['task']['force_gpu']:
         set_tensorflow_device_placement(mode='gpu')
@@ -182,7 +190,7 @@ def run(args, tsv_writer, config):
             X = tb.get('X')
             Y = tb.get('Y')
             X_node_map = tb.get('X_node_map')
-    
+
     if config['task']['kfolds'] < 0:
         loss, accuracy = single_run(A, X, Y, X_node_map, tsv_writer, config)
     else:
@@ -210,7 +218,7 @@ def init_logger(filename, verbose=0):
         if verbose >= 2:
             level = logging.DEBUG
         stream_handler.setLevel(level)
-        
+
         logging.getLogger().addHandler(stream_handler)
 
 if __name__ == "__main__":
@@ -226,6 +234,9 @@ if __name__ == "__main__":
     # load configuration
     assert is_readable(args.config)
     config = toml.load(args.config)
+    if config['version'] != VERSION:
+        raise UserWarning("Supplied config version '{}' differs from expected"+
+                          " version '{}'".format(config['version'], VERSION))
 
     # set output base filename
     baseFilename = "{}{}{}_{}".format(args.output, config['name'], timestamp,\
@@ -236,7 +247,7 @@ if __name__ == "__main__":
 
     init_logger(baseFilename+'.log', args.verbose)
     logger = logging.getLogger(__name__)
-    
+
     tsv_writer = TSV(baseFilename+'.tsv', 'w')
 
     # log parameters
@@ -247,5 +258,5 @@ if __name__ == "__main__":
 
     # run training
     run(args, tsv_writer, config)
-    
+
     logging.shutdown()
