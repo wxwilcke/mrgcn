@@ -12,12 +12,12 @@ def generate(knowledge_graph, config):
     # create mapping to integers [0, ...]
     properties_dict = {prop: i for i, prop in enumerate(knowledge_graph.properties())}
     nodes_dict = {node: i for i, node in enumerate(knowledge_graph.atoms())}
-    
+
     # generate adjacency matrix for each property
     adj_shape = (len(nodes_dict), len(nodes_dict))
-    adjacencies = generate_adjacency_matrices(knowledge_graph, 
+    adjacencies = generate_adjacency_matrices(knowledge_graph,
                                 properties_dict,
-                                nodes_dict, 
+                                nodes_dict,
                                 adj_shape,
                                 config['graph']['structural'])
 
@@ -25,12 +25,12 @@ def generate(knowledge_graph, config):
     ident = sp.identity(len(nodes_dict)).tocsr()
     if config['graph']['structural']['normalize']:
         ident = normalize_adjacency_matrix(ident)
-    adjacencies.append(ident) 
-    
+    adjacencies.append(ident)
+
     return adjacencies
 
-def generate_adjacency_matrices(knowledge_graph, 
-                                properties_dict, 
+def generate_adjacency_matrices(knowledge_graph,
+                                properties_dict,
                                 nodes_dict,
                                 adj_shape,
                                 config):
@@ -51,7 +51,7 @@ def generate_adjacency_matrices(knowledge_graph,
                          dtype=np.int32)
 
         # populate edge array with corresponding node URIs
-        for idx, (s, p, o) in enumerate(knowledge_graph.triples((None, 
+        for idx, (s, p, o) in enumerate(knowledge_graph.triples((None,
                                                                  prop,
                                                                  None))):
             edges[idx] = np.array([nodes_dict[s], nodes_dict[o]])
@@ -80,5 +80,5 @@ def normalize_adjacency_matrix(adj):
     d_inv = 1. / d
     d_inv[np.isinf(d_inv)] = 0.
     D_inv = sp.diags(d_inv)
-    
+
     return D_inv.dot(adj).tocsr()

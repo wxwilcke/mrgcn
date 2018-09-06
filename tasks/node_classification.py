@@ -44,7 +44,8 @@ def build_dataset(knowledge_graph, target_triples, config):
 
     # use identity matrix by default
     X = sp.identity(len(nodes_map), format='csr')
-    if 'features' in config['graph'].keys():
+    if 'features' in config['graph'].keys() and\
+       True in [feature['include'] for feature in config['graph']['features']]:
         X = construct_features(nodes_map, config['graph']['features'])
 
     logger.debug("Completed dataset build")
