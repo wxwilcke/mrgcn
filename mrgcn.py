@@ -20,7 +20,7 @@ from tasks.utils import mksplits, init_fold, mkfolds, sample_mask, strip_graph
 
 VERSION = 0.1
 
-def single_run(A, X, Y, X_node_map, tsv_writer, config):
+def single_run(A, R, X, Y, X_node_map, tsv_writer, config):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
@@ -30,7 +30,7 @@ def single_run(A, X, Y, X_node_map, tsv_writer, config):
                             config['task']['dataset_ratio'])
 
     # compile model computation graph
-    model = build_model(X, Y, A, config)
+    model = build_model(X, Y, A, R, config)
 
     # train model
     nepoch = config['model']['epoch']
@@ -55,7 +55,7 @@ def single_run(A, X, Y, X_node_map, tsv_writer, config):
 
     return (test_loss[0], test_acc[0])
 
-def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
+def kfold_crossvalidation(A, R, X, Y, X_node_map, k, tsv_writer, config):
     tsv_writer.writerow(["fold", "epoch",
                          "training_loss", "training_accurary",
                          "validation_loss", "validation_accuracy",
@@ -70,7 +70,7 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
         logger.info("Fold {} / {}".format(fold, k))
 
         # compile model computation graph
-        model = build_model(X, Y, A, config)
+        model = build_model(X, Y, A, R, config)
 
         # initialize fold
         dataset = init_fold(X, Y, X_node_map, folds_idx[fold-1],
@@ -117,19 +117,19 @@ def train_model(A, model, dataset, sample_weights, batch_size, nepoch):
     t0 = time()
     for epoch in range(1, nepoch+1):
         # Single training iteration
-        model.fit(x=[dataset['train']['X']] + A,
+        model.fit(x=[dataset['train']['X'], A],
                   y=dataset['train']['Y'],
                   batch_size=batch_size,
                   epochs=1,
                   shuffle=False,
                   sample_weight=sample_weights,
-                  validation_data=([dataset['val']['X']] + A,
+                  validation_data=([dataset['val']['X'], A],
                                     dataset['val']['Y']),
                   callbacks=[],
                   verbose=0)
 
         # Predict on full dataset
-        Y_hat = model.predict(x=[dataset['train']['X']] + A,
+        Y_hat = model.predict(x=[dataset['train']['X'], A],
                               batch_size=batch_size,
                               verbose=0)
 
@@ -154,7 +154,7 @@ def train_model(A, model, dataset, sample_weights, batch_size, nepoch):
 
 def test_model(A, model, dataset, batch_size):
     # Predict on full dataset
-    Y_hat = model.predict(x=[dataset['train']['X']] + A,
+    Y_hat = model.predict(x=[dataset['train']['X'], A],
                           batch_size=batch_size,
                           verbose=0)
 
@@ -180,21 +180,22 @@ def run(args, tsv_writer, config):
         logging.debug("No tarball supplied - building task prequisites")
         with KnowledgeGraph(graph=config['graph']['file']) as kg:
             targets = strip_graph(kg, config)
-            A = graph_structure.generate(kg, config)
+            A, R = graph_structure.generate(kg, config)
             X, Y, X_node_map = build_dataset(kg, targets, config)
     else:
         assert is_readable(args.input)
         logging.debug("Importing prepared tarball")
         with Tarball(args.input, 'r') as tb:
             A = tb.get('A')
+            R = tb.get('R')
             X = tb.get('X')
             Y = tb.get('Y')
             X_node_map = tb.get('X_node_map')
 
     if config['task']['kfolds'] < 0:
-        loss, accuracy = single_run(A, X, Y, X_node_map, tsv_writer, config)
+        loss, accuracy = single_run(A, R, X, Y, X_node_map, tsv_writer, config)
     else:
-        loss, accuracy = kfold_crossvalidation(A, X, Y, X_node_map,
+        loss, accuracy = kfold_crossvalidation(A, R, X, Y, X_node_map,
                                                config['task']['kfolds'],
                                                tsv_writer, config)
 

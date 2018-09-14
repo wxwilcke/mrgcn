@@ -1,13 +1,9 @@
 #!/usr/bin/env python
 
 import logging
-import os
-import random
 
-from keras import backend as K
 import numpy as np
 from rdflib.term import URIRef
-import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 

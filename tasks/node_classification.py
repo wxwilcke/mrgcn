@@ -42,24 +42,26 @@ def build_dataset(knowledge_graph, target_triples, config):
                                shape=(len(nodes_map), len(classes_map)),
                                  dtype=np.int32)
 
-    # use identity matrix by default
+    # use only identity matrix if no features are specified
     X = sp.identity(len(nodes_map), format='csr')
-    if 'features' in config['graph'].keys() and\
-       True in [feature['include'] for feature in config['graph']['features']]:
-        X = construct_features(nodes_map, config['graph']['features'])
+    if 'features' in config['graph'].keys():
+        # concat features to identity matrix if specified
+        X = sp.hstack([X,
+                       construct_features(nodes_map, config['graph']['features'])],
+                      format='csr')
 
     logger.debug("Completed dataset build")
     return (X, Y, X_node_idx)
 
-def build_model(X, Y, A, config):
+def build_model(X, Y, A, R, config):
     featureless = 'features' not in config['graph'].keys() or\
             True not in [feat['include'] for feat in config['graph']['features']]
     layers = config['model']['layers']
     assert len(layers) >= 2
     logger.debug("Starting model build")
 
-    support = len(A)
-    A_in = [InputAdj(shape=(adj.shape[1],), sparse=True) for adj in A]
+    support = R
+    A_in = InputAdj(shape=(A.shape[1],), sparse=True)
 
     # input layer
     X_in = Input(shape=(X.shape[1],), sparse=True)
@@ -67,8 +69,9 @@ def build_model(X, Y, A, config):
                          support=support,
                          num_bases=layers[0]['num_bases'],
                          featureless=featureless,
+                         input_layer=True,
                          activation=layers[0]['activation'],
-                         W_regularizer=l2(layers[0]['l2norm']))([X_in] + A_in)
+                         W_regularizer=l2(layers[0]['l2norm']))([X_in, A_in])
     H = Dropout(layers[0]['dropout'])(H)
 
     # intermediate layers (if any)
@@ -78,18 +81,18 @@ def build_model(X, Y, A, config):
                              num_bases=layers[i]['num_bases'],
                              featureless=featureless,
                              activation=layers[i]['activation'],
-                             W_regularizer=l2(layers[i]['l2norm']))([H] + A_in)
+                             W_regularizer=l2(layers[i]['l2norm']))([H, A_in])
         H = Dropout(layers[i]['dropout'])(H)
 
     # output layer
     Y_out = GraphConvolution(output_dim=Y.shape[1],
                              support=support,
                              num_bases=layers[-1]['num_bases'],
-                             activation=layers[-1]['activation'])([H] + A_in)
+                             activation=layers[-1]['activation'])([H, A_in])
 
     # Compile model
     logger.debug("Compiling model")
-    model = Model(inputs=[X_in] + A_in, outputs=Y_out)
+    model = Model(inputs=[X_in, A_in], outputs=Y_out)
     model.compile(loss=config['model']['loss'],
                   optimizer=Adam(lr=config['model']['learning_rate']))
 
