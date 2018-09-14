@@ -42,13 +42,11 @@ def build_dataset(knowledge_graph, target_triples, config):
                                shape=(len(nodes_map), len(classes_map)),
                                  dtype=np.int32)
 
-    # use only identity matrix if no features are specified
+    # use identity matrix by default
     X = sp.identity(len(nodes_map), format='csr')
-    if 'features' in config['graph'].keys():
-        # concat features to identity matrix if specified
-        X = sp.hstack([X,
-                       construct_features(nodes_map, config['graph']['features'])],
-                      format='csr')
+    if 'features' in config['graph'].keys() and\
+       True in [feature['include'] for feature in config['graph']['features']]:
+        X = construct_features(nodes_map, config['graph']['features'])
 
     logger.debug("Completed dataset build")
     return (X, Y, X_node_idx)

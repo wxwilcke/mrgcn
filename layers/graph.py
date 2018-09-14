@@ -35,7 +35,8 @@ class GraphConvolution(Layer):
         self.input_dim = None
         self.W_I = None
         self.W_F = None
-        self.W_comp = None
+        self.W_I_comp = None
+        self.W_F_comp = None
         self.b = None
         self.num_nodes = None
 
@@ -56,27 +57,34 @@ class GraphConvolution(Layer):
             # Bn x h  // B := number of basis functions
             self.W_I = tf.concat([self.add_weight((self.input_dim, self.output_dim),
                                                    initializer=self.init,
-                                                   name='{}_W'.format(self.name),
+                                                   name='{}_W_I'.format(self.name),
                                                    regularizer=self.W_regularizer) for _ in range(self.num_bases)],
                                    axis=0)
 
-            self.W_comp = self.add_weight((self.support, self.num_bases),
-                                          initializer=self.init,
-                                          name='{}_W_comp'.format(self.name),
-                                          regularizer=self.W_regularizer)
+            if self.input_layer:
+                self.W_I_comp = self.add_weight((self.support, self.num_bases),
+                                                 initializer=self.init,
+                                                 name='{}_W_I_comp'.format(self.name),
+                                                 regularizer=self.W_regularizer)
 
             if not self.featureless:
                 # B x f x h  // B := number of basis functions
                 self.W_F = tf.concat([[self.add_weight((self.input_dim, self.output_dim),
                                                         initializer=self.init,
-                                                        name='{}_W'.format(self.name),
+                                                        name='{}_W_F'.format(self.name),
                                                         regularizer=self.W_regularizer)] for _ in range(self.num_bases)],
                                        axis=0)
+
+                self.W_F_comp = self.add_weight((self.support, self.num_bases),
+                                                 initializer=self.init,
+                                                 name='{}_W_F_comp'.format(self.name),
+                                                 regularizer=self.W_regularizer)
+
         else:
             # Rn x h  // R := number of relations
             self.W_I = tf.concat([self.add_weight((self.input_dim, self.output_dim),
                                                    initializer=self.init,
-                                                   name='{}_W'.format(self.name),
+                                                   name='{}_W_I'.format(self.name),
                                                    regularizer=self.W_regularizer) for _ in range(self.support)],
                                    axis=0)
 
@@ -84,7 +92,7 @@ class GraphConvolution(Layer):
                 # R x f x h  // R := number of relations
                 self.W_F = tf.concat([[self.add_weight((self.input_dim, self.output_dim),
                                                         initializer=self.init,
-                                                        name='{}_W'.format(self.name),
+                                                        name='{}_W_F'.format(self.name),
                                                         regularizer=self.W_regularizer)] for _ in range(self.support)],
                                        axis=0)
 
@@ -113,13 +121,12 @@ class GraphConvolution(Layer):
         if self.input_layer:
             W_I = self.W_I
             # reduce weight matrix if basis functions are used
-            if self.num_bases > 0: # TODO: check: 
+            if self.num_bases > 0: 
                 W_I = tf.reshape(W_I, [self.num_bases, 
                                             self.num_nodes,
                                             self.output_dim])
                 W_I = tf.transpose(W_I, perm=[1, 0, 2]) 
-                W_I = tf.einsum('ij,bjk->bik', self.W_comp, W_I) 
-                #W_I = tf.transpose(W_I, perm=[1, 0, 2])  # needed?
+                W_I = tf.einsum('ij,bjk->bik', self.W_I_comp, W_I) 
                 W_I = tf.reshape(W_I, [self.support*self.num_nodes,
                                        self.output_dim])  
 
@@ -135,20 +142,12 @@ class GraphConvolution(Layer):
         
         W_F = self.W_F
         # reduce weight matrix if basis functions are used
-        if self.num_bases > 0: # TODO: check: 
+        if self.num_bases > 0: 
             W_F = tf.transpose(W_F, perm=[1, 0, 2])
-            W_F = tf.einsum('ij,bjk->bik', self.W_comp, W_F) 
-            W_F = tf.transpose(W_F, perm=[1, 0, 2]) 
-
-        F = X
-        if self.input_layer:
-            # separate F from X iff X := [I, F]
-            F = tf.sparse_tensor_to_dense(tf.sparse_slice(X, 
-                                                          [0, self.num_nodes],
-                                                          [self.num_nodes, self.input_dim]))
+            W_F = tf.einsum('ij,bjk->bik', self.W_F_comp, W_F) 
 
         # convolve
-        FW_F = tf.einsum('ij,bjk->bik', F, W_F) # R x n x y
+        FW_F = tf.einsum('ij,bjk->bik', X, W_F) # R x n x y
         FW_F = tf.reshape(FW_F, [self.support*self.num_nodes, self.output_dim]) 
         AFW_F = tf.sparse_tensor_dense_matmul(A, FW_F) 
  
