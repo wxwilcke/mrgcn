@@ -28,7 +28,7 @@ def generate(knowledge_graph, config):
     adjacencies.append(ident)
 
     # stack into a n x nR matrix
-    return (sp.hstack(adjacencies, format="csr"), len(adjacencies))
+    return sp.hstack(adjacencies, format="csr")
 
 def generate_adjacency_matrices(knowledge_graph,
                                 properties_dict,

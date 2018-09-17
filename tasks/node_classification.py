@@ -51,14 +51,14 @@ def build_dataset(knowledge_graph, target_triples, config):
     logger.debug("Completed dataset build")
     return (X, Y, X_node_idx)
 
-def build_model(X, Y, A, R, config):
+def build_model(X, Y, A, config):
     featureless = 'features' not in config['graph'].keys() or\
             True not in [feat['include'] for feat in config['graph']['features']]
     layers = config['model']['layers']
     assert len(layers) >= 2
     logger.debug("Starting model build")
 
-    support = R
+    support = int(A.shape[1]/A.shape[0])  # assumes A = n x nR
     A_in = InputAdj(shape=(A.shape[1],), sparse=True)
 
     # input layer
