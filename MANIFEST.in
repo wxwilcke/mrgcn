@@ -1,1 +1,5 @@
-./if/*.toml
+./if/aifb.toml
+./if/am.toml
+./if/bgs.toml
+./if/mutag.toml
+./if/dmg.toml

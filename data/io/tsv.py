@@ -20,7 +20,7 @@ class TSV:
             raise ValueError("::No path supplied")
 
         self._tsv = open(path, mode)
-        
+
         if 'r' in mode:
             self.logger.debug("Loading from file: {}".format(path))
             return self.read()

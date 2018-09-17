@@ -126,7 +126,7 @@ def mksplits(X, Y, X_nodes_map, dataset_ratio=(.7,.2,.1), shuffle=True):
     Y_test[X_test_idx] = np.array(Y[X_test_idx].todense())
     Y_val[X_val_idx] = np.array(Y[X_val_idx].todense())
 
-    # X stays unmodified during featureless learning
+    # X stays unmodified 
     # X = X
 
     return { 'train': { 'X': X, 'Y': Y_train, 'X_idx': X_train_idx },
