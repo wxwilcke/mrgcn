@@ -148,6 +148,7 @@ class GraphConvolution(Layer):
             if self.num_bases > 0:
                 W_F = tf.transpose(W_F, perm=[1, 0, 2])
                 W_F = tf.einsum('ij,bjk->bik', self.W_F_comp, W_F)
+                W_F = tf.transpose(W_F, perm=[1, 0, 2])
 
             # convolve
             FW_F = tf.einsum('ij,bjk->bik', F, W_F) # R x n x y
