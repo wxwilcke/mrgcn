@@ -5,7 +5,6 @@ from keras import regularizers
 from keras.engine import Layer
 from keras.layers import Dropout
 
-import keras.backend as K
 import tensorflow as tf
 
 
@@ -165,12 +164,12 @@ class GraphConvolution(Layer):
         # if featureless add dropout to output, by elementwise multiplying with column vector of ones,
         # with dropout applied to the vector of ones.
         if self.featureless:
-            tmp = K.ones(self.num_nodes)
+            tmp = tf.ones(shape=[self.num_nodes], dtype=tf.float32)
             tmp_do = Dropout(self.dropout)(tmp)
-            AXW = K.transpose(K.transpose(AXW) * tmp_do)
+            AXW = tf.transpose(tf.multiply(tf.transpose(AXW), tmp_do))
 
         if self.bias:
-            AXW += self.b
+            AXW = tf.add(AXW, self.b)
         return self.activation(AXW)
 
     def get_config(self):
