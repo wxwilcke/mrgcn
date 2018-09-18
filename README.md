@@ -1,10 +1,22 @@
 Multimodal Relational Graph Convolutional Network (MRGCN)
 =====
+[https://www.slideshare.net/XanderWilcke/the-knowledge-graph-for-endtoend-learning-on-heterogeneous-knowledge]
+(ICT Open 2018 slides)
 
 This is a work in progress
 
 Note: this work is based on [1]
 
+=====
+
+# Example
+
+Prepare the AIFB dataset (optional):
+```python mkdataset.py -c ../if/aifb.toml -o ../of/ -vv```
+
+Run the MRGCN on the prepared AIFB dataset
+
+```python mrgcn.py -i ../of/AIFB<unix_date>.tar -c ../if/aifb.toml -o /tmp/ -vv```
 
 ## References
 
