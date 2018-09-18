@@ -122,16 +122,18 @@ class GraphConvolution(Layer):
             W_I = self.W_I
             # reduce weight matrix if basis functions are used
             if self.num_bases > 0:
-                W_I = tf.reshape(W_I, [self.num_bases,
-                                       self.num_nodes,
-                                       self.output_dim])
+                W_I = tf.reshape(W_I, 
+                                 [self.num_bases, self.num_nodes, self.output_dim],
+                                 name="W_I_pre")
                 W_I = tf.transpose(W_I, perm=[1, 0, 2])
-                W_I = tf.einsum('ij,bjk->bik', self.W_I_comp, W_I)
-                W_I = tf.reshape(W_I, [self.support*self.num_nodes,
-                                       self.output_dim])
+                W_I = tf.einsum('ij,bjk->bik', self.W_I_comp, W_I,
+                                name="W_I_comp-W_I")
+                W_I = tf.reshape(W_I,
+                                 [self.support*self.num_nodes, self.output_dim],
+                                 name="W_I_post")
 
             # convolve
-            AIW_I = tf.sparse_tensor_dense_matmul(A, W_I)
+            AIW_I = tf.sparse_tensor_dense_matmul(A, W_I, name="A-IW_I")
 
 
         ## compute entity features ###########################################
@@ -147,13 +149,16 @@ class GraphConvolution(Layer):
             # reduce weight matrix if basis functions are used
             if self.num_bases > 0:
                 W_F = tf.transpose(W_F, perm=[1, 0, 2])
-                W_F = tf.einsum('ij,bjk->bik', self.W_F_comp, W_F)
+                W_F = tf.einsum('ij,bjk->bik', self.W_F_comp, W_F,
+                                name="W_F_comp-W_F")
                 W_F = tf.transpose(W_F, perm=[1, 0, 2])
 
             # convolve
             FW_F = tf.einsum('ij,bjk->bik', F, W_F) # R x n x y
-            FW_F = tf.reshape(FW_F, [self.support*self.num_nodes, self.output_dim])
-            AFW_F = tf.sparse_tensor_dense_matmul(A, FW_F)
+            FW_F = tf.reshape(FW_F, 
+                              [self.support*self.num_nodes, self.output_dim],
+                              name="FW_F")
+            AFW_F = tf.sparse_tensor_dense_matmul(A, FW_F, name="A-FW_F")
 
 
         ## compute output ####################################################
