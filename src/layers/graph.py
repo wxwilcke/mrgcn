@@ -142,8 +142,8 @@ class GraphConvolution(Layer):
         AFW_F = tf.Variable(0.0, tf.float32)
         if not self.featureless:
             F = X
-            if type(X) is tf.SparseTensor:
-                X = tf.sparse_tensor_to_dense(X)
+            if type(F) is tf.SparseTensor:
+                F = tf.sparse_tensor_to_dense(F)
 
             W_F = self.W_F
             # reduce weight matrix if basis functions are used
