@@ -1,0 +1,48 @@
+# Dataset configuration file
+version = 0.1
+
+# name of the dataset
+name = "DMG4C"
+
+[graph]
+file = "../../../datasets/dmg/dataset.subset/baseline/monumentsT4C_full-dummyimg.nt.gz"
+
+[graph.structural]
+include_inverse_properties = true
+exclude_properties = []  # use empty list to include all
+normalize = true
+
+[[graph.features]]
+datatype = 'gYear'
+include = false
+normalize = true
+
+[task]
+# node classification
+instance_type = 'http://dbpedia.org/ontology/Monument'
+target_property = 'https://data.labs.pdok.nl/rce/def/monumentCode'
+target_property_inv = ''
+target_classes = ["https://data.labs.pdok.nl/rce/def/woonhuis", 
+                  "https://data.labs.pdok.nl/rce/def/agrarischGebouw",
+				  "https://data.labs.pdok.nl/rce/def/losObject",
+				  "https://data.labs.pdok.nl/rce/def/kerk"]
+dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
+kfolds = -1  # use < 0 to disable (single run)
+seed = -1  # use < 0 for random
+force_gpu = false
+
+[model]
+epoch = 50
+learning_rate = 0.01
+loss = 'categorical_crossentropy'
+
+[[model.layers]]
+hidden_nodes = 16
+num_bases = 40
+l2norm = 5e-4
+dropout = 0.0
+activation = 'relu'
+
+[[model.layers]]
+num_bases = 40
+activation = 'softmax'
