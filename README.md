@@ -6,8 +6,6 @@ This is a work in progress
 
 Note: this work is based on [1]
 
-=====
-
 # Example
 
 Prepare the AIFB dataset (optional):
