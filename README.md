@@ -1,7 +1,6 @@
 Multimodal Relational Graph Convolutional Network (MRGCN)
 =====
-[https://www.slideshare.net/XanderWilcke/the-knowledge-graph-for-endtoend-learning-on-heterogeneous-knowledge]
-(ICT Open 2018 slides)
+[ICT Open 2018 slides](https://www.slideshare.net/XanderWilcke/the-knowledge-graph-for-endtoend-learning-on-heterogeneous-knowledge)
 
 This is a work in progress
 
