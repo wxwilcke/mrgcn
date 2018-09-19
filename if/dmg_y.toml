@@ -5,7 +5,7 @@ version = 0.1
 name = "DMG4C_y"
 
 [graph]
-file = "../../../datasets/dmg/dataset.subset/baseline/monumentsT4C_full-dummyimg.nt.gz"
+file = "../../../../datasets/dmg/dataset.subset/baseline/monumentsT4C_full-dummyimg.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true

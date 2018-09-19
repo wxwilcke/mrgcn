@@ -5,7 +5,7 @@ version = 0.1
 name = "AM"
 
 [graph]
-file = "../../../datasets/am/am.nt.gz"
+file = "../../../../datasets/am/am.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
