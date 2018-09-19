@@ -69,7 +69,7 @@ class Tarball:
                 d_base = [path[len(top_level)+1:] for path in d_full]
                 content.append(self._read_dict(d_full, d_base))
                 names.append(top_level)
-        
+
             top_levels = {path.split('/')[1] for path in lists}
             for top_level in top_levels:
                 l_full = [path for path in lists if path.split('/')[1] == top_level]
@@ -131,10 +131,10 @@ class Tarball:
 
     def _read_csr(self, name):
         loader = self._read_nda(name)
-        return sp.csr_matrix((loader['data'], 
-                              loader['indices'], 
+        return sp.csr_matrix((loader['data'],
+                              loader['indices'],
                               loader['indptr']),
-                            shape=loader['shape'], 
+                            shape=loader['shape'],
                             dtype=np.float32)
 
     def _read_nda(self, name):
@@ -160,7 +160,7 @@ class Tarball:
         l = []
         for name, path in zip(names, paths):
             l.append(self._read_sublist(name, path.split('/')[1:]))
-        
+
         return l
 
     def _read_sublist(self, name, path_splitted):
@@ -190,7 +190,7 @@ class Tarball:
             if k not in d.keys():
                 d[k] = {}
             self._read_subdict(name, path_splitted[1:], d[k])
-            
+
             return
 
         filename = path_splitted[0]
@@ -268,7 +268,7 @@ class Tarball:
     def _store_py(self, f, name):
         buff = BytesIO()
         pickle.dump(f, buff, protocol=-1)
-        
+
         size = len(buff.getbuffer())
         buff.seek(0)
 
