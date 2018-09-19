@@ -22,7 +22,7 @@ class KnowledgeGraph:
     def __init__(self, graph=None):
         self.logger = logging.getLogger(__name__)
         self.logger.debug("Initiating Knowledge Graph")
-        
+
         if graph is not None:
             if type(graph) is Graph:
                 self.graph = graph
@@ -38,7 +38,7 @@ class KnowledgeGraph:
         self.logger.debug("Knowledge Graph ({} facts) succesfully imported".format(len(self.graph)))
 
     def _read(self, path=None):
-        assert is_readable(path) 
+        assert is_readable(path)
         graph = Graph()
 
         if not is_gzip(path):
@@ -49,7 +49,7 @@ class KnowledgeGraph:
                 graph.parse(f, format=guess_format(path[:-3]))
 
         return graph
-    
+
     def __enter__(self):
         return self
 
@@ -105,7 +105,7 @@ class KnowledgeGraph:
                 continue
 
             yield(p)
-            
+
     def datatype_properties(self):
         objecttype_properties = set(self.objecttype_properties())
         self.logger.debug("Yielding DT predicates")
@@ -114,7 +114,7 @@ class KnowledgeGraph:
                 continue
 
             yield(p)
-    
+
     def properties(self):
         self.logger.debug("Yielding properties")
         for p in self.graph.predicates():
