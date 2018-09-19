@@ -9,13 +9,12 @@ from rdflib.term import Literal
 from rdflib.namespace import XSD
 
 
-_REGEX_CHAR = "[\u0001-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
-_REGEX_STRING = "{}*".format(_REGEX_CHAR)
+_REGEX_WKTLITERAL = ""
 
 logger = logging.getLogger(__name__)
 
 def generate_features(nodes_map, config):
-    """ Generate features for XSD string literals
+    """ Generate features for OGC WKT literals
 
     Definition
     - string := Char*
@@ -33,7 +32,7 @@ def generate_features(nodes_map, config):
                     N :- number of nodes
                     C :- number of columns for this feature embedding
     """
-    logger.debug("Generating string features")
+    logger.debug("Generating wktLiteral features")
     C = ?  # number of items per feature
 
     nfeatures = 0
@@ -55,7 +54,7 @@ def generate_features(nodes_map, config):
         features[i] = [...]
         nfeatures += 1
 
-    logger.debug("Generated {} unique string features".format(nfeatures))
+    logger.debug("Generated {} unique wktLiteral features".format(nfeatures))
 
     # inplace L1 normalization over features
     if config['normalize']:
@@ -64,4 +63,4 @@ def generate_features(nodes_map, config):
     return features
 
 def validate(value):
-    return fullmatch(_REGEX_STRING, value)
+    return fullmatch(_REGEX_WKTLITERAL, value)

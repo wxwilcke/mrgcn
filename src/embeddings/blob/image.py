@@ -15,7 +15,7 @@ _REGEX_STRING = "{}*".format(_REGEX_CHAR)
 logger = logging.getLogger(__name__)
 
 def generate_features(nodes_map, config):
-    """ Generate features for XSD string literals
+    """ Generate features for images as XSD B64-encoded literals
 
     Definition
     - string := Char*
@@ -33,7 +33,7 @@ def generate_features(nodes_map, config):
                     N :- number of nodes
                     C :- number of columns for this feature embedding
     """
-    logger.debug("Generating string features")
+    logger.debug("Generating B64-encoded image features")
     C = ?  # number of items per feature
 
     nfeatures = 0
@@ -41,7 +41,8 @@ def generate_features(nodes_map, config):
     for node, i in nodes_map.items():
         if type(node) is not Literal:
             continue
-        if node.datatype is None or node.datatype.neq(XSD.string):
+        if node.datatype is None or node.datatype.neq(XSD.b64string):
+            # assume that all B64-encoded literals are images
             continue
 
         node._value = node.__str__()  ## empty value bug workaround
@@ -55,7 +56,7 @@ def generate_features(nodes_map, config):
         features[i] = [...]
         nfeatures += 1
 
-    logger.debug("Generated {} unique string features".format(nfeatures))
+    logger.debug("Generated {} unique B64-encoded image features".format(nfeatures))
 
     # inplace L1 normalization over features
     if config['normalize']:
