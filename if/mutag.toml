@@ -5,7 +5,7 @@ version = 0.1
 name = "MUTAG"
 
 [graph]
-file = "../../../datasets/mutag/mutag.nt.gz"
+file = "../../../../datasets/mutag/mutag.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
