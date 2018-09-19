@@ -3,7 +3,7 @@
 from importlib import import_module
 import logging
 
-import scipy.sparse as sp
+import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -16,12 +16,12 @@ def construct_features(nodes_map, feature_configs):
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param feature_config: list of features to construct, given as dicts
-    :returns: scipy sparse matrix N x (F * C);
+    :returns: numpy array N x (F * C);
                     N :- number of nodes
                     F :- number of features
                     C :- number of columns per feature
     """
-    features = sp.csr_matrix((len(nodes_map), 0))
+    features = []
     for feature_config in feature_configs:
         if not feature_config['include']:
             continue
@@ -37,6 +37,6 @@ def construct_features(nodes_map, feature_configs):
 
         logger.debug("Concatenating {} features to X".format(feature_name))
         # stack new features to existing ones
-        features = sp.hstack([features, feature], format='csr')
+        features.append(feature)
 
-    return features
+    return np.hstack(features)

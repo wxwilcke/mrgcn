@@ -60,9 +60,9 @@ def build_model(X, Y, A, config):
 
     support = int(A.shape[1]/A.shape[0])  # assumes A = n x nR
     A_in = InputAdj(shape=(A.shape[1],), sparse=True)
+    X_in = Input(shape=(X.shape[1],), sparse=sp.isspmatrix(X))
 
     # input layer
-    X_in = Input(shape=(X.shape[1],), sparse=True)
     H = GraphConvolution(output_dim=layers[0]['hidden_nodes'],
                          support=support,
                          num_bases=layers[0]['num_bases'],

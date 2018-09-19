@@ -4,7 +4,6 @@ import logging
 from re import match
 
 import numpy as np
-import scipy.sparse as sp
 from sklearn.preprocessing import normalize
 from rdflib.term import Literal
 from rdflib.namespace import XSD
@@ -44,15 +43,15 @@ def generate_features(nodes_map, config):
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param config: configuration dictionary
-    :returns: scipy sparse matrix N x C;
+    :returns: numpy array N x C;
                     N :- number of nodes
                     C :- number of columns for this feature embedding
     """
     logger.debug("Generating gYear features")
     C = 4  # number of items per feature
 
-    rows = []
-    data = []
+    nfeatures = 0
+    features = np.zeros(shape=(len(nodes_map), C), dtype=np.float32)
     for node, i in nodes_map.items():
         if type(node) is not Literal:
             continue
@@ -77,18 +76,10 @@ def generate_features(nodes_map, config):
         y = int(separated.group('year'))
 
         # add to matrix structures
-        rows.append(i)
-        data.extend([sign, c, d, y])
+        features[i] = [sign, c, d, y]
+        nfeatures += 1
 
-    cols = np.tile(range(C), len(rows))
-    rows = np.repeat(rows, C)  # expand indices
-
-    logger.debug("Generated {} unique gYear features".format(len(cols)//C))
-
-    # create matrix
-    features = sp.csr_matrix((data, (rows, cols)),
-                         shape=(len(nodes_map), C),
-                         dtype=np.float32)
+    logger.debug("Generated {} unique gYear features".format(nfeatures))
 
     # inplace L1 normalization over features
     if config['normalize']:
