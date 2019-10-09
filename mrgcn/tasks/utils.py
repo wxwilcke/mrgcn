@@ -71,7 +71,7 @@ def mkfolds(n, k, shuffle=True):
 
     return folds
 
-def init_fold(X, Y, X_nodes_map, idx_dict, dataset_ratio=(.7,.2,.1)):
+def init_fold(X, Y, X_nodes_map, idx_dict, device, dataset_ratio=(.7,.2,.1)):
     assert round(sum(dataset_ratio), 2) == 1.0
     logger.debug("Initializing fold")
 
@@ -80,9 +80,9 @@ def init_fold(X, Y, X_nodes_map, idx_dict, dataset_ratio=(.7,.2,.1)):
     val_idx = int(len(idx_dict['train'])*val_split)
 
     # split datasets
-    X_train_idx = X_nodes_map[idx_dict['train'][:-val_idx]]
-    X_test_idx = X_nodes_map[idx_dict['test']]
-    X_val_idx = X_nodes_map[idx_dict['train'][-val_idx:]]
+    X_train_idx = torch.LongTensor(X_nodes_map[idx_dict['train'][:-val_idx]])
+    X_test_idx = torch.LongTensor(X_nodes_map[idx_dict['test']])
+    X_val_idx = torch.LongTensor(X_nodes_map[idx_dict['train'][-val_idx:]])
 
     # split Y
     Y_train = torch.zeros(Y.size())
@@ -100,7 +100,7 @@ def init_fold(X, Y, X_nodes_map, idx_dict, dataset_ratio=(.7,.2,.1)):
             'test': { 'X': X, 'Y': Y_test, 'idx': X_test_idx },
             'val': { 'X': X, 'Y': Y_val, 'idx': X_val_idx }}
 
-def mksplits(X, Y, X_nodes_map, dataset_ratio=(.7,.2,.1), shuffle=True):
+def mksplits(X, Y, X_nodes_map, device, dataset_ratio=(.7,.2,.1), shuffle=True):
     assert round(sum(dataset_ratio), 2) == 1.0
     logger.debug("Creating train-test-validation sets with ratio {}".format(dataset_ratio))
     # indices of targets
@@ -115,9 +115,9 @@ def mksplits(X, Y, X_nodes_map, dataset_ratio=(.7,.2,.1), shuffle=True):
     val_idx = idx[len(train_idx)+len(test_idx):]
 
     # split datasets
-    X_train_idx = X_nodes_map[train_idx]
-    X_test_idx = X_nodes_map[test_idx]
-    X_val_idx = X_nodes_map[val_idx]
+    X_train_idx = torch.LongTensor(X_nodes_map[train_idx])
+    X_test_idx = torch.LongTensor(X_nodes_map[test_idx])
+    X_val_idx = torch.LongTensor(X_nodes_map[val_idx])
 
     # split Y
     Y_train = torch.zeros(Y.size())
@@ -135,15 +135,13 @@ def mksplits(X, Y, X_nodes_map, dataset_ratio=(.7,.2,.1), shuffle=True):
             'test': { 'X': X, 'Y': Y_test, 'idx': X_test_idx },
             'val': { 'X': X, 'Y': Y_val, 'idx': X_val_idx }}
 
+def dataset_to_device(dataset, device):
+    for split in dataset.values():
+        split['Y'].to(device)
+        split['idx'].to(device)
+        # X stays where it is
+
 def sample_mask(idx, n):
     mask = np.zeros(n)
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
-
-class DummyTensor():
-    def __init__(self, size, dtype):
-        self.size = size
-        self.dtype = dtype
-
-    def size(self):
-        return self.size

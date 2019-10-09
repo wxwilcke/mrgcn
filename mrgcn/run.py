@@ -14,15 +14,18 @@ import torch.optim as optim
 from mrgcn.data.io.knowledge_graph import KnowledgeGraph
 from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.io.tsv import TSV
-from mrgcn.data.utils import is_readable, is_writable
+from mrgcn.data.utils import is_readable, is_writable, scipy_sparse_to_pytorch_sparse
 from mrgcn.embeddings import graph_structure
 from mrgcn.tasks.config import set_seed
-from mrgcn.data.utils import scipy_sparse_to_pytorch_sparse
 from mrgcn.tasks.node_classification import (build_dataset,
                                              build_model,
                                              categorical_accuracy,
                                              categorical_crossentropy)
-from mrgcn.tasks.utils import mksplits, init_fold, mkfolds, strip_graph
+from mrgcn.tasks.utils import (dataset_to_device,
+                               mksplits,
+                               init_fold,
+                               mkfolds,
+                               strip_graph)
 
 
 VERSION = 0.1
@@ -33,12 +36,13 @@ def single_run(A, X, Y, X_node_map, tsv_writer, device, config, featureless):
                                   "test_loss", "test_accuracy"])
 
     # create splits
-    dataset = mksplits(X, Y, X_node_map,
+    dataset = mksplits(X, Y, X_node_map, device,
                             config['task']['dataset_ratio'])
 
     # compile model and move to gpu if possible
     model = build_model(X, Y, A, config, featureless)
-    model.to(device, non_blocking=True)
+    model.to(device)
+    dataset_to_device(dataset, device)
 
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
@@ -47,10 +51,9 @@ def single_run(A, X, Y, X_node_map, tsv_writer, device, config, featureless):
 
     # train model
     nepoch = config['model']['epoch']
-    batch_size = X.size()[0]  # number of nodes
 
     for epoch in train_model(A, model, optimizer, criterion, dataset,
-                             batch_size, nepoch):
+                             nepoch):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -76,7 +79,7 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, device, config,
 
     # compile model and move to gpu if possible
     model = build_model(X, Y, A, config, featureless)
-    model.to(device, non_blocking=True)
+    model.to(device)
 
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
@@ -93,14 +96,14 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, device, config,
         logger.info("Fold {} / {}".format(fold, k))
         # initialize fold
         dataset = init_fold(X, Y, X_node_map, folds_idx[fold-1],
-                            config['task']['dataset_ratio'])
+                            device, config['task']['dataset_ratio'])
+        dataset_to_device(dataset, device)  # move to gpu if possible
 
         # train model
         nepoch = config['model']['epoch']
-        batch_size = X.size()[0]  # number of nodes
 
         for epoch in train_model(A, model, optimizer, criterion, dataset,
-                                 batch_size, nepoch):
+                                 nepoch):
             # log metrics
             tsv_writer.writerow([str(fold),
                                  str(epoch[0]),
@@ -123,13 +126,16 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, device, config,
         model.reset()
         optimizer.load_state_dict(optimizer_state_zero)
 
+        # remove split-specific tensors from gpu if possible
+        dataset_to_device(dataset, torch.device("cpu"))
+
     mean_loss, mean_acc = tuple(sum(e)/len(e) for e in zip(*results))
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
                          str(mean_loss), str(mean_acc)])
 
     return (mean_loss, mean_acc)
 
-def train_model(A, model, optimizer, criterion, dataset, batch_size, nepoch):
+def train_model(A, model, optimizer, criterion, dataset, nepoch):
     logging.info("Training for {} epoch".format(nepoch))
     # Log wall-clock time
     t0 = time()
@@ -155,6 +161,13 @@ def train_model(A, model, optimizer, criterion, dataset, batch_size, nepoch):
         train_loss.backward()
         optimizer.step()
 
+        # cast criterion objects to floats to free the memory of the tensors
+        # they point to
+        train_loss = float(train_loss)
+        train_acc = float(train_acc)
+        val_loss = float(val_loss)
+        val_acc = float(val_acc)
+
         logging.info("{:04d} ".format(epoch) \
                      + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
                                                                   train_acc)
@@ -177,6 +190,9 @@ def test_model(A, model, criterion, dataset):
     test_acc = categorical_accuracy(Y_hat, dataset['test']['Y'],
                                     dataset['test']['idx'])
 
+    test_loss = float(test_loss)
+    test_acc = float(test_acc)
+
     logging.info("Performance on test set: loss {:.4f} / accuracy {:.4f}".format(
                   test_loss,
                   test_acc))
@@ -194,6 +210,7 @@ def run(args, tsv_writer, config):
     device = torch.device("cpu")
     if config['task']['gpu'] and torch.cuda.is_available():
         device = torch.device("cuda")
+        logging.debug("Running on GPU")
 
     # prep data
     if args.input is None:
@@ -216,10 +233,9 @@ def run(args, tsv_writer, config):
         X = np.empty(X)
 
     # convert numpy and scipy matrices to pyTorch tensors
-    # move to gpu if possible
-    A = scipy_sparse_to_pytorch_sparse(A, device)
+    A = scipy_sparse_to_pytorch_sparse(A, device)  # move to gpu if possible
     X = torch.Tensor(X, device=device) if not featureless else torch.Tensor(X)
-    Y = torch.Tensor(Y, device=device)
+    Y = torch.Tensor(Y)  # keep on cpu until after splits
 
     if config['task']['kfolds'] < 0:
         loss, accuracy = single_run(A, X, Y, X_node_map, tsv_writer, device,
@@ -229,6 +245,10 @@ def run(args, tsv_writer, config):
                                                config['task']['kfolds'],
                                                tsv_writer, device, config,
                                                featureless)
+
+    if device is torch.device("cuda"):
+        logging.debug("Peak GPU memory used (MB): ",
+                      torch.cuda.max_memory_allocated()/1.0e-6)
 
     logging.info("Mean performance: loss {:.4f} / accuracy {:.4f}".format(
                   loss,

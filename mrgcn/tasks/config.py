@@ -17,6 +17,7 @@ def set_seed(seed=-1):
         random.seed(seed)
         np.random.seed(seed)
         torch.random.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
         logger.debug("Setting seed to {}".format(seed))
     else:
