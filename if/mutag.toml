@@ -5,7 +5,7 @@ version = 0.1
 name = "MUTAG"
 
 [graph]
-file = "../../../../datasets/mutag/mutag.nt.gz"
+file = "../../datasets/mutag/mutag.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -19,22 +19,22 @@ target_property = 'http://dl-learner.org/carcinogenesis#isMutagenic'
 target_property_inv = ''
 target_classes = []
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = -1  # use < 0 to disable (single run)
+kfolds = 5  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
-force_gpu = false
+gpu = false
 
 [model]
 epoch = 50
 learning_rate = 0.01
 loss = 'categorical_crossentropy'
-
-[[model.layers]]
-hidden_nodes = 16
 num_bases = 30
+p_dropout = 0.0
 l2norm = 5e-4
-dropout = 0.0
-activation = 'relu'
+bias = false
 
 [[model.layers]]
-num_bases = 30
-activation = 'softmax'
+type = 'mrgcn'
+hidden_nodes = 16
+
+[[model.layers]]
+type = 'mrgcn'

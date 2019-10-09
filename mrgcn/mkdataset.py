@@ -6,19 +6,29 @@ from time import time
 
 import toml
 
-from data.io.knowledge_graph import KnowledgeGraph
-from data.io.tarball import Tarball
-from data.utils import is_readable, is_writable
-from embeddings import graph_structure
-from tasks.node_classification import build_dataset
-from tasks.utils import strip_graph
+from mrgcn.data.io.knowledge_graph import KnowledgeGraph
+from mrgcn.data.io.tarball import Tarball
+from mrgcn.data.utils import is_readable, is_writable
+from mrgcn.embeddings import graph_structure
+from mrgcn.tasks.node_classification import build_dataset
+from mrgcn.tasks.utils import strip_graph
 
 def run(args, config):
     logger.info("Generating data structures")
+
+    featureless = True
+    if 'features' in config['graph'].keys() and\
+       True in [feature['include'] for feature in config['graph']['features']]:
+        featureless = False
+
     with KnowledgeGraph(graph=config['graph']['file']) as kg:
         targets = strip_graph(kg, config)
         A = graph_structure.generate(kg, config)
-        X, Y, X_node_map = build_dataset(kg, targets, config)
+        X, Y, X_node_map = build_dataset(kg, targets, config, featureless)
+
+    if featureless:
+        num_nodes = Y.shape[0]
+        X = (num_nodes, num_nodes)
 
     return (A, X, Y, X_node_map)
 

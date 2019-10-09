@@ -4,6 +4,8 @@ import logging
 
 import numpy as np
 from rdflib.term import URIRef
+import torch
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,20 +85,20 @@ def init_fold(X, Y, X_nodes_map, idx_dict, dataset_ratio=(.7,.2,.1)):
     X_val_idx = X_nodes_map[idx_dict['train'][-val_idx:]]
 
     # split Y
-    Y_train = np.zeros(Y.shape)
-    Y_test = np.zeros(Y.shape)
-    Y_val = np.zeros(Y.shape)
+    Y_train = torch.zeros(Y.size())
+    Y_test = torch.zeros(Y.size())
+    Y_val = torch.zeros(Y.size())
 
-    Y_train[X_train_idx] = np.array(Y[X_train_idx].todense())
-    Y_test[X_test_idx] = np.array(Y[X_test_idx].todense())
-    Y_val[X_val_idx] = np.array(Y[X_val_idx].todense())
+    Y_train[X_train_idx] = Y[X_train_idx]
+    Y_test[X_test_idx] = Y[X_test_idx]
+    Y_val[X_val_idx] = Y[X_val_idx]
 
-    # X stays unmodified during featureless learning
+    # X stays unmodified 
     # X = X
 
-    return { 'train': { 'X': X, 'Y': Y_train, 'X_idx': X_train_idx },
-            'test': { 'X': X, 'Y': Y_test, 'X_idx': X_test_idx },
-            'val': { 'X': X, 'Y': Y_val, 'X_idx': X_val_idx }}
+    return { 'train': { 'X': X, 'Y': Y_train, 'idx': X_train_idx },
+            'test': { 'X': X, 'Y': Y_test, 'idx': X_test_idx },
+            'val': { 'X': X, 'Y': Y_val, 'idx': X_val_idx }}
 
 def mksplits(X, Y, X_nodes_map, dataset_ratio=(.7,.2,.1), shuffle=True):
     assert round(sum(dataset_ratio), 2) == 1.0
@@ -118,22 +120,30 @@ def mksplits(X, Y, X_nodes_map, dataset_ratio=(.7,.2,.1), shuffle=True):
     X_val_idx = X_nodes_map[val_idx]
 
     # split Y
-    Y_train = np.zeros(Y.shape)
-    Y_test = np.zeros(Y.shape)
-    Y_val = np.zeros(Y.shape)
+    Y_train = torch.zeros(Y.size())
+    Y_test = torch.zeros(Y.size())
+    Y_val = torch.zeros(Y.size())
 
-    Y_train[X_train_idx] = np.array(Y[X_train_idx].todense())
-    Y_test[X_test_idx] = np.array(Y[X_test_idx].todense())
-    Y_val[X_val_idx] = np.array(Y[X_val_idx].todense())
+    Y_train[X_train_idx] = Y[X_train_idx]
+    Y_test[X_test_idx] = Y[X_test_idx]
+    Y_val[X_val_idx] = Y[X_val_idx]
 
     # X stays unmodified 
     # X = X
 
-    return { 'train': { 'X': X, 'Y': Y_train, 'X_idx': X_train_idx },
-            'test': { 'X': X, 'Y': Y_test, 'X_idx': X_test_idx },
-            'val': { 'X': X, 'Y': Y_val, 'X_idx': X_val_idx }}
+    return { 'train': { 'X': X, 'Y': Y_train, 'idx': X_train_idx },
+            'test': { 'X': X, 'Y': Y_test, 'idx': X_test_idx },
+            'val': { 'X': X, 'Y': Y_val, 'idx': X_val_idx }}
 
 def sample_mask(idx, n):
     mask = np.zeros(n)
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
+
+class DummyTensor():
+    def __init__(self, size, dtype):
+        self.size = size
+        self.dtype = dtype
+
+    def size(self):
+        return self.size

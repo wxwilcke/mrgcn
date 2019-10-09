@@ -5,22 +5,29 @@ import argparse
 from os import getpid
 from time import time
 
+import numpy as np
 import toml
+import torch
+import torch.nn as nn
+import torch.optim as optim
 
-from data.io.knowledge_graph import KnowledgeGraph
-from data.io.tarball import Tarball
-from data.io.tsv import TSV
-from data.utils import is_readable, is_writable
-from embeddings import graph_structure
-from tasks.config import reload_config, set_number_of_threads, set_seed,\
-        set_tensorflow_device_placement
-from tasks.node_classification import build_dataset, build_model, evaluate_model
-from tasks.utils import mksplits, init_fold, mkfolds, sample_mask, strip_graph
+from mrgcn.data.io.knowledge_graph import KnowledgeGraph
+from mrgcn.data.io.tarball import Tarball
+from mrgcn.data.io.tsv import TSV
+from mrgcn.data.utils import is_readable, is_writable
+from mrgcn.embeddings import graph_structure
+from mrgcn.tasks.config import set_seed
+from mrgcn.data.utils import scipy_sparse_to_pytorch_sparse
+from mrgcn.tasks.node_classification import (build_dataset,
+                                             build_model,
+                                             categorical_accuracy,
+                                             categorical_crossentropy)
+from mrgcn.tasks.utils import mksplits, init_fold, mkfolds, strip_graph
 
 
 VERSION = 0.1
 
-def single_run(A, X, Y, X_node_map, tsv_writer, config):
+def single_run(A, X, Y, X_node_map, tsv_writer, device, config, featureless):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
@@ -29,16 +36,21 @@ def single_run(A, X, Y, X_node_map, tsv_writer, config):
     dataset = mksplits(X, Y, X_node_map,
                             config['task']['dataset_ratio'])
 
-    # compile model computation graph
-    model = build_model(X, Y, A, config)
+    # compile model and move to gpu if possible
+    model = build_model(X, Y, A, config, featureless)
+    model.to(device, non_blocking=True)
+
+    optimizer = optim.Adam(model.parameters(),
+                           lr=config['model']['learning_rate'],
+                           weight_decay=config['model']['l2norm'])
+    criterion = nn.CrossEntropyLoss()
 
     # train model
     nepoch = config['model']['epoch']
-    batch_size = X.shape[0]  # number of nodes
-    sample_weights = sample_mask(dataset['train']['X_idx'],
-                                            Y.shape[0])
+    batch_size = X.size()[0]  # number of nodes
 
-    for epoch in train_model(A, model, dataset, sample_weights, batch_size, nepoch):
+    for epoch in train_model(A, model, optimizer, criterion, dataset,
+                             batch_size, nepoch):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -48,18 +60,29 @@ def single_run(A, X, Y, X_node_map, tsv_writer, config):
                              "-1", "-1"])
 
     # test model
-    test_loss, test_acc = test_model(A, model, dataset, batch_size)
+    test_loss, test_acc = test_model(A, model, criterion, dataset)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
-                         str(test_loss[0]), str(test_acc[0])])
+                         str(test_loss), str(test_acc)])
 
-    return (test_loss[0], test_acc[0])
+    return (test_loss, test_acc)
 
-def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
+def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, device, config,
+                          featureless):
     tsv_writer.writerow(["fold", "epoch",
                          "training_loss", "training_accurary",
                          "validation_loss", "validation_accuracy",
                          "test_loss", "test_accuracy"])
+
+    # compile model and move to gpu if possible
+    model = build_model(X, Y, A, config, featureless)
+    model.to(device, non_blocking=True)
+
+    optimizer = optim.Adam(model.parameters(),
+                           lr=config['model']['learning_rate'],
+                           weight_decay=config['model']['l2norm'])
+    optimizer_state_zero = optimizer.state_dict()  # save initial state
+    criterion = nn.CrossEntropyLoss()
 
     # generate fold indices
     folds_idx = mkfolds(X_node_map.shape[0], k)
@@ -68,21 +91,16 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
     logger.info("Starting {}-fold cross validation".format(k))
     for fold in range(1, k+1):
         logger.info("Fold {} / {}".format(fold, k))
-
-        # compile model computation graph
-        model = build_model(X, Y, A, config)
-
         # initialize fold
         dataset = init_fold(X, Y, X_node_map, folds_idx[fold-1],
                             config['task']['dataset_ratio'])
 
         # train model
         nepoch = config['model']['epoch']
-        batch_size = X.shape[0]  # number of nodes
-        sample_weights = sample_mask(dataset['train']['X_idx'],
-                                                Y.shape[0])
+        batch_size = X.size()[0]  # number of nodes
 
-        for epoch in train_model(A, model, dataset, sample_weights, batch_size, nepoch):
+        for epoch in train_model(A, model, optimizer, criterion, dataset,
+                                 batch_size, nepoch):
             # log metrics
             tsv_writer.writerow([str(fold),
                                  str(epoch[0]),
@@ -93,17 +111,17 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
                                  "-1", "-1"])
 
         # test model
-        test_loss, test_acc = test_model(A, model, dataset, batch_size)
-        results.append((test_loss[0], test_acc[0]))
+        test_loss, test_acc = test_model(A, model, criterion, dataset)
+        results.append((test_loss, test_acc))
 
         # log metrics
         tsv_writer.writerow([str(fold),
                              "-1", "-1", "-1", "-1", "-1",
-                             str(test_loss[0]), str(test_acc[0])])
+                             str(test_loss), str(test_acc)])
 
-        # release memory workaround
-        del model
-        reload_config(reset_session=True)
+        # reset model and optimizer
+        model.reset()
+        optimizer.load_state_dict(optimizer_state_zero)
 
     mean_loss, mean_acc = tuple(sum(e)/len(e) for e in zip(*results))
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
@@ -111,69 +129,71 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, config):
 
     return (mean_loss, mean_acc)
 
-def train_model(A, model, dataset, sample_weights, batch_size, nepoch):
+def train_model(A, model, optimizer, criterion, dataset, batch_size, nepoch):
     logging.info("Training for {} epoch".format(nepoch))
     # Log wall-clock time
     t0 = time()
+
     for epoch in range(1, nepoch+1):
         # Single training iteration
-        model.fit(x=[dataset['train']['X'], A],
-                  y=dataset['train']['Y'],
-                  batch_size=batch_size,
-                  epochs=1,
-                  shuffle=False,
-                  sample_weight=sample_weights,
-                  validation_data=([dataset['val']['X'], A],
-                                    dataset['val']['Y']),
-                  callbacks=[],
-                  verbose=0)
+        Y_hat = model(dataset['train']['X'], A)
 
-        # Predict on full dataset
-        Y_hat = model.predict(x=[dataset['train']['X'], A],
-                              batch_size=batch_size,
-                              verbose=0)
+        # Training scores
+        train_loss = categorical_crossentropy(Y_hat, dataset['train']['Y'],
+                                              dataset['train']['idx'], criterion)
+        train_acc = categorical_accuracy(Y_hat, dataset['train']['Y'],
+                                         dataset['train']['idx'])
 
-        # Train / validation scores
-        train_val_loss, train_val_acc = evaluate_model(Y_hat,
-                                                       [dataset['train']['Y'],
-                                                        dataset['val']['Y']],
-                                                       [dataset['train']['X_idx'],
-                                                        dataset['val']['X_idx']])
+        # validation scores
+        val_loss = categorical_crossentropy(Y_hat, dataset['val']['Y'],
+                                            dataset['val']['idx'], criterion)
+        val_acc = categorical_accuracy(Y_hat, dataset['val']['Y'],
+                                         dataset['val']['idx'])
+
+        # Zero gradients, perform a backward pass, and update the weights.
+        optimizer.zero_grad()
+        train_loss.backward()
+        optimizer.step()
 
         logging.info("{:04d} ".format(epoch) \
-                     + "| train loss {:.4f} / acc {:.4f} ".format(train_val_loss[0],
-                                                                  train_val_acc[0])
-                     + "| val loss {:.4f} / acc {:.4f}".format(train_val_loss[1],
-                                                               train_val_acc[1]))
+                     + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
+                                                                  train_acc)
+                     + "| val loss {:.4f} / acc {:.4f}".format(val_loss,
+                                                               val_acc))
 
         yield (epoch,
-               train_val_loss[0], train_val_acc[0],
-               train_val_loss[1], train_val_acc[1])
+               train_loss, train_acc,
+               val_loss, val_acc)
 
     logging.info("training time: {:.2f}s".format(time()-t0))
 
-def test_model(A, model, dataset, batch_size):
+def test_model(A, model, criterion, dataset):
     # Predict on full dataset
-    Y_hat = model.predict(x=[dataset['train']['X'], A],
-                          batch_size=batch_size,
-                          verbose=0)
+    Y_hat = model(dataset['test']['X'], A)
 
-    test_loss, test_acc = evaluate_model(Y_hat,
-                                         [dataset['test']['Y']],
-                                         [dataset['test']['X_idx']])
+    # scores on test set
+    test_loss = categorical_crossentropy(Y_hat, dataset['test']['Y'],
+                                         dataset['test']['idx'], criterion)
+    test_acc = categorical_accuracy(Y_hat, dataset['test']['Y'],
+                                    dataset['test']['idx'])
 
     logging.info("Performance on test set: loss {:.4f} / accuracy {:.4f}".format(
-                  test_loss[0],
-                  test_acc[0]))
+                  test_loss,
+                  test_acc))
 
     return (test_loss, test_acc)
 
-
 def run(args, tsv_writer, config):
-    # set_number_of_threads(n=1)  # needed for reproducability
     set_seed(config['task']['seed'])
-    if config['task']['force_gpu']:
-        set_tensorflow_device_placement(mode='gpu')
+
+    featureless = True
+    if 'features' in config['graph'].keys() and\
+       True in [feature['include'] for feature in config['graph']['features']]:
+        featureless = False
+
+    device = torch.device("cpu")
+    if config['task']['gpu'] and torch.cuda.is_available():
+        device = torch.device("cuda")
 
     # prep data
     if args.input is None:
@@ -181,7 +201,7 @@ def run(args, tsv_writer, config):
         with KnowledgeGraph(graph=config['graph']['file']) as kg:
             targets = strip_graph(kg, config)
             A = graph_structure.generate(kg, config)
-            X, Y, X_node_map = build_dataset(kg, targets, config)
+            X, Y, X_node_map = build_dataset(kg, targets, config, featureless)
     else:
         assert is_readable(args.input)
         logging.debug("Importing prepared tarball")
@@ -191,12 +211,24 @@ def run(args, tsv_writer, config):
             Y = tb.get('Y')
             X_node_map = tb.get('X_node_map')
 
+    if featureless:
+        # tuple := (shape)
+        X = np.empty(X)
+
+    # convert numpy and scipy matrices to pyTorch tensors
+    # move to gpu if possible
+    A = scipy_sparse_to_pytorch_sparse(A, device)
+    X = torch.Tensor(X, device=device) if not featureless else torch.Tensor(X)
+    Y = torch.Tensor(Y, device=device)
+
     if config['task']['kfolds'] < 0:
-        loss, accuracy = single_run(A, X, Y, X_node_map, tsv_writer, config)
+        loss, accuracy = single_run(A, X, Y, X_node_map, tsv_writer, device,
+                                    config, featureless)
     else:
         loss, accuracy = kfold_crossvalidation(A, X, Y, X_node_map,
                                                config['task']['kfolds'],
-                                               tsv_writer, config)
+                                               tsv_writer, device, config,
+                                               featureless)
 
     logging.info("Mean performance: loss {:.4f} / accuracy {:.4f}".format(
                   loss,

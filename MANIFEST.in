@@ -1,5 +1,7 @@
-./if/aifb.toml
-./if/am.toml
-./if/bgs.toml
-./if/mutag.toml
-./if/dmg.toml
+include README.md
+include LICENSE
+include ./if/aifb.toml
+include ./if/am.toml
+include ./if/bgs.toml
+include ./if/mutag.toml
+include ./if/dmg.toml
