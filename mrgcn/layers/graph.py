@@ -6,7 +6,8 @@ import torch.nn as nn
 
 class GraphConvolution(nn.Module):
     def __init__(self, indim, outdim, num_relations, num_nodes, num_bases=-1,
-                 bias=False, input_layer=False, featureless=False):
+                 bias=False, input_layer=False, featureless=False,
+                 shared_bases_weights=False):
         """
         Multimodal Relational Graph Convolutional Layer
         """
@@ -36,8 +37,12 @@ class GraphConvolution(nn.Module):
                 self.W_I_comp = nn.Parameter(torch.empty((self.num_relations,
                                                           self.num_bases)))
             if not self.featureless:
-                self.W_F_comp = nn.Parameter(torch.empty((self.num_relations,
-                                                          self.num_bases)))
+                if shared_bases_weights:
+                    # use same basis matrix for both identities and features
+                    self.W_F_comp = self.W_I_comp
+                else:
+                    self.W_F_comp = nn.Parameter(torch.empty((self.num_relations,
+                                                              self.num_bases)))
 
         # weights for identities and features
         if self.input_layer:
