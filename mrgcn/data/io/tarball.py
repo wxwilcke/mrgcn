@@ -7,13 +7,14 @@ import os
 import tarfile
 
 import numpy as np
+import keras.engine.training as ket
+import keras.models as km
 import scipy.sparse as sp
-import torch
 
 
 class Tarball:
     """ Tarball Class
-    Create tar archive of numpy, scipy, and pyTorch objects
+    Create tar archive of numpy, scipy, and keras objects
     """
 
     tar = None
@@ -41,7 +42,7 @@ class Tarball:
         # check for structures
         paths = {member for member in members if '/' in member}
         for path in paths:
-            names.add(path.split('/')[0])
+            names.add(path.split('/')[1])
 
         # objects
         members -= paths
@@ -61,8 +62,6 @@ class Tarball:
         if len(paths) > 0:
             dicts = {path for path in paths if path.split('/')[0] == 'dict' }
             lists = {path for path in paths if path.split('/')[0] == 'list' }
-            other = {path for path in paths if path.split('/')[0] != 'dict'
-                                           and path.split('/')[0] != 'list' }
 
             top_levels = {path.split('/')[1] for path in dicts}
             for top_level in top_levels:
@@ -79,16 +78,6 @@ class Tarball:
                 content.append(self._read_list(l_full, l_base))
                 names.append(top_level)
 
-            if len(other) > 0:
-                items = {path.split('/')[0] for path in other}
-                for item in items:
-                    top_levels = {path.split('/')[1] for path in other if
-                                  path.split('/')[0] == item}
-                    if top_levels == {'indices.pt', 'values.pt', 'size.pt'}:
-                        # assume pytorch.sparse tensor
-                        content.append(self._read_ptsp(item))
-                        names.append(item)
-
         # objects
         members -= paths
         for name in members:
@@ -99,8 +88,8 @@ class Tarball:
             elif ext == '.npy':
                 content.append(self._read_nda(name))
                 names.append(base)
-            elif ext == '.pt':
-                content.append(self._read_pt(name))
+            elif ext == '.h5':
+                content.append(self._read_kfm(name))
                 names.append(base)
             else:
                 content.append(self._read_py( name))
@@ -116,11 +105,8 @@ class Tarball:
                 self._store_csr(f, names[i])
             elif type(f) is np.ndarray:
                 self._store_nda(f, names[i])
-            elif type(f) is torch.Tensor:
-                if f.layout is not torch.sparse_coo:
-                    self._store_pt(f, names[i])
-                else:
-                    self._store_ptsp(f, names[i])
+            elif type(f) is ket.Model:
+                self._store_kfm(f, names[i])
             elif type(f) is dict:
                 self._store_dict(f, os.path.join('dict', names[i]))
             elif type(f) is list:
@@ -158,17 +144,14 @@ class Tarball:
         buff.seek(0)
         return np.load(buff)
 
-    def _read_pt(self, name):
-        return torch.load(self.tar.extractfile(name))
+    def _read_kfm(self, name):
+        # h5py does not support file objects
+        self.tar.extract(name)
+        path = './{}'.format(name)
+        model = km.load_model(path)
+        os.remove(path)
 
-    def _read_ptsp(self, folder):
-        idc = self.tar.extractfile(os.path.join(folder, "indices.pt"))
-        val = self.tar.extractfile(os.path.join(folder, "values.pt"))
-        sze = self.tar.extractfile(os.path.join(folder, "size.pt"))
-
-        return torch.sparse.FloatTensor(torch.load(idc),
-                                        torch.load(val),
-                                        torch.load(sze))
+        return model
 
     def _read_py(self, name):
         return pickle.load(self.tar.extractfile(name))
@@ -189,8 +172,8 @@ class Tarball:
                 return self._read_csr(name)
             elif self._ext_of(filename) == '.npy':
                 return self._read_nda(name)
-            elif self._ext_of(filename) == '.pt':
-                return self._read_pt(name)
+            elif self._ext_of(filename) == '.h5':
+                return self._read_kfm(name)
             else:
                 return self._read_py(name)
 
@@ -217,8 +200,8 @@ class Tarball:
             value = self._read_csr(name)
         elif ext == '.npy':
             value = self._read_nda(name)
-        elif ext == '.pt':
-            value = self._read_pt(name)
+        elif ext == '.h5':
+            value = self._read_kfm(name)
         else:
             value = self._read_py(name)
 
@@ -236,11 +219,8 @@ class Tarball:
                 self._store_csr(item, os.path.join(name, i))
             elif type(item) is np.ndarray:
                 self._store_nda(item, os.path.join(name, i))
-            elif type(item) is torch.Tensor:
-                if item.layout is not torch.sparse_coo:
-                    self._store_pt(item, os.path.join(name, i))
-                else:
-                    self._store_ptsp(item, os.path.join(name, i))
+            elif type(item) is ket.Model:
+                self._store_kfm(item, os.path.join(name, i))
             else:
                 self._store_py(item, os.path.join(name, i))
 
@@ -262,19 +242,12 @@ class Tarball:
 
         self._add_to_tar(buff, name+'.npy', size)
 
-    def _store_pt(self, f, name):
-        buff = BytesIO()
-        torch.save(f, buff)
-
-        size = len(buff.getbuffer())
-        buff.seek(0)
-
-        self._add_to_tar(buff, name+'.pt', size)
-
-    def _store_ptsp(self, f, name):
-        self._store_pt(f.coalesce().indices(), os.path.join(name, "indices"))
-        self._store_pt(f.coalesce().values(), os.path.join(name, "values"))
-        self._store_pt(f.coalesce().size(), os.path.join(name, "size"))
+    def _store_kfm(self, f, name):
+        # h5py does not support file objects
+        path = './.{}.tmp'.format(name)
+        f.save(path)
+        self.tar.add(path, arcname='{}.h5'.format(name))
+        os.remove(path)
 
     def _store_dict(self, f, name):
         if type(f) is not dict:
@@ -282,11 +255,8 @@ class Tarball:
                 self._store_csr(f, name)
             elif type(f) is np.ndarray:
                 self._store_nda(f, name)
-            elif type(f) is torch.Tensor:
-                if f.layout is not torch.sparse_coo:
-                    self._store_pt(f, name)
-                else:
-                    self._store_ptsp(f, name)
+            elif type(f) is ket.Model:
+                self._store_kfm(f, name)
             else:
                 self._store_py(f, name)
 

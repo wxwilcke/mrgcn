@@ -9,7 +9,7 @@ from rdflib.graph import Graph
 from rdflib.term import BNode, Literal
 from rdflib.util import guess_format
 
-from mrgcn.data.utils import is_gzip, is_readable
+from data.utils import is_gzip, is_readable
 
 
 class KnowledgeGraph:

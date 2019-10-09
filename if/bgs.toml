@@ -5,7 +5,7 @@ version = 0.1
 name = "BGS"
 
 [graph]
-file = "../../datasets/bgs/bgs.nt.gz"
+file = "../../../../datasets/bgs/bgs.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -21,21 +21,20 @@ target_classes = []
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
 kfolds = 5  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
-gpu = false
+force_gpu = false
 
 [model]
 epoch = 50
 learning_rate = 0.01
 loss = 'categorical_crossentropy'
-num_bases = 40
-p_dropout = 0.0
-l2norm = 5e-4
-bias = false
 
 [[model.layers]]
-type = 'mrgcn'
 hidden_nodes = 16
+num_bases = 40
+l2norm = 5e-4
+dropout = 0.0
+activation = 'relu'
 
 [[model.layers]]
-type = 'mrgcn'
-
+num_bases = 40
+activation = 'softmax'

@@ -3,7 +3,6 @@
 import logging
 from os import access, F_OK, R_OK, W_OK
 from os.path import split
-import torch
 
 
 logger = logging.getLogger(__name__)
@@ -28,11 +27,3 @@ def is_writable(filename):
 
 def is_gzip(filename):
     return True if filename.endswith('.gz') else False
-
-def scipy_sparse_to_pytorch_sparse(sp_input, device=None):
-    return torch.sparse.FloatTensor(torch.LongTensor([sp_input.nonzero()[0],
-                                                      sp_input.nonzero()[1]]),
-                                    torch.Tensor(sp_input.data),
-                                    sp_input.shape,
-                                    device=device)
-

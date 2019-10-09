@@ -2,12 +2,16 @@
 
 import logging
 
+from keras.layers import Input, Dropout
+from keras.models import Model
+from keras.optimizers import Adam
+from keras.regularizers import l2
 import numpy as np
-import torch
-import torch.nn as nn
+import scipy.sparse as sp
 
-from mrgcn.embeddings.graph_features import construct_features
-from mrgcn.models.mrgcn import MRGCN
+from embeddings.graph_features import construct_features
+from layers.graph import GraphConvolution
+from layers.input_adj import InputAdj
 
 
 logger = logging.getLogger(__name__)
@@ -21,85 +25,91 @@ def generate_task(knowledge_graph, A, targets, config):
 
     return (X, Y, X_node_idx, model)
 
-def build_dataset(knowledge_graph, target_triples, config, featureless):
+def build_dataset(knowledge_graph, target_triples, config):
     logger.debug("Starting dataset build")
     # generate target matrix
     classes = {t[2] for t in target_triples}  # unique classes
     logger.debug("Found {} instances (statements)".format(len(target_triples)))
     logger.debug("Target classes ({}): {}".format(len(classes), classes))
 
-    # node/class label to integers
     nodes_map = {label:i for i,label in enumerate(knowledge_graph.atoms())}
     classes_map = {label:i for i,label in enumerate(classes)}
-    num_nodes = len(nodes_map)
-    num_classes = len(classes_map)
-
-    target_indices = [(nodes_map[x], classes_map[y]) for x, _, y in target_triples]
-    X_node_idx, Y_class_idx = map(np.array, zip(*target_indices))
 
     # matrix of 1-hot class vectors per node
-    Y = np.zeros((num_nodes, num_classes), dtype=np.int8)
-    for i,j in zip(X_node_idx, Y_class_idx):
-        Y[i, j] = 1
+    target_labels = [(nodes_map[x], classes_map[y]) for x, _, y in target_triples]
+    X_node_idx, Y_class_idx = map(np.array, zip(*target_labels))
+    Y = sp.csr_matrix((np.ones(len(target_labels)), (X_node_idx, Y_class_idx)),
+                               shape=(len(nodes_map), len(classes_map)),
+                                 dtype=np.int32)
 
-    if featureless:
-        # use uninitialized matrix when featureless
-        X = None
-    else:
+    # use identity matrix by default
+    X = sp.identity(len(nodes_map), format='csr')
+    if 'features' in config['graph'].keys() and\
+       True in [feature['include'] for feature in config['graph']['features']]:
         X = construct_features(nodes_map, config['graph']['features'])
 
     logger.debug("Completed dataset build")
     return (X, Y, X_node_idx)
 
-def build_model(X, Y, A, config, featureless):
+def build_model(X, Y, A, config):
+    featureless = 'features' not in config['graph'].keys() or\
+            True not in [feat['include'] for feat in config['graph']['features']]
     layers = config['model']['layers']
     assert len(layers) >= 2
     logger.debug("Starting model build")
 
-    # should be pyTorch tensors
-    num_nodes, X_dim = X.size()
-    num_relations = int(A.size()[1]/num_nodes)
-    Y_dim = Y.size()[1]
+    support = int(A.shape[1]/A.shape[0])  # assumes A = n x nR
+    A_in = InputAdj(shape=(A.shape[1],), sparse=True)
+    X_in = Input(shape=(X.shape[1],), sparse=sp.isspmatrix(X))
 
-    modules = list()
     # input layer
-    modules.append((X_dim,
-                    layers[0]['hidden_nodes'],
-                    nn.ReLU()))
+    H = GraphConvolution(output_dim=layers[0]['hidden_nodes'],
+                         support=support,
+                         num_bases=layers[0]['num_bases'],
+                         featureless=featureless,
+                         input_layer=True,
+                         activation=layers[0]['activation'],
+                         W_regularizer=l2(layers[0]['l2norm']))([X_in, A_in])
+    H = Dropout(layers[0]['dropout'])(H)
 
     # intermediate layers (if any)
-    i = 1
-    for layer in layers[1:-1]:
-        modules.append((layers[i-1]['hidden_nodes'],
-                        layer['hidden_nodes'],
-                        nn.ReLU()))
-
-        i += 1
+    for i, layer in enumerate(layers[1:-1], 1):
+        H = GraphConvolution(output_dim=layers[i]['hidden_nodes'],
+                             support=support,
+                             num_bases=layers[i]['num_bases'],
+                             featureless=featureless,
+                             activation=layers[i]['activation'],
+                             W_regularizer=l2(layers[i]['l2norm']))([H, A_in])
+        H = Dropout(layers[i]['dropout'])(H)
 
     # output layer
-    # applies softmax over possible classes
-    modules.append((layers[i-1]['hidden_nodes'],
-                    Y_dim,
-                    nn.Softmax(dim=1)))
+    Y_out = GraphConvolution(output_dim=Y.shape[1],
+                             support=support,
+                             num_bases=layers[-1]['num_bases'],
+                             activation=layers[-1]['activation'])([H, A_in])
 
-    model = MRGCN(modules, num_relations, num_nodes,
-                  num_bases=config['model']['num_bases'],
-                  p_dropout=config['model']['p_dropout'],
-                  featureless=featureless,
-                  bias=config['model']['bias'])
+    # Compile model
+    logger.debug("Compiling model")
+    model = Model(inputs=[X_in, A_in], outputs=Y_out)
+    model.compile(loss=config['model']['loss'],
+                  optimizer=Adam(lr=config['model']['learning_rate']))
 
     logger.debug("Completed model build")
 
     return model
 
-def categorical_accuracy(Y_hat, Y, idx):
-    _, labels = Y_hat[idx].max(dim=1)
-    _, targets = Y[idx].max(dim=1)
+def evaluate_model(Y_hat, Y, indices):
+    split_loss = []
+    split_acc = []
 
-    return torch.mean(torch.eq(labels, targets).float())
+    for Y_split, idx_split in zip(Y, indices):
+        split_loss.append(categorical_crossentropy(Y_hat[idx_split], Y_split[idx_split]))
+        split_acc.append(categorical_accuracy(Y_hat[idx_split], Y_split[idx_split]))
 
-def categorical_crossentropy(Y_hat, Y, idx, criterion):
-    predictions = Y_hat[idx]
-    _, targets = Y[idx].max(dim=1)
+    return split_loss, split_acc
 
-    return criterion(predictions, targets)
+def categorical_accuracy(Y_hat, Y):
+    return np.mean(np.equal(np.argmax(Y, 1), np.argmax(Y_hat, 1)))
+
+def categorical_crossentropy(Y_hat, Y):
+    return np.mean(-np.log(np.extract(Y, Y_hat)))
