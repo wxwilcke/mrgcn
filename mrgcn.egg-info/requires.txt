@@ -1,0 +1,6 @@
+torch
+numpy
+rdflib
+scipy
+sklearn
+toml

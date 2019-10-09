@@ -1,25 +1,29 @@
 #!/usr/bin/env python
 
-from setuptools import find_packages, setup
+from setuptools import setup
 
+
+def readme():
+    with open('README.md') as f:
+        return f.read()
 
 setup(
     name='mrgcn',
     version='0.1',
     author='Xander Wilcke',
     author_email='w.x.wilcke@vu.nl',
+    url='https://gitlab.com/wxwilcke/mrgcn',
     description='Multimodal Relational Graph Convolutional Network (MRGCN)',
     license='GLP3',
-    packages=find_packages(),
     include_package_data=True,
     zip_safe=True,
     install_requires=[
-        'keras',
+        'torch',
         'numpy',
         'rdflib',
         'scipy',
-        'sklearn'
+        'sklearn',
         'toml',
-        'tensorflow'
     ],
+    packages=['mrgcn'],
 )
