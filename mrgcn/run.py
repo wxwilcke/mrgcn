@@ -5,7 +5,6 @@ import argparse
 from os import getpid
 from time import time
 
-import numpy as np
 import toml
 import torch
 import torch.nn as nn
@@ -228,14 +227,10 @@ def run(args, tsv_writer, config):
             Y = tb.get('Y')
             X_node_map = tb.get('X_node_map')
 
-    if featureless:
-        # tuple := (shape)
-        X = np.empty(X)
-
     # convert numpy and scipy matrices to pyTorch tensors
     A = scipy_sparse_to_pytorch_sparse(A, device)  # move to gpu if possible
-    X = torch.Tensor(X, device=device) if not featureless else torch.Tensor(X)
-    Y = torch.Tensor(Y)  # keep on cpu until after splits
+    X = torch.tensor(X, device=torch.device("cpu")) if featureless else torch.tensor(X, device=device)
+    Y = torch.tensor(Y, device=torch.device("cpu"))  # keep on cpu until after splitting
 
     if config['task']['kfolds'] < 0:
         loss, accuracy = single_run(A, X, Y, X_node_map, tsv_writer, device,

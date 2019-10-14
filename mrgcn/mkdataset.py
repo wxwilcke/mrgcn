@@ -26,10 +26,6 @@ def run(args, config):
         A = graph_structure.generate(kg, config)
         X, Y, X_node_map = build_dataset(kg, targets, config, featureless)
 
-    if featureless:
-        num_nodes = Y.shape[0]
-        X = (num_nodes, num_nodes)
-
     return (A, X, Y, X_node_map)
 
 def init_logger(filename, verbose=0):

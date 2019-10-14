@@ -44,7 +44,7 @@ def build_dataset(knowledge_graph, target_triples, config, featureless):
 
     if featureless:
         # use uninitialized matrix when featureless
-        X = None
+        X = np.empty((0,0), dtype=np.float32)
     else:
         X = construct_features(nodes_map, config['graph']['features'])
 
@@ -56,10 +56,10 @@ def build_model(X, Y, A, config, featureless):
     assert len(layers) >= 2
     logger.debug("Starting model build")
 
-    # should be pyTorch tensors
-    num_nodes, X_dim = X.size()
+    # get sizes from dataset
+    X_dim = X.size()[1]  # == 0 if featureless
+    num_nodes, Y_dim = Y.size()
     num_relations = int(A.size()[1]/num_nodes)
-    Y_dim = Y.size()[1]
 
     modules = list()
     # input layer
