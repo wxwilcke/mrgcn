@@ -89,9 +89,9 @@ def init_fold(X, Y, X_nodes_map, idx_dict, device, dataset_ratio=(.7,.2,.1)):
     Y_test = torch.zeros(Y.size())
     Y_val = torch.zeros(Y.size())
 
-    Y_train[X_train_idx] = Y[X_train_idx]
-    Y_test[X_test_idx] = Y[X_test_idx]
-    Y_val[X_val_idx] = Y[X_val_idx]
+    Y_train[X_train_idx] = Y[X_train_idx].float()
+    Y_test[X_test_idx] = Y[X_test_idx].float()
+    Y_val[X_val_idx] = Y[X_val_idx].float()
 
     # X stays unmodified 
     # X = X
@@ -124,9 +124,9 @@ def mksplits(X, Y, X_nodes_map, device, dataset_ratio=(.7,.2,.1), shuffle=True):
     Y_test = torch.zeros(Y.size())
     Y_val = torch.zeros(Y.size())
 
-    Y_train[X_train_idx] = Y[X_train_idx]
-    Y_test[X_test_idx] = Y[X_test_idx]
-    Y_val[X_val_idx] = Y[X_val_idx]
+    Y_train[X_train_idx] = Y[X_train_idx].float()
+    Y_test[X_test_idx] = Y[X_test_idx].float()
+    Y_val[X_val_idx] = Y[X_val_idx].float()
 
     # X stays unmodified 
     # X = X

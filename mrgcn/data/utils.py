@@ -30,9 +30,14 @@ def is_gzip(filename):
     return True if filename.endswith('.gz') else False
 
 def scipy_sparse_to_pytorch_sparse(sp_input, device=None):
-    return torch.sparse.FloatTensor(torch.LongTensor([sp_input.nonzero()[0],
-                                                      sp_input.nonzero()[1]]),
-                                    torch.Tensor(sp_input.data),
-                                    sp_input.shape,
-                                    device=device)
+    if device is torch.device("cuda"):
+        return torch.cuda.sparse.FloatTensor(torch.LongTensor([sp_input.nonzero()[0],
+                                                               sp_input.nonzero()[1]]),
+                                             torch.Tensor(sp_input.data),
+                                             sp_input.shape)
+    else:
+        return torch.sparse.FloatTensor(torch.LongTensor([sp_input.nonzero()[0],
+                                                          sp_input.nonzero()[1]]),
+                                        torch.Tensor(sp_input.data),
+                                        sp_input.shape)
 
