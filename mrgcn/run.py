@@ -228,7 +228,7 @@ def run(args, tsv_writer, config):
             X_node_map = tb.get('X_node_map')
 
     # convert numpy and scipy matrices to pyTorch tensors
-    A = scipy_sparse_to_pytorch_sparse(A, device)  # move to gpu if possible
+    A = scipy_sparse_to_pytorch_sparse(A).cuda() if device == torch.device("cuda") else scipy_sparse_to_pytorch_sparse(A)
     X = torch.tensor(X, device=torch.device("cpu")) if featureless else torch.tensor(X, device=device)
     Y = torch.tensor(Y, device=torch.device("cpu"))  # keep on cpu until after splitting
 
@@ -241,9 +241,9 @@ def run(args, tsv_writer, config):
                                                tsv_writer, device, config,
                                                featureless)
 
-    if device is torch.device("cuda"):
-        logging.debug("Peak GPU memory used (MB): ",
-                      torch.cuda.max_memory_allocated()/1.0e-6)
+    if device == torch.device("cuda"):
+        logging.debug("Peak GPU memory used (MB): {}".format(
+                      str(torch.cuda.max_memory_allocated()/1.0e6)))
 
     logging.info("Mean performance: loss {:.4f} / accuracy {:.4f}".format(
                   loss,
