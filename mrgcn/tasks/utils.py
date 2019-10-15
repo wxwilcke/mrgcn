@@ -137,8 +137,8 @@ def mksplits(X, Y, X_nodes_map, device, dataset_ratio=(.7,.2,.1), shuffle=True):
 
 def dataset_to_device(dataset, device):
     for split in dataset.values():
-        split['Y'].to(device)
-        split['idx'].to(device)
+        split['Y'] = split['Y'].to(device)
+        split['idx'] = split['idx'].to(device)
         # X stays where it is
 
 def sample_mask(idx, n):
