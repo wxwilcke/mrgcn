@@ -8,11 +8,14 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-EMBEDDINGS_PKG = "embeddings.xsd"
+ENCODINGS_PKG = "encodings.xsd"
 AVAILABLE_FEATURES = ["gYear"]
 
 def construct_features(nodes_map, feature_configs):
     """ Construct specified features for given nodes
+
+    Note that normalization occurs per feature, independent of the predicate
+    it is linked with. Future work should separate these.
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param feature_config: list of features to construct, given as dicts
@@ -32,7 +35,7 @@ def construct_features(nodes_map, feature_configs):
             continue
 
         # dynamically load module
-        module = import_module("{}.{}".format(EMBEDDINGS_PKG, feature_name))
+        module = import_module("{}.{}".format(ENCODINGS_PKG, feature_name))
         feature = module.generate_features(nodes_map, feature_config)
 
         logger.debug("Concatenating {} features to X".format(feature_name))

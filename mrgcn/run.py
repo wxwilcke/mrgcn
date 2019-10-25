@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 
 import logging
 import argparse
@@ -14,7 +14,7 @@ from mrgcn.data.io.knowledge_graph import KnowledgeGraph
 from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.io.tsv import TSV
 from mrgcn.data.utils import is_readable, is_writable, scipy_sparse_to_pytorch_sparse
-from mrgcn.embeddings import graph_structure
+from mrgcn.encodings import graph_structure
 from mrgcn.tasks.config import set_seed
 from mrgcn.tasks.node_classification import (build_dataset,
                                              build_model,

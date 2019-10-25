@@ -9,7 +9,7 @@ import toml
 from mrgcn.data.io.knowledge_graph import KnowledgeGraph
 from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.utils import is_readable, is_writable
-from mrgcn.embeddings import graph_structure
+from mrgcn.encodings import graph_structure
 from mrgcn.tasks.node_classification import build_dataset
 from mrgcn.tasks.utils import strip_graph
 
