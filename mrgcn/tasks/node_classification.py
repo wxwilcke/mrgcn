@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from mrgcn.embeddings.graph_features import construct_features
+from mrgcn.encodings.graph_features import construct_features
 from mrgcn.models.mrgcn import MRGCN
 
 
