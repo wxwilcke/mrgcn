@@ -41,7 +41,11 @@ class Tarball:
         # check for structures
         paths = {member for member in members if '/' in member}
         for path in paths:
-            names.add(path.split('/')[0])
+            root = path.split('/')[0]
+            if root == "dict" or root == "list":
+                root = path.split('/')[1]
+
+            names.add(root)
 
         # objects
         members -= paths
@@ -67,7 +71,7 @@ class Tarball:
             top_levels = {path.split('/')[1] for path in dicts}
             for top_level in top_levels:
                 d_full = [path for path in dicts if path.split('/')[1] == top_level]
-                d_base = [path[len(top_level)+1:] for path in d_full]
+                d_base = [path[len('dict/'):] for path in d_full]
                 content.append(self._read_dict(d_full, d_base))
                 names.append(top_level)
 
@@ -75,7 +79,7 @@ class Tarball:
             for top_level in top_levels:
                 l_full = [path for path in lists if path.split('/')[1] == top_level]
                 l_full.sort()  # maintain list order
-                l_base = [path[len(top_level)+1:] for path in l_full]
+                l_base = [path[len('list/'):] for path in l_full]
                 content.append(self._read_list(l_full, l_base))
                 names.append(top_level)
 
@@ -197,6 +201,10 @@ class Tarball:
     def _read_dict(self, names, paths):
         d = {}
         for name, path in zip(names, paths):
+            if len(path) <= 1:
+                # empty
+                continue
+
             self._read_subdict(name, path.split('/')[1:], d)
 
         return d
@@ -294,6 +302,8 @@ class Tarball:
 
         for k,v in f.items():
             self._store_dict(v, os.path.join(name,k))
+        if len(f) <= 0:  # empty dict
+            self._add_dir(name)
 
     def _store_py(self, f, name):
         buff = BytesIO()

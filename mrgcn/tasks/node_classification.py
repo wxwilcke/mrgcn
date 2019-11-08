@@ -14,12 +14,13 @@ logger = logging.getLogger(__name__)
 
 def generate_task(knowledge_graph, A, targets, config):
     logger.debug("Generating node classification task")
-    X, Y, X_node_idx = build_dataset(knowledge_graph, targets, config)
-    model = build_model(X,
+    F, Y, X_node_idx = build_dataset(knowledge_graph, targets, config)
+    C = sum(c for _, _, c in F.values())  # number of columns in X
+    model = build_model(C,
                         Y,
                         A, config)
 
-    return (X, Y, X_node_idx, model)
+    return (F, Y, X_node_idx, model)
 
 def build_dataset(knowledge_graph, target_triples, config, featureless):
     logger.debug("Starting dataset build")
@@ -43,28 +44,48 @@ def build_dataset(knowledge_graph, target_triples, config, featureless):
         Y[i, j] = 1
 
     if featureless:
-        # use uninitialized matrix when featureless
-        X = np.empty((0,0), dtype=np.float32)
+        F = dict()
     else:
-        X = construct_features(nodes_map, config['graph']['features'])
+        F = construct_features(nodes_map, knowledge_graph, config['graph']['features'])
 
     logger.debug("Completed dataset build")
-    return (X, Y, X_node_idx)
+    return (F, Y, X_node_idx)
 
-def build_model(X, Y, A, config, featureless):
+def build_model(C, Y, A, features_included,  config, featureless):
     layers = config['model']['layers']
     assert len(layers) >= 2
     logger.debug("Starting model build")
 
     # get sizes from dataset
-    X_dim = X.size()[1]  # == 0 if featureless
+    X_dim = C  # == 0 if featureless
     num_nodes, Y_dim = Y.size()
     num_relations = int(A.size()[1]/num_nodes)
+
+    # additional early layers if needed
+    embedding_layers = list()
+    for datatype in ["blob.image", "xsd.string"]:
+        if datatype in features_included:
+            feature_configs = config['graph']['features']
+            feature_config = next((d for d in feature_configs
+                                   if feature_configs['datatype'] == datatype),
+                                  None)
+            module_sequence = list()
+            for layer in feature_config['layers']:
+                ltype = getattr(nn, layer['type'])
+                lattr = {k:v for k,v in layer.items()
+                         if k != "type" and k != "activation"}
+                lactivation = None if "activation" not in layer.keys()\
+                              else getattr(nn, layer['activation'])
+                module_sequence.append((ltype(**lattr),
+                                        lactivation()))
+
+            embedding_layers.append((datatype, module_sequence))
 
     modules = list()
     # input layer
     modules.append((X_dim,
                     layers[0]['hidden_nodes'],
+                    layers[0]['type'],
                     nn.ReLU()))
 
     # intermediate layers (if any)
@@ -72,6 +93,7 @@ def build_model(X, Y, A, config, featureless):
     for layer in layers[1:-1]:
         modules.append((layers[i-1]['hidden_nodes'],
                         layer['hidden_nodes'],
+                        layers[i-1]['type'],
                         nn.ReLU()))
 
         i += 1
@@ -80,9 +102,10 @@ def build_model(X, Y, A, config, featureless):
     # applies softmax over possible classes
     modules.append((layers[i-1]['hidden_nodes'],
                     Y_dim,
+                    layers[i-1]['type'],
                     nn.Softmax(dim=1)))
 
-    model = MRGCN(modules, num_relations, num_nodes,
+    model = MRGCN(modules, embedding_layers, num_relations, num_nodes,
                   num_bases=config['model']['num_bases'],
                   p_dropout=config['model']['p_dropout'],
                   featureless=featureless,

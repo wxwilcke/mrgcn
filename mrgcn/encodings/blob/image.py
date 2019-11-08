@@ -17,33 +17,34 @@ _IMG_MODE = "RGB"
 
 logger = logging.getLogger(__name__)
 
-def generate_features(nodes_map, config):
-    """ Generate features for images as XSD B64-encoded literals
+def generate_features(nodes_map, node_predicate_map, config):
+    """ Generate encodings for images as XSD B64-encoded literals
 
     Returns an N-D array A and an vector b, such that A[i] holds the matrix
     representation of the image belonging to node b[i].
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param config: configuration dictionary
-    :returns: numpy array M x C x W x H;
+    :returns: numpy array M x Ch x W x H;
                     M :- number of nodes with an image, such that M <= N
-                    C :- number of channels for this colour space
+                    Ch :- number of channels for this colour space
                     W :- width number of pixels
                     H :- height in number of pixels
               numpy array 1 x M;
                     M :- number of nodes with an image, such that M <= N
     """
-    logger.debug("Generating B64-encoded image features")
+    logger.debug("Generating B64-encoded image encodings")
     W, H = _IMG_SIZE
 
+    C = 128
     m = 0
     n = len(nodes_map)
-    C = len([c for c in _IMG_MODE if c.isupper() or c == '1'])
-    images = np.zeros(shape=(n, C, W, H), dtype=np.float32)
+    c = len([c for c in _IMG_MODE if c.isupper() or c == '1'])
+    encodings = np.zeros(shape=(n, c, W, H), dtype=np.float32)
     node_idx = np.zeros(shape=(n), dtype=np.int32)
 
-    channel_means = np.zeros(C, dtype=np.float32)
-    channel_stdev = np.zeros(C, dtype=np.float32)
+    values_max = [None for _ in range(c)]
+    values_min = [None for _ in range(c)]
 
     for node, i in nodes_map.items():
         if type(node) is not Literal:
@@ -66,27 +67,25 @@ def generate_features(nodes_map, config):
             # from WxHxC to CxWxH
             a = a.transpose((0, 2, 1)).transpose((1, 0, 2))
 
-        images[m] = a
+        for ch in range(c):
+            if values_max[ch] is None or a[ch].max() > values_max[ch]:
+                values_max[ch] = a[ch].max()
+            if values_min[ch] is None or a[ch].min() < values_min[ch]:
+                values_min[ch] = a[ch].min()
+
+        encodings[m] = a
         node_idx[m] = i
         m += 1
 
-        for c in range(C):
-            # store means and stdevs for normalization
-            channel_means[c] += np.mean(a[c])
-            channel_stdev[c] += np.std(a[c])
+    logger.debug("Generated {} unique B64-encoded image encodings".format(m))
 
-    logger.debug("Generated {} unique B64-encoded image features".format(m))
+    # normalization over channels
+    for img in encodings[:m]:
+        for ch in range(c):
+            img[ch] = (img[ch]-values_min[ch]) / (values_max[ch] -
+                                                  values_min[ch])
 
-    #inplace normalization over channels
-    if config['normalize']:
-        normalize(images[:m], C, channel_means/m, channel_stdev/m)
-
-    return [images[:m], node_idx[:m]]
-
-def normalize(images, C, means, stdevs):
-    for img in images:
-        for c in range(C):
-            img[c] = (img[c] - means[c]) / stdevs[c]
+    return [encodings[:m], node_idx[:m], C, None]
 
 def b64_to_img(b64string):
     im = Image.open(BytesIO(base64.decodebytes(b64string.encode())))

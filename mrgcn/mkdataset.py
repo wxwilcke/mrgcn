@@ -24,9 +24,9 @@ def run(args, config):
     with KnowledgeGraph(graph=config['graph']['file']) as kg:
         targets = strip_graph(kg, config)
         A = graph_structure.generate(kg, config)
-        X, Y, X_node_map = build_dataset(kg, targets, config, featureless)
+        F, Y, X_node_map = build_dataset(kg, targets, config, featureless)
 
-    return (A, X, Y, X_node_map)
+    return (A, F, Y, X_node_map)
 
 def init_logger(filename, verbose=0):
     logging.basicConfig(filename=filename,
@@ -71,6 +71,6 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     with Tarball(baseFilename+'.tar', 'w') as tb:
-        tb.store(run(args, config), names=['A', 'X', 'Y', 'X_node_map'])
+        tb.store(run(args, config), names=['A', 'F', 'Y', 'X_node_map'])
 
     logging.shutdown()

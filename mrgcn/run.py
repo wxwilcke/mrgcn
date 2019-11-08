@@ -15,6 +15,7 @@ from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.io.tsv import TSV
 from mrgcn.data.utils import is_readable, is_writable, scipy_sparse_to_pytorch_sparse
 from mrgcn.encodings import graph_structure
+from mrgcn.encodings.graph_features import construct_feature_matrix, features_included
 from mrgcn.tasks.config import set_seed
 from mrgcn.tasks.node_classification import (build_dataset,
                                              build_model,
@@ -24,22 +25,30 @@ from mrgcn.tasks.utils import (dataset_to_device,
                                mksplits,
                                init_fold,
                                mkfolds,
-                               strip_graph)
+                               strip_graph,
+                               mkbatches,
+                               mkbatches_varlength)
 
 
 VERSION = 0.1
 
-def single_run(A, X, Y, X_node_map, tsv_writer, device, config, featureless):
+def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config, featureless):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
+
+    # add additional features if available
+    F_strings = F.pop("xsd.string", None)
+    F_images = F.pop("blob.image", None)
+    X = [X, F_strings, F_images]
 
     # create splits
     dataset = mksplits(X, Y, X_node_map, device,
                             config['task']['dataset_ratio'])
 
     # compile model and move to gpu if possible
-    model = build_model(X, Y, A, config, featureless)
+    features = features_included(config)
+    model = build_model(C, Y, A, features,  config, featureless)
     model.to(device)
     dataset_to_device(dataset, device)
 
@@ -69,7 +78,7 @@ def single_run(A, X, Y, X_node_map, tsv_writer, device, config, featureless):
 
     return (test_loss, test_acc)
 
-def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, device, config,
+def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, config,
                           featureless):
     tsv_writer.writerow(["fold", "epoch",
                          "training_loss", "training_accurary",
@@ -77,7 +86,8 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, device, config,
                          "test_loss", "test_accuracy"])
 
     # compile model and move to gpu if possible
-    model = build_model(X, Y, A, config, featureless)
+    features = features_included(config)
+    model = build_model(C, Y, A, features, config, featureless)
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(),
@@ -86,6 +96,10 @@ def kfold_crossvalidation(A, X, Y, X_node_map, k, tsv_writer, device, config,
     optimizer_state_zero = optimizer.state_dict()  # save initial state
     criterion = nn.CrossEntropyLoss()
 
+    # add additional features if available
+    F_strings = F.pop("xsd.string", None)
+    F_images = F.pop("blob.image", None)
+    X = [X, F_strings, F_images]
     # generate fold indices
     folds_idx = mkfolds(X_node_map.shape[0], k)
 
@@ -217,26 +231,32 @@ def run(args, tsv_writer, config):
         with KnowledgeGraph(graph=config['graph']['file']) as kg:
             targets = strip_graph(kg, config)
             A = graph_structure.generate(kg, config)
-            X, Y, X_node_map = build_dataset(kg, targets, config, featureless)
+            F, Y, X_node_map = build_dataset(kg, targets, config, featureless)
     else:
         assert is_readable(args.input)
         logging.debug("Importing prepared tarball")
         with Tarball(args.input, 'r') as tb:
             A = tb.get('A')
-            X = tb.get('X')
+            F = tb.get('F')
             Y = tb.get('Y')
             X_node_map = tb.get('X_node_map')
 
     # convert numpy and scipy matrices to pyTorch tensors
+    C = 0  # number of columns in X
+    X = torch.empty((0,C), device=torch.device("cpu"))
+    if not featureless:
+        C = sum(c for _, _, c, _ in F.values())
+        X, F = torch.as_tensor(construct_feature_matrix(F, X_node_map),
+                               device=device)
+
     A = scipy_sparse_to_pytorch_sparse(A).cuda() if device == torch.device("cuda") else scipy_sparse_to_pytorch_sparse(A)
-    X = torch.tensor(X, device=torch.device("cpu")) if featureless else torch.tensor(X, device=device)
-    Y = torch.tensor(Y, device=torch.device("cpu"))  # keep on cpu until after splitting
+    Y = torch.as_tensor(Y, device=torch.device("cpu"))  # keep on cpu until after splitting
 
     if config['task']['kfolds'] < 0:
-        loss, accuracy = single_run(A, X, Y, X_node_map, tsv_writer, device,
+        loss, accuracy = single_run(A, X, F, Y, C, X_node_map, tsv_writer, device,
                                     config, featureless)
     else:
-        loss, accuracy = kfold_crossvalidation(A, X, Y, X_node_map,
+        loss, accuracy = kfold_crossvalidation(A, X, F, Y, C, X_node_map,
                                                config['task']['kfolds'],
                                                tsv_writer, device, config,
                                                featureless)
