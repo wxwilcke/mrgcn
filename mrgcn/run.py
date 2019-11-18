@@ -230,8 +230,8 @@ def run(args, tsv_writer, config):
         logging.debug("No tarball supplied - building task prequisites")
         with KnowledgeGraph(graph=config['graph']['file']) as kg:
             targets = strip_graph(kg, config)
-            A = graph_structure.generate(kg, config)
-            F, Y, X_node_map = build_dataset(kg, targets, config, featureless)
+            A, nodes_idx = graph_structure.generate(kg, config)
+            F, Y, X_node_map = build_dataset(kg, nodes_idx, targets, config, featureless)
     else:
         assert is_readable(args.input)
         logging.debug("Importing prepared tarball")
@@ -242,12 +242,13 @@ def run(args, tsv_writer, config):
             X_node_map = tb.get('X_node_map')
 
     # convert numpy and scipy matrices to pyTorch tensors
+    num_nodes = Y.shape[0]
     C = 0  # number of columns in X
     X = torch.empty((0,C), device=torch.device("cpu"))
     if not featureless:
         C = sum(c for _, _, c, _ in F.values())
-        X, F = torch.as_tensor(construct_feature_matrix(F, X_node_map),
-                               device=device)
+        X, F = construct_feature_matrix(F, num_nodes)
+        X = torch.as_tensor(X, device=device)
 
     A = scipy_sparse_to_pytorch_sparse(A).cuda() if device == torch.device("cuda") else scipy_sparse_to_pytorch_sparse(A)
     Y = torch.as_tensor(Y, device=torch.device("cpu"))  # keep on cpu until after splitting

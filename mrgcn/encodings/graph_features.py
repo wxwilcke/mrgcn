@@ -10,7 +10,7 @@ from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
 
 logger = logging.getLogger(__name__)
 
-ENCODINGS_PKG = "encodings"
+ENCODINGS_PKG = "mrgcn.encodings"
 EMBEDDING_FEATURES = {"xsd.gYear", "xsd.numeric"}
 PREEMBEDDING_FEATURES = {"xsd.string", "blob.image"}
 AVAILABLE_FEATURES = set().union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
@@ -21,7 +21,7 @@ def construct_features(nodes_map, knowledge_graph, feature_configs):
     Note that normalization occurs per feature, independent of the predicate
     it is linked with. Future work should separate these.
 
-    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
+    :param nodes_map: list of node labels (URIs) with node idx {0, N}
     :param feature_config: list of features to construct, given as dicts
     :returns: numpy array N x (F * C);
                     N :- number of nodes
@@ -64,13 +64,12 @@ def feature_module(hierarchy, feature_name):
     for feature in AVAILABLE_FEATURES:
         if not feature.startswith("xsd"):
             continue
-        if hierarchy.subtypeof(feature_name, feature[4:]):
+        if hierarchy.subtypeof(feature[4:], feature_name):
             return feature
 
     return None
 
-def construct_feature_matrix(features, nodes_map):
-    n = len(nodes_map)
+def construct_feature_matrix(features, n):
     feature_matrix = list()
     features_processed = set()
     for feature in features.keys():

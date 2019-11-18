@@ -33,7 +33,7 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     Encoding
     - a vector v of length C = 4
-    -- v[0] : '-'? : BCE or AD; 0.0 if '-', else -1.0
+    -- v[0] : '-'? : BCE or AD; -1.0 if '-', else 1.0
                      Note: a. needed to represent difference 0YY AD and 0YY BCE
                            b. mapping assumes majority is AD
     -- v[1] : \d\d : centuries; numerical and normalized
@@ -61,17 +61,17 @@ def generate_features(nodes_map, node_predicate_map, config):
     values_max = [None, None, None]
     values_min = [None, None, None]
     for node, i in nodes_map.items():
-        if type(node) is not Literal:
+        if not isinstance(node, Literal):
             continue
         if node.datatype is None or node.datatype.neq(XSD.gYear):
             continue
 
-        node._value = node.__str__()  ## empty value bug workaround
+        node._value = str(node)  ## empty value bug workaround
         value = validate(node.value)
         if value is None:  # invalid syntax
             continue
 
-        sign = 0. if value.group('sign') == '' else 1.
+        sign = 1. if value.group('sign') == '' else -1.
         year = value.group('year')
 
         # separate centuries, decades, and individual years
@@ -83,11 +83,11 @@ def generate_features(nodes_map, node_predicate_map, config):
         d = int(separated.group('decade'))
         y = int(separated.group('year'))
 
-        for i, value in enumerate([c,d,y]):
-            if values_max[i] is None or value > values_max[i]:
-                values_max[i] = value
-            if values_min[i] is None or value < values_min[i]:
-                values_min[i] = value
+        for idx, value in enumerate([c,d,y]):
+            if values_max[idx] is None or value > values_max[idx]:
+                values_max[idx] = value
+            if values_min[idx] is None or value < values_min[idx]:
+                values_min[idx] = value
 
         # add to matrix structures
         encodings[m] = [sign, c, d, y]
@@ -98,9 +98,9 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     # normalization over encodings
     for i in range(C-1):
-        # skip sign as it can only take values [0, 1]
-        encodings[:m,i+1] = ((encodings[:m,i+1] - values_min[i]) /
-                             (values_max[i] - values_min[i]))
+        # skip sign as it can only take values [-1, 1]
+        encodings[:m,i+1] = (2*(encodings[:m,i+1] - values_min[i]) /
+                             (values_max[i] - values_min[i])) - 1.0
 
     return [encodings[:m], node_idx[:m], C, None]
 

@@ -22,7 +22,7 @@ def generate_task(knowledge_graph, A, targets, config):
 
     return (F, Y, X_node_idx, model)
 
-def build_dataset(knowledge_graph, target_triples, config, featureless):
+def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureless):
     logger.debug("Starting dataset build")
     # generate target matrix
     classes = {t[2] for t in target_triples}  # unique classes
@@ -30,7 +30,6 @@ def build_dataset(knowledge_graph, target_triples, config, featureless):
     logger.debug("Target classes ({}): {}".format(len(classes), classes))
 
     # node/class label to integers
-    nodes_map = {label:i for i,label in enumerate(knowledge_graph.atoms())}
     classes_map = {label:i for i,label in enumerate(classes)}
     num_nodes = len(nodes_map)
     num_classes = len(classes_map)

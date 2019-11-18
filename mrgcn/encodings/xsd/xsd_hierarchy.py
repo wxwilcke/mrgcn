@@ -48,17 +48,17 @@ class XSDHierarchy:
         anySimpleType.children = { anyAtomicType }
 
         dateTime = self.XSDDatatype("dateTime",
-                                     anyAtomicType),
+                                     anyAtomicType)
         decimal = self.XSDDatatype("decimal",
-                                    anyAtomicType),
+                                    anyAtomicType)
         double = self.XSDDatatype("double",
-                                   anyAtomicType),
+                                   anyAtomicType)
         duration = self.XSDDatatype("duration",
-                                     anyAtomicType),
+                                     anyAtomicType)
         floattype = self.XSDDatatype("float",
-                                      anyAtomicType),
+                                      anyAtomicType)
         string = self.XSDDatatype("string",
-                                   anyAtomicType),
+                                   anyAtomicType)
         anyAtomicType.children = {
             self.XSDDatatype("anyURI",
                              anyAtomicType),
@@ -171,17 +171,18 @@ class XSDHierarchy:
         anyAtomicType.children.add(numeric)
 
     def parentof(self, a, b):
-        return self._index[a.parent.name] is self._index[b.name]
+        # true if b is parent of a
+        return self._index[a].parent is self._index[b]
 
     def subtypeof(self, a, b):
-        # true iff a is b or a in tree rooted at b
-        a = self._index[a.name]
-        b = self._index[b.name]
-        if a is b or b is self._root:
+        # true iff a is b or b in tree rooted at a
+        a = self._index[a]
+        b = self._index[b]
+        if a is b or a is self._root:
             return True
 
-        while a is not self._root:
-            a = a.parent
+        while b is not self._root:
+            b = b.parent
             if a is b:
                 return True
 
