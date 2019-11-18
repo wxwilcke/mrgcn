@@ -12,9 +12,10 @@ def generate(knowledge_graph, config):
     # create mapping to integers [0, ...]
     properties_dict = {prop: i for i, prop in enumerate(knowledge_graph.properties())}
     nodes_dict = {node: i for i, node in enumerate(knowledge_graph.atoms())}
+    num_nodes = len(nodes_dict)
 
     # generate adjacency matrix for each property
-    adj_shape = (len(nodes_dict), len(nodes_dict))
+    adj_shape = (num_nodes, num_nodes)
     adjacencies = generate_adjacency_matrices(knowledge_graph,
                                 properties_dict,
                                 nodes_dict,
@@ -22,13 +23,13 @@ def generate(knowledge_graph, config):
                                 config['graph']['structural'])
 
     # add identity matrix (self-relations)
-    ident = sp.identity(len(nodes_dict)).tocsr()
+    ident = sp.identity(num_nodes).tocsr()
     if config['graph']['structural']['normalize']:
         ident = normalize_adjacency_matrix(ident)
     adjacencies.append(ident)
 
     # stack into a n x nR matrix
-    return sp.hstack(adjacencies, format="csr")
+    return [sp.hstack(adjacencies, format="csr"), nodes_dict]
 
 def generate_adjacency_matrices(knowledge_graph,
                                 properties_dict,

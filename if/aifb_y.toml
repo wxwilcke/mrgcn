@@ -1,0 +1,44 @@
+# Dataset configuration file
+version = 0.1
+
+# name of the dataset
+name = "AIFBy"
+
+[graph]
+file = "../../datasets/aifb/aifb_gYear.nt.gz"
+
+[graph.structural]
+include_inverse_properties = true
+exclude_properties = []  # use empty list to include all
+normalize = true
+
+[[graph.features]]
+datatype = 'xsd.gYear'
+include = true
+
+[task]
+# node classification
+instance_type = ''
+target_property = 'http://swrc.ontoware.org/ontology#affiliation'
+target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
+target_classes = []
+dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
+kfolds = 5  # use < 0 to disable (single run)
+seed = -1  # use < 0 for random
+gpu = false
+
+[model]
+epoch = 50
+learning_rate = 0.01
+loss = 'categorical_crossentropy'
+num_bases = 0
+p_dropout = 0.0
+l2norm = 0.0
+bias = false
+
+[[model.layers]]
+type = 'mrgcn'
+hidden_nodes = 16
+
+[[model.layers]]
+type = 'mrgcn'

@@ -47,7 +47,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     values_min = [None for _ in range(c)]
 
     for node, i in nodes_map.items():
-        if type(node) is not Literal:
+        if not isinstance(node, Literal):
             continue
         if node.datatype is None or node.datatype.neq(XSD.b64string):
             # assume that all B64-encoded literals are images
@@ -82,8 +82,8 @@ def generate_features(nodes_map, node_predicate_map, config):
     # normalization over channels
     for img in encodings[:m]:
         for ch in range(c):
-            img[ch] = (img[ch]-values_min[ch]) / (values_max[ch] -
-                                                  values_min[ch])
+            img[ch] = (2*(img[ch]-values_min[ch]) /
+                       (values_max[ch] - values_min[ch])) - 1.0
 
     return [encodings[:m], node_idx[:m], C, None]
 

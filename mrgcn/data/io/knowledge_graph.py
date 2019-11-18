@@ -2,7 +2,6 @@
 
 from collections import Counter
 import logging
-from itertools import chain
 import gzip
 
 from rdflib.graph import Graph
@@ -64,8 +63,16 @@ class KnowledgeGraph:
 
     def atoms(self):
         self.logger.debug("Yielding atoms")
-        for atom in frozenset(chain(self.graph.subjects(), self.graph.objects())):
-            yield(atom)
+        seen = set()
+        for s, p, o in self.graph.triples((None, None, None)):
+            for atom in (s, o):
+                if isinstance(atom, Literal):
+                    atom = self.UniqueLiteral(s, p, atom)
+                if atom in seen:
+                    continue
+                seen.add(atom)
+
+                yield atom
 
     def non_terminal_atoms(self):
         self.logger.debug("Yielding non-terminal atoms")
@@ -75,7 +82,7 @@ class KnowledgeGraph:
     def terminal_atoms(self):
         self.logger.debug("Yielding terminal atoms")
         non_terminal_atoms = list(self.non_terminal_atoms())
-        for atom in frozenset(self.graph.objects()):
+        for atom in list(self.graph.objects()):
             if atom in non_terminal_atoms:
                 continue
 
@@ -97,6 +104,7 @@ class KnowledgeGraph:
             yield(res)
 
     def objecttype_properties(self):
+        # return unique properties
         attributes = frozenset(self.attributes())
         self.logger.debug("Yielding OT predicates")
         for p in self.graph.predicates():
@@ -107,6 +115,7 @@ class KnowledgeGraph:
             yield(p)
 
     def datatype_properties(self):
+        # return unique properties
         objecttype_properties = set(self.objecttype_properties())
         self.logger.debug("Yielding DT predicates")
         for p in self.graph.predicates():
@@ -123,6 +132,8 @@ class KnowledgeGraph:
     def triples(self, triple=(None, None, None)):
         self.logger.debug("Yielding triples (triple {})".format(triple))
         for s,p,o in self.graph.triples(triple):
+            if isinstance(o, Literal):
+                o = self.UniqueLiteral(s, p, o)
             yield s, p, o
 
     ## Statistics
@@ -149,6 +160,23 @@ class KnowledgeGraph:
 
         self.logger.debug("Sampling graph")
         return strategy.sample(self, **kwargs)
+
+    class UniqueLiteral(Literal):
+        # literal with unique hash, irrespective of content
+        def __new__(cls, s, p, o):
+            self = super().__new__(cls, str(o), o.language, o.datatype, normalize=None)
+            self.s = str(s)
+            self.p = str(p)
+
+            return self
+
+        def __hash__(self):
+            base = self.s + self.p + str(self)
+            for attr in [self.language, self.datatype]:
+                if attr is not None:
+                    base += str(attr)
+
+            return hash(base)
 
 if __name__ == "__main__":
     print("Knowledge Graph")

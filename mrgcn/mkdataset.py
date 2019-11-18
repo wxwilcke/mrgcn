@@ -23,8 +23,8 @@ def run(args, config):
 
     with KnowledgeGraph(graph=config['graph']['file']) as kg:
         targets = strip_graph(kg, config)
-        A = graph_structure.generate(kg, config)
-        F, Y, X_node_map = build_dataset(kg, targets, config, featureless)
+        A, nodes_idx = graph_structure.generate(kg, config)
+        F, Y, X_node_map = build_dataset(kg, nodes_idx, targets, config, featureless)
 
     return (A, F, Y, X_node_map)
 
