@@ -102,7 +102,7 @@ def generate_features(nodes_map, node_predicate_map, config):
         encodings[:m,i+1] = (2*(encodings[:m,i+1] - values_min[i]) /
                              (values_max[i] - values_min[i])) - 1.0
 
-    return [encodings[:m], node_idx[:m], C, None]
+    return [[encodings[:m], node_idx[:m], C, None]]
 
 def separate(year):
     regex = "(?P<century>\d\d)(?P<decade>\d)(?P<year>\d)"

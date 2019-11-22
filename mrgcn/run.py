@@ -49,8 +49,6 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config, featureles
     # compile model and move to gpu if possible
     features = features_included(config)
     model = build_model(C, Y, A, features,  config, featureless)
-    model.to(device)
-    dataset_to_device(dataset, device)
 
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
@@ -61,7 +59,7 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config, featureles
     nepoch = config['model']['epoch']
 
     for epoch in train_model(A, model, optimizer, criterion, dataset,
-                             nepoch):
+                             nepoch, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -71,7 +69,7 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config, featureles
                              "-1", "-1"])
 
     # test model
-    test_loss, test_acc = test_model(A, model, criterion, dataset)
+    test_loss, test_acc = test_model(A, model, criterion, dataset, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(test_loss), str(test_acc)])
@@ -88,7 +86,6 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
     # compile model and move to gpu if possible
     features = features_included(config)
     model = build_model(C, Y, A, features, config, featureless)
-    model.to(device)
 
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
@@ -110,13 +107,12 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
         # initialize fold
         dataset = init_fold(X, Y, X_node_map, folds_idx[fold-1],
                             device, config['task']['dataset_ratio'])
-        dataset_to_device(dataset, device)  # move to gpu if possible
 
         # train model
         nepoch = config['model']['epoch']
 
         for epoch in train_model(A, model, optimizer, criterion, dataset,
-                                 nepoch):
+                                 nepoch, device):
             # log metrics
             tsv_writer.writerow([str(fold),
                                  str(epoch[0]),
@@ -127,7 +123,7 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
                                  "-1", "-1"])
 
         # test model
-        test_loss, test_acc = test_model(A, model, criterion, dataset)
+        test_loss, test_acc = test_model(A, model, criterion, dataset, device)
         results.append((test_loss, test_acc))
 
         # log metrics
@@ -136,11 +132,8 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
                              str(test_loss), str(test_acc)])
 
         # reset model and optimizer
-        model.reset()
+        model.init()
         optimizer.load_state_dict(optimizer_state_zero)
-
-        # remove split-specific tensors from gpu if possible
-        dataset_to_device(dataset, torch.device("cpu"))
 
     mean_loss, mean_acc = tuple(sum(e)/len(e) for e in zip(*results))
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
@@ -148,14 +141,14 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
 
     return (mean_loss, mean_acc)
 
-def train_model(A, model, optimizer, criterion, dataset, nepoch):
+def train_model(A, model, optimizer, criterion, dataset, nepoch, device):
     logging.info("Training for {} epoch".format(nepoch))
     # Log wall-clock time
     t0 = time()
 
     for epoch in range(1, nepoch+1):
         # Single training iteration
-        Y_hat = model(dataset['train']['X'], A)
+        Y_hat = model(dataset['train']['X'], A, device)
 
         # Training scores
         train_loss = categorical_crossentropy(Y_hat, dataset['train']['Y'],
@@ -193,9 +186,9 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch):
 
     logging.info("training time: {:.2f}s".format(time()-t0))
 
-def test_model(A, model, criterion, dataset):
+def test_model(A, model, criterion, dataset, device):
     # Predict on full dataset
-    Y_hat = model(dataset['test']['X'], A)
+    Y_hat = model(dataset['test']['X'], A, device)
 
     # scores on test set
     test_loss = categorical_crossentropy(Y_hat, dataset['test']['Y'],
@@ -244,14 +237,25 @@ def run(args, tsv_writer, config):
     # convert numpy and scipy matrices to pyTorch tensors
     num_nodes = Y.shape[0]
     C = 0  # number of columns in X
-    X = torch.empty((0,C), device=torch.device("cpu"))
+    X = torch.empty((0,C))
     if not featureless:
-        C = sum(c for _, _, c, _ in F.values())
+        C = sum(c for f in F.values() for _, _, c, _ in f)
         X, F = construct_feature_matrix(F, num_nodes)
-        X = torch.as_tensor(X, device=device)
+        X = torch.as_tensor(X)
 
-    A = scipy_sparse_to_pytorch_sparse(A).cuda() if device == torch.device("cuda") else scipy_sparse_to_pytorch_sparse(A)
-    Y = torch.as_tensor(Y, device=torch.device("cpu"))  # keep on cpu until after splitting
+        # determine no. input channels for CNNs
+        for datatype in ["blob.image", "xsd.string"]:
+            if datatype not in F.keys():
+                continue
+            feature_configs = config['graph']['features']
+            feature_config = next((d for d in feature_configs
+                                   if feature_configs['datatype'] == datatype),
+                                  None)
+            feature_config['nchannels_in'] = [a.shape[1] for lst in F[datatype]
+                                              for a in lst]
+
+    A = scipy_sparse_to_pytorch_sparse(A)
+    Y = torch.as_tensor(Y)
 
     if config['task']['kfolds'] < 0:
         loss, accuracy = single_run(A, X, F, Y, C, X_node_map, tsv_writer, device,

@@ -43,11 +43,9 @@ def construct_features(nodes_map, knowledge_graph, feature_configs):
 
         # dynamically load module
         module = import_module("{}.{}".format(ENCODINGS_PKG, feature_name))
-        encodings, node_idx, C, encoding_length_map = module.generate_features(nodes_map,
-                                                                      node_predicate_map,
-                                                                      feature_config)
-
-        features[feature_name] = [encodings, node_idx, C, encoding_length_map]
+        features[feature_name] = module.generate_features(nodes_map,
+                                                          node_predicate_map,
+                                                          feature_config)
 
     return features
 
@@ -78,7 +76,8 @@ def construct_feature_matrix(features, n):
             # concatenated to X
             continue
 
-        feature_matrix.append(_mkdense(*features[feature], n))
+        feature_matrix.extend([_mkdense(*feature_encoding, n) for
+                               feature_encoding in features[feature]])
         features_processed.add(feature)
 
     for feature in features_processed:

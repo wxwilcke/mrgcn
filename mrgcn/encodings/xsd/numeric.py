@@ -95,7 +95,7 @@ def generate_nodewise_features(node_map, C, config):
     encodings[:m] = (2*(encodings[:m] - value_min) /
                      (value_max - value_min)) -1.0
 
-    return [encodings[:m], node_idx[:m], C, None]
+    return [[encodings[:m], node_idx[:m], C, None]]
 
 def generate_relationwise_features(node_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
@@ -147,7 +147,7 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config):
                            relationwise_encodings.values()])
     C *= len(relationwise_encodings.keys())
 
-    return [encodings[:m], node_idx[:m], C, None]
+    return [[encodings[:m], node_idx[:m], C, None]]
 
 def validate(value):
     return match(_REGEX_NUMERIC, value)

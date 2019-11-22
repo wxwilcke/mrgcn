@@ -19,9 +19,9 @@ include = false
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
+share_weights = true
 [[graph.features.layers]]
 type = 'Conv1d'
-nchannels_in = 1  # per sentence
 nchannels_out = 18
 kernel_size = 3
 stride = 1
