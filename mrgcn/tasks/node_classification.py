@@ -50,7 +50,7 @@ def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureles
     logger.debug("Completed dataset build")
     return (F, Y, X_node_idx)
 
-def build_model(C, Y, A, features_included,  config, featureless):
+def build_model(C, Y, A, modules_config, config, featureless):
     layers = config['model']['layers']
     assert len(layers) >= 2
     logger.debug("Starting model build")
@@ -59,26 +59,6 @@ def build_model(C, Y, A, features_included,  config, featureless):
     X_dim = C  # == 0 if featureless
     num_nodes, Y_dim = Y.size()
     num_relations = int(A.size()[1]/num_nodes)
-
-    # additional early layers if needed
-    embedding_layers = list()
-    for datatype in ["blob.image", "xsd.string"]:
-        if datatype in features_included:
-            feature_configs = config['graph']['features']
-            feature_config = next((d for d in feature_configs
-                                   if feature_configs['datatype'] == datatype),
-                                  None)
-            module_sequence = list()
-            for layer in feature_config['layers']:
-                ltype = getattr(nn, layer['type'])
-                lattr = {k:v for k,v in layer.items()
-                         if k != "type" and k != "activation"}
-                lactivation = None if "activation" not in layer.keys()\
-                              else getattr(nn, layer['activation'])
-                module_sequence.append((ltype(**lattr),
-                                        lactivation()))
-
-            embedding_layers.append((datatype, module_sequence))
 
     modules = list()
     # input layer
@@ -104,7 +84,7 @@ def build_model(C, Y, A, features_included,  config, featureless):
                     layers[i-1]['type'],
                     nn.Softmax(dim=1)))
 
-    model = MRGCN(modules, embedding_layers, num_relations, num_nodes,
+    model = MRGCN(modules, modules_config, num_relations, num_nodes,
                   num_bases=config['model']['num_bases'],
                   p_dropout=config['model']['p_dropout'],
                   featureless=featureless,

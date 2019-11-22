@@ -78,7 +78,7 @@ class MRGCN(nn.Module):
             if F is None:
                 continue
 
-            for i, (encodings, node_idx, C, _) in F:
+            for i, (encodings, node_idx, C, _) in enumerate(F):
                 module, batch_size = self.modality_modules[modality][i]
                 module.to(device)
 

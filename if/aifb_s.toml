@@ -20,24 +20,6 @@ include = false
 datatype = 'xsd.string'
 include = true
 share_weights = true
-[[graph.features.layers]]
-type = 'Conv1d'
-nchannels_out = 18
-kernel_size = 3
-stride = 1
-padding = 1
-activation = 'ReLU'
-[[graph.features.layers]]
-type = 'MaxPool2d'
-kernel_size = 2
-stride = 2
-[[graph.features.layers]]
-type = 'Linear'
-indim = 1  # 18xWxH
-hidden_nodes = 0
-activation = 'ReLU'
-[[graph.features.layers]]
-outdim = 0
 
 [task]
 # node classification

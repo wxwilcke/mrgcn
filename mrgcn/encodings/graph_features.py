@@ -84,7 +84,9 @@ def construct_feature_matrix(features, n):
         # save some memory
         del features[feature]
 
-    return [np.hstack(feature_matrix), features]
+    X = np.empty((0,0)) if len(feature_matrix) <= 0 else np.hstack(feature_matrix)
+
+    return [X, features]
 
 def _mkdense(encodings, node_idx, c, encodings_length_map, n):
     F = np.zeros(shape=(n, c), dtype=np.float32)

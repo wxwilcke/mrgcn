@@ -13,7 +13,7 @@ from rdflib.namespace import XSD
 
 _REGEX_CHAR = "[\u0001-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
 _REGEX_STRING = "{}+".format(_REGEX_CHAR)  # skip empty string
-_MAX_CHARS = 512  # one-hot ASCII encoded
+_MAX_CHARS = 64  # one-hot ASCII encoded
 _MAX_ASCII = 255
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def generate_features(nodes_map, node_predicate_map, config,
               """
     logger.debug("Generating string features")
 
-    C = 128
+    C = 32
 
     if separated_domains:
         return generate_relationwise_features(nodes_map, node_predicate_map, C, config)
