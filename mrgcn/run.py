@@ -32,7 +32,8 @@ from mrgcn.tasks.utils import (dataset_to_device,
 
 VERSION = 0.1
 
-def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config, featureless):
+def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
+               modules_config, featureless):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
@@ -46,9 +47,8 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config, featureles
     dataset = mksplits(X, Y, X_node_map, device,
                             config['task']['dataset_ratio'])
 
-    # compile model and move to gpu if possible
-    features = features_included(config)
-    model = build_model(C, Y, A, features,  config, featureless)
+    # compile model
+    model = build_model(C, Y, A, modules_config, config, featureless)
 
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
@@ -77,15 +77,14 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config, featureles
     return (test_loss, test_acc)
 
 def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, config,
-                          featureless):
+                          modules_config, featureless):
     tsv_writer.writerow(["fold", "epoch",
                          "training_loss", "training_accurary",
                          "validation_loss", "validation_accuracy",
                          "test_loss", "test_accuracy"])
 
-    # compile model and move to gpu if possible
-    features = features_included(config)
-    model = build_model(C, Y, A, features, config, featureless)
+    # compile model
+    model = build_model(C, Y, A, modules_config, config, featureless)
 
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
@@ -239,32 +238,37 @@ def run(args, tsv_writer, config):
     C = 0  # number of columns in X
     X = torch.empty((0,C))
     if not featureless:
-        C = sum(c for f in F.values() for _, _, c, _ in f)
         X, F = construct_feature_matrix(F, num_nodes)
         X = torch.as_tensor(X)
 
-        # determine no. input channels for CNNs
+        # determine configurations for CNNs
+        modules_config = list()
         for datatype in ["blob.image", "xsd.string"]:
             if datatype not in F.keys():
                 continue
+
             feature_configs = config['graph']['features']
-            feature_config = next((d for d in feature_configs
-                                   if feature_configs['datatype'] == datatype),
+            feature_config = next((conf for conf in feature_configs
+                                   if conf['datatype'] == datatype),
                                   None)
-            feature_config['nchannels_in'] = [a.shape[1] for lst in F[datatype]
-                                              for a in lst]
+            for encodings, _, c, _ in F[datatype]:
+                modules_config.append((datatype, (feature_config['batch_size'],
+                                                  encodings.shape[1:],
+                                                  c)))
+
+                C += c
 
     A = scipy_sparse_to_pytorch_sparse(A)
     Y = torch.as_tensor(Y)
 
     if config['task']['kfolds'] < 0:
         loss, accuracy = single_run(A, X, F, Y, C, X_node_map, tsv_writer, device,
-                                    config, featureless)
+                                    config, modules_config, featureless)
     else:
         loss, accuracy = kfold_crossvalidation(A, X, F, Y, C, X_node_map,
                                                config['task']['kfolds'],
                                                tsv_writer, device, config,
-                                               featureless)
+                                               modules_config, featureless)
 
     if device == torch.device("cuda"):
         logging.debug("Peak GPU memory used (MB): {}".format(
