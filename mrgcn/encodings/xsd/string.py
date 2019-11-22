@@ -13,7 +13,8 @@ from rdflib.namespace import XSD
 
 _REGEX_CHAR = "[\u0001-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
 _REGEX_STRING = "{}+".format(_REGEX_CHAR)  # skip empty string
-_MAX_CHARS = 512  # ASCII encoded
+_MAX_CHARS = 512  # one-hot ASCII encoded
+_MAX_ASCII = 255
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +27,21 @@ def generate_features(nodes_map, node_predicate_map, config,
     -- Char  := [\t\r\n] + {unicode} + {ISO/IEC 10646}
 
     This is a character level encoding, in which each character is represented
-    by its ASCII value. Prior to encoding, all words were stemmed and
-    punctuation was filtered.
+    by a one-hot vector indexed by its ASCII value. Prior to encoding, all words
+    are stemmed and punctuation is filtered.
     Note that this encoding treats similar spelling as roughly the same word
     Note that UNICODE is ignored as it skews the value distribution
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param config: configuration dictionary
-    :returns: numpy array M x C;
+    :returns: numpy array M x A x C;
                     M :- number of nodes with this feature, such that M <= N
-                    C :- number of columns for this feature encoding
+                    A :- number of allowed ASCII characters
+                    C :- maximum length of sequences
               numpy array 1 x M;
                     M :- number of nodes with this feature, such that M <= N
               int C;
-              None;
+              list 1 x M;
               """
     logger.debug("Generating string features")
 
@@ -55,12 +57,12 @@ def generate_nodewise_features(nodes_map, C, config):
     """
     m = 0
     n = len(nodes_map)
-    sequences = np.zeros(shape=(n, _MAX_CHARS), dtype=np.float32)
+    sequences = list()
     node_idx = np.zeros(shape=(n), dtype=np.int32)
     seq_length_map = list()
 
-    value_max = None
-    value_min = None
+    min_value = None
+    max_value = None
 
     stemmer = PorterStemmer()  # English
     for node, i in nodes_map.items():
@@ -74,39 +76,45 @@ def generate_nodewise_features(nodes_map, C, config):
             continue
 
         seq = preprocess(node.value, stemmer)
-        vec = np.array(toASCII(seq), dtype=np.float32)
-        vec_length = len(vec)
-
-        if vec_length <= 0:
+        seq = toASCII(seq)[:_MAX_CHARS]
+        seq_length = len(seq)
+        if seq_length <= 0:
             continue
-        seq_length_map.append(vec_length)
 
-        if value_max is None or vec.max() > value_max:
-            value_max = vec.max()
-        if value_min is None or vec.min() < value_min:
-            value_min = vec.min()
+        sequence = np.zeros(shape=(_MAX_ASCII, _MAX_CHARS), dtype=np.float32)
+        sequence[[seq], range(seq_length)] = 1.0  # not sparse as Conv1D doesn't support it
 
         # pad with repetition
-        sequences[m] = np.tile(vec, ceil(_MAX_CHARS/vec_length))[:_MAX_CHARS]
+        unfilled = _MAX_CHARS - seq_length
+        if unfilled > 0:
+            sequence[:,seq_length:] = np.tile(sequence[:,:seq_length],
+                                              ceil((unfilled)/seq_length))[:,:unfilled]
+        sequences.append(sequence)
+
+        if min_value is None or min(seq) < min_value:
+            min_value = min(seq)
+        if max_value is None or max(seq) > max_value:
+            max_value = max(seq)
+
+        seq_length_map.append(seq_length)
         node_idx[m] = i
         m += 1
 
     logger.debug("Generated {} unique string features".format(m))
 
-    # normalization over features
-    sequences = 2*(sequences[:m] - value_min) / (value_max - value_min) - 1.0
+    # remove unused ASCII range as we're not interested in unseen data right now
+    sequences = np.stack(sequences, axis=0)[:,min_value:max_value,:max(seq_length_map)]
 
-    return [sequences[:m], node_idx[:m], C, seq_length_map]
+    return [[sequences, node_idx[:m], C, seq_length_map]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    m = 0
     n = len(node_predicate_map)
-    relationwise_encodings = dict()
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
-    seq_length_map = list()
-    values_idx = dict()
+    m = dict()
+    node_idx = dict()
+    sequences = dict()
+    seq_length_map = dict()
     values_min = dict()
     values_max = dict()
     stemmer = PorterStemmer()  # English
@@ -121,43 +129,49 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             continue
 
         seq = preprocess(node.value, stemmer)
-        vec = np.array(toASCII(seq), dtype=np.float32)
-        vec_length = len(vec)
+        seq = toASCII(seq)[:_MAX_CHARS]
+        seq_length = len(seq)
 
-        if vec_length <= 0:
+        if seq_length <= 0:
             continue
-        seq_length_map.append(vec_length)
 
         predicate = node_predicate_map[node]
-        if predicate not in relationwise_encodings.keys():
-            relationwise_encodings[predicate] = np.zeros(shape=(n, _MAX_CHARS), dtype=np.float32)
+        if predicate not in sequences.keys():
+            sequences[predicate] = list()
+            m[predicate] = 0
+            seq_length_map[predicate] = list()
+            node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
             values_min[predicate] = None
             values_max[predicate] = None
-            values_idx[predicate] = list()
 
-        if values_max[predicate] is None or vec.max() > values_max[predicate]:
-            values_max[predicate] = vec.max()
-        if values_min[predicate] is None or vec.min() < values_min[predicate]:
-            values_min[predicate] = vec.min()
-
+        sequence = np.zeros(shape=(_MAX_ASCII, _MAX_CHARS), dtype=np.float32)
+        sequence[[seq], range(seq_length)] = 1.0  # not sparse as Conv1D doesn't support it
 
         # pad with repetition
-        relationwise_encodings[predicate][m] = np.tile(vec, ceil(_MAX_CHARS/vec_length))[:_MAX_CHARS]
-        node_idx[m] = i
-        values_idx[predicate].append(m)
-        m += 1
+        unfilled = _MAX_CHARS - seq_length
+        if unfilled > 0:
+            sequence[:,seq_length:] = np.tile(sequence[:,:seq_length],
+                                              ceil((unfilled)/seq_length))[:,:unfilled]
+        sequences[predicate].append(sequence)
 
-    logger.debug("Generated {} unique string features".format(m))
+        if values_max[predicate] is None or max(seq) > values_max[predicate]:
+            values_max[predicate] = max(seq)
+        if values_min[predicate] is None or min(seq) < values_min[predicate]:
+            values_min[predicate] = min(seq)
 
-    # normalization over encodings
-    for predicate, encodings in relationwise_encodings.items():
-        encodings[values_idx[predicate]] = (2*(encodings[values_idx[predicate]] - values_min[predicate]) /
-                                             (values_max[predicate] - values_min[predicate])) -1.0
+        seq_length_map[predicate].append(seq_length)
+        node_idx[m[predicate]] = i
+        m[predicate] += 1
 
-    encodings = np.hstack([encodings[:m] for encodings in
-                           relationwise_encodings.values()])
+    logger.debug("Generated {} unique string features".format(sum(m.values())))
 
-    return [encodings[:m], node_idx[:m], C, seq_length_map]
+    for predicate, sequence in sequences.items():
+        # remove unused ASCII range as we're not interested in unseen data right now
+        sequence = np.stack(sequence,
+                            axis=0)[:,values_min[predicate]:values_max[predicate],:max(seq_length_map[predicate])]
+
+    return [[sequences[predicate], node_idx[predicate][:m[predicate]], C, seq_length_map[predicate]]
+            for predicate in sequences.keys()]
 
 def toASCII(seq):
     try:

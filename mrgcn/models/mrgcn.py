@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn.functional import dropout
+import torch.utils.data as td
 
-from mrgcn.layers.graph import GraphConvolution
+from mrgcn.models.charcnn import CharCNN
+from mrgcn.models.rgcn import RGCN
 
 
 class MRGCN(nn.Module):
@@ -27,123 +27,87 @@ class MRGCN(nn.Module):
 
         self.num_nodes = num_nodes
         self.p_dropout = p_dropout
+        self.module_list = nn.ModuleList()
 
-        # add additional embedding layers
-        self.embedding_layers = nn.ModuleDict()
-        for modality, embedding_module in embedding_modules:
-            self.embedding_layers[modality](self.PreEmbedding(embedding_module))
-            # add to parameters?
+        # add embedding layers
+        self.modality_modules = dict()
+        for modality, args in embedding_modules:
+            if modality == "xsd.string":
+                batch_size, (nrows, ncols), dim_out = args
+                module = CharCNN(features_in=nrows,
+                                 features_out=dim_out,
+                                 sequence_length=ncols,
+                                 p_dropout=p_dropout)
+                self.module_list.append(module)
+            if modality == "blob.image":
+                pass
 
-        self.layers = nn.ModuleDict()
-        self.activations = nn.ModuleDict()
-        # input layer
-        indim, outdim, ltype, f_activation = modules[0]
-        self.layers['layer_0'] = GraphConvolution(indim=indim,
-                                          outdim=outdim,
-                                          num_relations=num_relations,
-                                          num_nodes=num_nodes,
-                                          num_bases=num_bases,
-                                          featureless=featureless,
-                                          input_layer=True,
-                                          bias=bias)
-        self.activations['layer_0'] = f_activation
+            if modality not in self.modality_modules.keys():
+                self.modality_modules[modality] = list()
+            self.modality_modules[modality].append((module, batch_size))
 
-        # other layers (if any)
-        for i, layer in enumerate(modules[1:], 1):
-            indim, outdim, ltype, f_activation = layer
-            self.layers['layer_'+str(i)] = GraphConvolution(indim=indim,
-                                              outdim=outdim,
-                                              num_relations=num_relations,
-                                              num_nodes=num_nodes,
-                                              num_bases=num_bases,
-                                              featureless=False,
-                                              input_layer=False,
-                                              bias=bias)
-            self.activations['layer_'+str(i)] = f_activation
+        # add graph convolution layers
+        self.mrgcn = RGCN(modules, num_relations, num_nodes,
+                          num_bases, p_dropout, featureless, bias)
+        self.module_list.append(self.mrgcn)
 
-    def forward(self, X, A):
+    def forward(self, X, A, device=None):
         X, F_string, F_images = X
 
         # compute and concat modality-specific embeddings
-        XF = self.compute_modality_embeddings(F_string,
-                                              F_images)
+        XF = self._compute_modality_embeddings(F_string,
+                                               F_images,
+                                               device)
         if XF is not None:
             X = torch.cat([X,XF], dim=1)
 
-        # Forward pass with full input
-        for layer, f_activation in zip(self.layers.values(),
-                                       self.activations.values()):
-            if type(layer) is GraphConvolution:
-                X = layer(X, A)
-            else:
-                X = layer(X)
+        # Forward pass through graph convolution layers
+        self.mrgcn.to(device)
+        X_dev = X.to(device)
+        A_dev = A.to(device)
 
-            if self.p_dropout > 0.0:
-                # add dropout to output, by elementwise multiplying with 
-                # column vector of ones, with dropout applied to the vector
-                # of ones.
-                ones = dropout(torch.ones(self.num_nodes),
-                               p=self.p_dropout)
-                X = torch.mul(X.T, ones).T
-
-
-            X = f_activation(X)
+        X_dev = self.mrgcn(X_dev, A_dev)
+        X = X_dev.to('cpu')
 
         return X
 
-    def compute_modality_embeddings(self, F_string, F_images):
+    def _compute_modality_embeddings(self, F_string, F_images, device):
         X = list()
         for modality, F in zip(["xsd.string", "blob.image"],
                                [F_string, F_images]):
             if F is None:
                 continue
 
-            encodings, node_idx, C, _ = F
-            XF = np.zeros((self.num_nodes, C), dtype=np.float32)
-            for i, x in enumerate(encodings):
-                # do we already need to have pytorch tensors here?
-                XF[node_idx[i]] = self.embedding_layers[modality](x)
+            for i, (encodings, node_idx, C, _) in F:
+                module, batch_size = self.modality_modules[modality][i]
+                module.to(device)
 
-        return None if len(X) <= 0 else torch.as_tensor(np.hstack(X))
+                encodings = torch.as_tensor(encodings)  # convert from numpy array
+                data_loader = td.DataLoader(td.TensorDataset(encodings),
+                                            batch_size=batch_size,
+                                            shuffle=False)  # order matters
+                out = list()
+                for [batch] in data_loader:
+                    batch_dev = batch.to(device)
+                    out_dev = module(batch_dev)
 
-    def reset(self):
-        # reinitialze all weights
-        for layer in self.layers.values():
-            if type(layer) is GraphConvolution:
-                layer.init()
-            else:
-                raise NotImplementedError
+                    out_cpu = out_dev.to('cpu')
+                    out.append(out_cpu)
 
-        for layer in self.embedding_layers.values():
-            layer.init()
+                out = torch.cat(out, dim=0)
 
-class PreEmbedding(nn.Module):
-    def __init__(self, modules):
-        """
-        PARAMETERS
-            modules:    list with tuples (module, activation function)
-        """
-        super().__init__()
+                # map output to correct nodes
+                XF = torch.zeros((self.num_nodes, C), dtype=torch.float32)
+                XF[node_idx] = out
 
-        self.layers = nn.ModuleList()
-        self.activations = nn.ModuleList()
+                X.append(XF)
 
-        for module, f_activation in modules:
-            self.layers.append(module)
-            self.activations.append(f_activation)
-
-    def forward(self, X):
-        for layer, f_activation in zip(self.layers,
-                                       self.activations):
-            X = f_activation(layer(X))
-
-        return X
+        return None if len(X) <= 0 else torch.cat(X, dim=1)
 
     def init(self):
         # reinitialze all weights
-        for layer in self.layers:
-            for param in layer.parameters():
-                # initialize weights from a uniform distribution following 
-                # "Understanding the difficulty of training deep feedforward 
-                #  neural networks" - Glorot, X. & Bengio, Y. (2010)
-                nn.init.xavier_uniform_(param)
+        for module in self.module_list:
+            if type(module) in (CharCNN, RGCN):
+                module.init()
+            else:
+                raise NotImplementedError
