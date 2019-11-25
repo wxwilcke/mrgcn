@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import logging
+
 import torch
 import torch.nn as nn
 import torch.utils.data as td
@@ -7,6 +9,8 @@ import torch.utils.data as td
 from mrgcn.models.charcnn import CharCNN
 from mrgcn.models.rgcn import RGCN
 
+
+logger = logging.getLogger(__name__)
 
 class MRGCN(nn.Module):
     def __init__(self, modules, embedding_modules, num_relations,
@@ -75,9 +79,10 @@ class MRGCN(nn.Module):
         X = list()
         for modality, F in zip(["xsd.string", "blob.image"],
                                [F_string, F_images]):
-            if F is None:
+            if modality not in self.modality_modules.keys() or F is None:
                 continue
 
+            #logging.debug("Computing modality specific embeddings for {}".format(modality))
             for i, (encodings, node_idx, C, _) in enumerate(F):
                 module, batch_size = self.modality_modules[modality][i]
                 module.to(device)

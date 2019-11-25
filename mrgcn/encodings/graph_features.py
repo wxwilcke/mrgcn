@@ -67,10 +67,14 @@ def feature_module(hierarchy, feature_name):
 
     return None
 
-def construct_feature_matrix(features, n):
+def construct_feature_matrix(features, features_enabled, n):
     feature_matrix = list()
     features_processed = set()
-    for feature in features.keys():
+    for feature in features_enabled:
+        if feature not in features.keys():
+            logging.debug("=> WARNING: feature {} not in dataset".format(feature))
+            continue
+
         if feature in PREEMBEDDING_FEATURES:
             # these require additional processing before they can be
             # concatenated to X
@@ -84,7 +88,7 @@ def construct_feature_matrix(features, n):
         # save some memory
         del features[feature]
 
-    X = np.empty((0,0)) if len(feature_matrix) <= 0 else np.hstack(feature_matrix)
+    X = np.empty((n,0), dtype=np.float32) if len(feature_matrix) <= 0 else np.hstack(feature_matrix)
 
     return [X, features]
 
