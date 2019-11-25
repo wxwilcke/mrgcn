@@ -57,15 +57,10 @@ class CharCNN(nn.Module):
 
     def forward(self, X):
         for layer in self.conv_layers:
-            print(X.size())
-            print(layer)
             X = layer(X)
 
-        print(X.size())
         X = X.view(X.size(0), -1)
         for layer in self.lin_layers:
-            print(X.size())
-            print(layer)
             X = layer(X)
 
         return X
