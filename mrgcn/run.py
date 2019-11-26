@@ -21,13 +21,10 @@ from mrgcn.tasks.node_classification import (build_dataset,
                                              build_model,
                                              categorical_accuracy,
                                              categorical_crossentropy)
-from mrgcn.tasks.utils import (dataset_to_device,
-                               mksplits,
+from mrgcn.tasks.utils import (mksplits,
                                init_fold,
                                mkfolds,
-                               strip_graph,
-                               mkbatches,
-                               mkbatches_varlength)
+                               strip_graph)
 
 
 VERSION = 0.1
@@ -255,9 +252,10 @@ def run(args, tsv_writer, config):
                                    if conf['datatype'] == datatype),
                                   None)
             for encodings, _, c, _ in F[datatype]:
-                modules_config.append((datatype, (feature_config['batch_size'],
-                                                  encodings.shape[1:],
-                                                  c)))
+                if datatype in ["xsd.string", "blob.image"]:
+                    modules_config.append((datatype, (feature_config['batch_size'],
+                                                      encodings.shape[1:],
+                                                      c)))
 
                 C += c
 

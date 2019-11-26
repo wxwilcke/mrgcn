@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data as td
 
+from mrgcn.data.utils import SparseDataset
 from mrgcn.models.charcnn import CharCNN
 from mrgcn.models.rgcn import RGCN
 
@@ -88,11 +89,15 @@ class MRGCN(nn.Module):
                 module.to(device)
 
                 encodings = torch.as_tensor(encodings)  # convert from numpy array
-                data_loader = td.DataLoader(td.TensorDataset(encodings),
+                if encodings.layout is torch.sparse_coo:
+                    encodings = SparseDataset(encodings)
+                else:
+                    encodings = td.TensorDataset(encodings)
+                data_loader = td.DataLoader(encodings,
                                             batch_size=batch_size,
                                             shuffle=False)  # order matters
                 out = list()
-                for [batch] in data_loader:
+                for batch in data_loader:
                     batch_dev = batch.to(device)
                     out_dev = module(batch_dev)
 
