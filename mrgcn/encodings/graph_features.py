@@ -5,6 +5,7 @@ import logging
 
 import numpy as np
 
+from mrgcn.data.utils import scipy_sparse_to_pytorch_sparse
 from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
 
 
@@ -78,15 +79,14 @@ def construct_feature_matrix(features, features_enabled, n):
         if feature in PREEMBEDDING_FEATURES:
             # these require additional processing before they can be
             # concatenated to X
+            if feature == "xsd.string":
+                for i in range(len(features[feature])):
+                    features[feature][i][0] = scipy_sparse_to_pytorch_sparse(features[feature][i][0])
             continue
 
         feature_matrix.extend([_mkdense(*feature_encoding, n) for
                                feature_encoding in features[feature]])
         features_processed.add(feature)
-
-    for feature in features_processed:
-        # save some memory
-        del features[feature]
 
     X = np.empty((n,0), dtype=np.float32) if len(feature_matrix) <= 0 else np.hstack(feature_matrix)
 
