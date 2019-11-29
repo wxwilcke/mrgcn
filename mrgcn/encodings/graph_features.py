@@ -43,11 +43,10 @@ def construct_features(nodes_map, knowledge_graph, feature_configs):
             continue
 
         # dynamically load module
-        module = import_module("{}.{}".format(ENCODINGS_PKG, feature_name))
+        module = import_module("{}.{}".format(ENCODINGS_PKG, feature))
         features[feature_name] = module.generate_features(nodes_map,
                                                           node_predicate_map,
                                                           feature_config)
-
     return features
 
 def feature_module(hierarchy, feature_name):

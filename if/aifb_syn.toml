@@ -15,7 +15,7 @@ normalize = true
 [[graph.features]]
 datatype = 'xsd.positiveInteger'
 include = true
-share_weights = false  
+share_weights = false  # not yet implemented
 
 [[graph.features]]
 datatype = 'xsd.gYear'

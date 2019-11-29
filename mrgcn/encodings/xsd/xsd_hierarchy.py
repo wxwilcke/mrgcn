@@ -170,6 +170,10 @@ class XSDHierarchy:
                                      floattype })
         anyAtomicType.children.add(numeric)
 
+        decimal.parent = numeric
+        double.parent = numeric
+        floattype.parent = numeric
+
     def parentof(self, a, b):
         # true if b is parent of a
         return self._index[a].parent is self._index[b]
