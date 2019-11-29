@@ -74,10 +74,10 @@ def generate_nodewise_features(node_map, C, config):
         if node.datatype is None or node.datatype not in _XSD_NUMERICAL:
             continue
 
-        node._value = node.__str__()  ## empty value bug workaround
-        value = validate(node.value)
-        if value is None:  # invalid syntax
+        value = str(node)  ## empty value bug workaround
+        if validate(value) is None:
             continue
+        value = float(value)
 
         if value_max is None or value > value_max:
             value_max = value
@@ -89,7 +89,8 @@ def generate_nodewise_features(node_map, C, config):
         node_idx[m] = i
         m += 1
 
-    logger.debug("Generated {} unique {} encodings".format(m, node.datatype))
+    logger.debug("Generated {} unique {} encodings".format(m,
+                                                           config['datatype']))
 
     # normalization over encodings
     encodings[:m] = (2*(encodings[:m] - value_min) /
@@ -113,10 +114,10 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config):
         if node.datatype is None or node.datatype not in _XSD_NUMERICAL:
             continue
 
-        node._value = node.__str__()  ## empty value bug workaround
-        value = validate(node.value)
-        if value is None:  # invalid syntax
+        value = str(node)  ## empty value bug workaround
+        if validate(value) is None:
             continue
+        value = float(value)
 
         predicate = node_predicate_map[node]
         if predicate not in relationwise_encodings.keys():
@@ -136,7 +137,8 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config):
         values_idx[predicate].append(m)
         m += 1
 
-    logger.debug("Generated {} unique {} encodings".format(m, node.datatype))
+    logger.debug("Generated {} unique {} encodings".format(m,
+                                                           config['datatype']))
 
     # normalization over encodings
     for predicate, encodings in relationwise_encodings.items():
