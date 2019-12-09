@@ -53,15 +53,29 @@ def scipy_sparse_to_pytorch_sparse(sp_input):
 
     return t
 
+#class SparseDataset(Dataset):
+#    n = 0
+#
+#    def __init__(self, sp_input):
+#        self.n = sp_input.size(0)
+#        self.sp = sp_input
+#
+#    def __len__(self):
+#        return self.n
+#
+#    def __getitem__(self, idx):
+#        return self.sp[idx].to_dense()
+
 class SparseDataset(Dataset):
     n = 0
 
     def __init__(self, sp_input):
-        self.n = sp_input.size(0)
+        # sp_input := a list with sparse coo matrices
+        self.n = len(sp_input)
         self.sp = sp_input
 
     def __len__(self):
         return self.n
 
     def __getitem__(self, idx):
-        return self.sp[idx].to_dense()
+        return torch.as_tensor(self.sp[idx].todense())

@@ -81,15 +81,15 @@ def generate_nodewise_features(nodes_map, C, config):
         if seq_length <= 0:
             continue
 
-        # pad with repetition
-        c = cycle(sequence)
-        unfilled = _MAX_CHARS - seq_length
-        if unfilled > 0:
-            sequence.extend([next(c) for _ in range(unfilled)])
+        # pad with repetition  -- move to preloading
+        #c = cycle(sequence)
+        #unfilled = _MAX_CHARS - seq_length
+        #if unfilled > 0:
+        #    sequence.extend([next(c) for _ in range(unfilled)])
 
-        a = sp.coo_matrix((np.repeat([1.0], repeats=_MAX_CHARS),
-                           (sequence, np.array(range(_MAX_CHARS)))),
-                          shape=(_MAX_ASCII, _MAX_CHARS),
+        a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
+                           (sequence, np.array(range(seq_length)))),
+                          shape=(_MAX_ASCII, seq_length),
                           dtype=np.float32)
 
         data.append(a)
@@ -135,10 +135,10 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
 
         # pad with repetition
-        c = cycle(sequence)
-        unfilled = _MAX_CHARS - seq_length
-        if unfilled > 0:
-            sequence.extend([next(c) for _ in range(unfilled)])
+        #c = cycle(sequence)
+        #unfilled = _MAX_CHARS - seq_length
+        #if unfilled > 0:
+        #    sequence.extend([next(c) for _ in range(unfilled)])
 
         a = sp.coo_matrix((np.repeat([1.0], repeats=_MAX_CHARS),
                            (sequence, np.array(range(_MAX_CHARS)))),

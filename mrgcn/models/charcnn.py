@@ -16,52 +16,44 @@ class CharCNN(nn.Module):
             Processing Systems 28 (NIPS 2015)
         """
         super().__init__()
-        self.conv_layers = nn.ModuleList()
-        self.lin_layers = nn.ModuleList()
-        #sequence_length_out = 8
 
-        self.conv_layers.append(
-            nn.Sequential(nn.Conv1d(features_in, 32, kernel_size=7),
-                          nn.ReLU(),
-                          nn.MaxPool1d(kernel_size=3, stride=3)))
+        def conv1d(features_in, features_out, kernel, padding=0):
+            return nn.Sequential(
+                nn.Conv1d(features_in, features_out,
+                          kernel_size=kernel,
+                          padding=padding,
+                          stride=1),
+                nn.ReLU(inplace=True)
+            )
 
-        #self.conv_layers.append(
-        #    nn.Sequential(nn.Conv1d(256, 256, kernel_size=7),
-        #                  nn.ReLU(),
-        #                  nn.MaxPool1d(kernel_size=3, stride=3)))
+        def linear(features_in, features_out):
+            return nn.Sequential(
+                nn.Linear(features_in, features_out),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=p_dropout)
+            )
 
-        #for _ in range(3):
-        #    self.conv_layers.append(
-        #        nn.Sequential(nn.Conv1d(256, 256, kernel_size=3),
-        #                      nn.ReLU()))
+        self.conv = nn.Sequential(
+            conv1d(features_in, 256, kernel=7, padding=3),
+            nn.AdaptiveMaxPool1d(16),
+            conv1d(256, 256, kernel=7),
+            nn.AdaptiveMaxPool1d(10),
+            conv1d(256, 256, kernel=3),
+            conv1d(256, 256, kernel=3),
+            conv1d(256, 256, kernel=3),
+            conv1d(256, 256, kernel=3),
+            nn.AdaptiveMaxPool1d(4)  # 1024/256
+        )
 
-        #conv_to_lin_dim = 32 * sequence_length_out
-        #assert conv_to_lin_dim >= 256
-
-        self.conv_layers.append(
-            nn.Sequential(nn.Conv1d(32, 32, kernel_size=3),
-                          nn.ReLU(),
-                          nn.AdaptiveMaxPool1d(8)))
-
-        self.lin_layers.append(
-            nn.Sequential(nn.Linear(32*8, 128),
-                          nn.ReLU(),
-                          nn.Dropout(p=p_dropout)))
-
-        #self.lin_layers.append(
-        #    nn.Sequential(nn.Linear(1024, 1024),
-        #                  nn.ReLU(),
-        #                  nn.Dropout(p=p_dropout)))
-
-        self.lin_layers.append(nn.Linear(128, features_out))
+        self.fc = nn.Sequential(
+            linear(1024, 512),
+            linear(512, features_out)
+        )
 
     def forward(self, X):
-        for layer in self.conv_layers:
-            X = layer(X)
-
+        X = self.conv(X)
         X = X.view(X.size(0), -1)
-        for layer in self.lin_layers:
-            X = layer(X)
+        X = self.fc(X)
 
         return X
 
