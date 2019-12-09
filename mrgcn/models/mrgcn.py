@@ -8,6 +8,8 @@ import torch.utils.data as td
 
 from mrgcn.data.utils import SparseDataset
 from mrgcn.models.charcnn import CharCNN
+from mrgcn.models.mobilenets import MobileNETS
+from mrgcn.models.rnn import RNN
 from mrgcn.models.rgcn import RGCN
 
 
@@ -45,7 +47,20 @@ class MRGCN(nn.Module):
                                  p_dropout=p_dropout)
                 self.module_list.append(module)
             if modality == "blob.image":
-                pass
+                batch_size, (nchannels, nrows, ncols), dim_out = args
+                module = CNN(channels_in=nchannels,
+                             height=nrows,
+                             width=ncols,
+                             features_out=dim_out,
+                             p_dropout=p_dropout)
+                self.module_list.append(module)
+            if modality == "ogc.wktLiteral":
+                batch_size, (nrows, ncols), dim_out = args
+                module = RNN(features_in=nrows,
+                             features_out=dim_out,
+                             sequence_length=ncols,
+                             p_dropout=p_dropout)
+                self.module_list.append(module)
 
             if modality not in self.modality_modules.keys():
                 self.modality_modules[modality] = list()
@@ -57,11 +72,12 @@ class MRGCN(nn.Module):
         self.module_list.append(self.mrgcn)
 
     def forward(self, X, A, device=None):
-        X, F_string, F_images = X
+        X, F_string, F_images, F_wktLiteral = X
 
         # compute and concat modality-specific embeddings
         XF = self._compute_modality_embeddings(F_string,
                                                F_images,
+                                               F_wktLiteral,
                                                device)
         if XF is not None:
             X = torch.cat([X,XF], dim=1)
@@ -76,10 +92,10 @@ class MRGCN(nn.Module):
 
         return X
 
-    def _compute_modality_embeddings(self, F_string, F_images, device):
+    def _compute_modality_embeddings(self, F_string, F_images, F_wktLiteral, device):
         X = list()
-        for modality, F in zip(["xsd.string", "blob.image"],
-                               [F_string, F_images]):
+        for modality, F in zip(["xsd.string", "blob.image", "ogc.wktLiteral"],
+                               [F_string, F_images, F_wktLiteral]):
             if modality not in self.modality_modules.keys() or F is None:
                 continue
 
@@ -88,6 +104,8 @@ class MRGCN(nn.Module):
                 module, batch_size = self.modality_modules[modality][i]
                 module.to(device)
 
+                # create m datasets; one per seq length bin
+                # create a dataloader per dataset
                 encodings = torch.as_tensor(encodings)  # convert from numpy array
                 if encodings.layout is torch.sparse_coo:
                     encodings = SparseDataset(encodings)
@@ -98,6 +116,7 @@ class MRGCN(nn.Module):
                                             shuffle=False)  # order matters
                 out = list()
                 for batch in data_loader:
+                    # put mini batching here? track i from outer loop?
                     batch_dev = batch.to(device)
                     out_dev = module(batch_dev)
 
@@ -117,7 +136,7 @@ class MRGCN(nn.Module):
     def init(self):
         # reinitialze all weights
         for module in self.module_list:
-            if type(module) in (CharCNN, RGCN):
+            if type(module) in (CNN, CharCNN, RGCN):
                 module.init()
             else:
                 raise NotImplementedError

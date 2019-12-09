@@ -38,7 +38,8 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
     # add additional features if available
     F_strings = F.pop("xsd.string", None)
     F_images = F.pop("blob.image", None)
-    X = [X, F_strings, F_images]
+    F_wktLiteral = F.pop("ogc.wktLiteral", None)
+    X = [X, F_strings, F_images, F_wktLiteral]
 
     # create splits
     dataset = mksplits(X, Y, X_node_map, device,
@@ -92,7 +93,8 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
     # add additional features if available
     F_strings = F.pop("xsd.string", None)
     F_images = F.pop("blob.image", None)
-    X = [X, F_strings, F_images]
+    F_wktLiteral = F.pop("ogc.wktLiteral", None)
+    X = [X, F_strings, F_images, F_wktLiteral]
     # generate fold indices
     folds_idx = mkfolds(X_node_map.shape[0], k)
 
@@ -242,7 +244,7 @@ def run(args, tsv_writer, config):
         X, F = construct_feature_matrix(F, features_enabled, num_nodes)
         X = torch.as_tensor(X)
 
-        # determine configurations for CNNs
+        # determine configurations
         for datatype in features_enabled:
             if datatype not in F.keys():
                 continue
@@ -252,7 +254,13 @@ def run(args, tsv_writer, config):
                                    if conf['datatype'] == datatype),
                                   None)
             for encodings, _, c, _ in F[datatype]:
-                if datatype in ["xsd.string", "blob.image"]:
+                if datatype in ["xsd.string", "ogc.wktLiteral"]:
+                    # stored as list of arrays
+                    modules_config.append((datatype, (feature_config['batch_size'],
+                                                      len(encodings),
+                                                      c)))
+                if datatype in ["blob.image"]:
+                    # stored as tensor
                     modules_config.append((datatype, (feature_config['batch_size'],
                                                       encodings.shape[1:],
                                                       c)))

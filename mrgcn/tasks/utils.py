@@ -157,10 +157,10 @@ def mkbatches(mat, node_idx, nbins, C):
 
     return [bins, node_assignments]
 
-def mkbatches_varlength(sequences, node_idx, C, seq_length_map):
+def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1):
     """ :param sequences: M x K numpy array with encodings
                     M :- number of nodes with this feature M <= N
-                    K :- number of columns in encoding 
+                    K :- number of columns in encoding
         :param node_idx: list that maps sequence idx {0, M} to node idx {0, N}
         :param seq_length_map: list that maps sequence idx {0, M} to length {0, K}
         :returns: list with B numpy arrays Mb x Cb;
@@ -172,10 +172,14 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map):
     Returns an encoding list Le and an index list Li such that Le[i][j] holds
     encoding j in batch i, and Li[i][j] the index of the corresponding node
     """
+    if max_bins <= 0:
+        max_bins = 16
+
     # determine optimal number of bins using the Freedman-Diaconis rule
     IQR = np.quantile(seq_length_map, 0.75) - np.quantile(seq_length_map, 0.25)
     h = 2 * IQR / np.power(len(seq_length_map), 1/3)
-    nbins = np.round((max(seq_length_map)-min(seq_length_map)) / h)
+    nbins = min(max_bins,
+                np.round((max(seq_length_map)-min(seq_length_map)) / h))
 
     # create bins and assign sequences
     bin_ranges = np.array_split(np.unique(seq_length_map), nbins)

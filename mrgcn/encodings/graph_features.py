@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 ENCODINGS_PKG = "mrgcn.encodings"
 EMBEDDING_FEATURES = {"xsd.gYear", "xsd.numeric"}
-PREEMBEDDING_FEATURES = {"xsd.string", "blob.image"}
+PREEMBEDDING_FEATURES = {"xsd.string", "blob.image", "ogc.wktLiteral"}
 AVAILABLE_FEATURES = set().union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
 
 def construct_features(nodes_map, knowledge_graph, feature_configs):
@@ -78,9 +78,10 @@ def construct_feature_matrix(features, features_enabled, n):
         if feature in PREEMBEDDING_FEATURES:
             # these require additional processing before they can be
             # concatenated to X
-            if feature == "xsd.string":
-                for i in range(len(features[feature])):
-                    features[feature][i][0] = scipy_sparse_to_pytorch_sparse(features[feature][i][0])
+
+            #if feature == "xsd.string":
+            #    for i in range(len(features[feature])):
+            #        features[feature][i][0] = scipy_sparse_to_pytorch_sparse(features[feature][i][0])
             continue
 
         feature_matrix.extend([_mkdense(*feature_encoding, n) for
