@@ -17,7 +17,7 @@ _REGEX_WKTLITERAL = _REGEX_WKTPOINT + "|" + _REGEX_WKTPOLYGON
 
 _OGC_NAMESPACE = Namespace(URIRef("http://www.opengis.net/ont/geosparql#"))
 
-_MAX_POINTS = 128
+_MAX_POINTS = 64
 _GEOVECTORIZER_VEC_LENGTH = 7
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def generate_features(nodes_map, node_predicate_map, config):
         if validate(value) is None:
             continue
 
-        vec = gv.vectorize_wkt(value)
+        vec = gv.vectorize_wkt(value)[:_MAX_POINTS,:]
         vec_length = vec.shape[0]
         if vec_length <= 0:
             continue

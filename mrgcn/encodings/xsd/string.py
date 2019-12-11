@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import logging
-from itertools import cycle
 from re import fullmatch, sub
 from string import punctuation
 
@@ -21,7 +20,7 @@ _MAX_ASCII = 255 - _MIN_ASCII  # omit signals
 logger = logging.getLogger(__name__)
 
 def generate_features(nodes_map, node_predicate_map, config,
-                      separated_domains=True):
+                      separated_domains=False):
     """ Generate features for XSD string literals
 
     Definition
@@ -140,9 +139,9 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         #if unfilled > 0:
         #    sequence.extend([next(c) for _ in range(unfilled)])
 
-        a = sp.coo_matrix((np.repeat([1.0], repeats=_MAX_CHARS),
-                           (sequence, np.array(range(_MAX_CHARS)))),
-                          shape=(_MAX_ASCII, _MAX_CHARS),
+        a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
+                           (sequence, np.array(range(seq_length)))),
+                          shape=(_MAX_ASCII, seq_length),
                           dtype=np.float32)
 
         sequences[predicate].append(a)

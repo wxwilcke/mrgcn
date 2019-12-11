@@ -146,45 +146,65 @@ def sample_mask(idx, n):
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
 
-def mkbatches(mat, node_idx, nbins, C):
+def mkbatches(mat, node_idx, C, _, nbins=10):
+    """ split N x * array in batches
+    """
     n = mat.shape[0]  # number of samples
     idc = np.array(range(n), dtype=np.int32)
-    idc_splits = np.array_split(idc, nbins)
+    idc_assignments = np.array_split(idc, nbins)
 
-    bins = [mat[slce] for slce in idc_splits]
     node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
-                        for slce in idc_splits]
+                        for slce in idc_assignments]
 
-    return [bins, node_assignments]
+    return list(zip(idc_assignments, node_assignments))
 
 def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1):
-    """ :param sequences: M x K numpy array with encodings
+    """ :param sequences: a list with M arrays of length ?
                     M :- number of nodes with this feature M <= N
-                    K :- number of columns in encoding
         :param node_idx: list that maps sequence idx {0, M} to node idx {0, N}
         :param seq_length_map: list that maps sequence idx {0, M} to length {0, K}
-        :returns: list with B numpy arrays Mb x Cb;
-                        Mb :- number of encodings for nodes in batch b
-                        Cb :- number of columns for batch b
-                  list with B lists of length Mb holding node idx;
-                        Mb :- number of encodings for nodes in batch b
+        :returns: list with B lists, each holding sequence indices for that batch;
+                  list with B lists, each holding node indices for sequences;
 
-    Returns an encoding list Le and an index list Li such that Le[i][j] holds
-    encoding j in batch i, and Li[i][j] the index of the corresponding node
     """
     if max_bins <= 0:
         max_bins = 16
 
-    # determine optimal number of bins using the Freedman-Diaconis rule
-    IQR = np.quantile(seq_length_map, 0.75) - np.quantile(seq_length_map, 0.25)
-    h = 2 * IQR / np.power(len(seq_length_map), 1/3)
-    nbins = min(max_bins,
-                np.round((max(seq_length_map)-min(seq_length_map)) / h))
+    # split outliers
+    q25 = np.quantile(seq_length_map, 0.25)
+    q75 = np.quantile(seq_length_map, 0.75)
+    IQR = q75 - q25
+    cut_off = IQR * 1.5
 
-    # create bins and assign sequences
-    bin_ranges = np.array_split(np.unique(seq_length_map), nbins)
+    outliers_low = list()
+    outliers_high = list()
+    non_outliers = list()
+    for seq_length in seq_length_map:
+        if seq_length < q25 - cut_off:
+            outliers_low.append(seq_length)
+            continue
+        if seq_length > q75 + cut_off:
+            outliers_high.append(seq_length)
+            continue
+
+        non_outliers.append(seq_length)
+
+    # determine optimal number of bins using the Freedman-Diaconis rule
+    h = 2 * IQR / np.power(len(non_outliers), 1/3)
+    nbins = min(max_bins,
+                np.round((max(non_outliers)-min(non_outliers)) / h))
+
+    # create bins
+    bin_ranges = np.array_split(np.unique(non_outliers), nbins)
+    for outlier_bin in [outliers_low, outliers_high]:
+        if len(outlier_bin) <= 0:
+            continue
+        bin_ranges.append(np.array(outlier_bin))
+
     bin_ranges_map = {length:bin_idx for bin_idx in range(len(bin_ranges))
                       for length in bin_ranges[bin_idx]}
+
+    # assign sequences
     seq_assignments = [list() for bin_range in bin_ranges]
     node_assignments = [list() for bin_range in bin_ranges]
     for i in range(len(sequences)):
@@ -192,8 +212,5 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1):
         seq_assignments[bin_ranges_map[length]].append(i)
         node_assignments[bin_ranges_map[length]].append(node_idx[i])
 
-    bins = [np.array(sequences[idc, :max(ranges)])
-            for idc, ranges in zip(seq_assignments, bin_ranges)]
-
-    return [bins, node_assignments]
+    return list(zip(seq_assignments, node_assignments))
 

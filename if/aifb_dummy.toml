@@ -2,10 +2,10 @@
 version = 0.1
 
 # name of the dataset
-name = "AIFBy"
+name = "AIFB_dummy"
 
 [graph]
-file = "../../datasets/aifb/aifb_gYear.nt.gz"
+file = "../../datasets/aifb/tmp/aifb_gYear_string_numeric_dummy.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -13,8 +13,32 @@ exclude_properties = []  # use empty list to include all
 normalize = true
 
 [[graph.features]]
+datatype = 'xsd.positiveInteger'
+include = true
+share_weights = false  # not yet implemented
+
+[[graph.features]]
 datatype = 'xsd.gYear'
 include = true
+share_weights = false  # not yet implemented
+
+[[graph.features]]
+datatype = 'xsd.string'
+include = true
+batch_size = 100
+share_weights = false
+
+[[graph.features]]
+datatype = 'blob.image'
+include = false
+batch_size = 100
+share_weights = false
+
+[[graph.features]]
+datatype = 'ogc.wktLiteral'
+include = false
+batch_size = 100
+share_weights = false
 
 [task]
 # node classification
@@ -23,7 +47,7 @@ target_property = 'http://swrc.ontoware.org/ontology#affiliation'
 target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
 target_classes = []
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = -1 # use < 0 to disable (single run)
+kfolds = 5  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 

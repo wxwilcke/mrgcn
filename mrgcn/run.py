@@ -24,7 +24,9 @@ from mrgcn.tasks.node_classification import (build_dataset,
 from mrgcn.tasks.utils import (mksplits,
                                init_fold,
                                mkfolds,
-                               strip_graph)
+                               strip_graph,
+                               mkbatches,
+                               mkbatches_varlength)
 
 
 VERSION = 0.1
@@ -36,10 +38,15 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
                                   "test_loss", "test_accuracy"])
 
     # add additional features if available
-    F_strings = F.pop("xsd.string", None)
-    F_images = F.pop("blob.image", None)
-    F_wktLiteral = F.pop("ogc.wktLiteral", None)
-    X = [X, F_strings, F_images, F_wktLiteral]
+    F_strings = F.pop("xsd.string", list())
+    F_strings = [(f, mkbatches_varlength(*f)) for f in F_strings]
+    F_images = F.pop("blob.image", list())
+    F_images = [(f, mkbatches(*f)) for f in F_images]
+    F_wktLiterals = F.pop("ogc.wktLiteral", list())
+    F_wktLiterals = [(f, mkbatches_varlength(*f))
+                    for f in F_wktLiterals]
+
+    X = [X, F_strings, F_images, F_wktLiterals]
 
     # create splits
     dataset = mksplits(X, Y, X_node_map, device,
@@ -91,10 +98,15 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
     criterion = nn.CrossEntropyLoss()
 
     # add additional features if available
-    F_strings = F.pop("xsd.string", None)
-    F_images = F.pop("blob.image", None)
-    F_wktLiteral = F.pop("ogc.wktLiteral", None)
-    X = [X, F_strings, F_images, F_wktLiteral]
+    F_strings = F.pop("xsd.string", list())
+    F_strings = [(f, mkbatches_varlength(*f)) for f in F_strings]
+    F_images = F.pop("blob.image", list())
+    F_images = [(f, mkbatches(*f)) for f in F_images]
+    F_wktLiterals = F.pop("ogc.wktLiteral", list())
+    F_wktLiterals = [(f, mkbatches_varlength(*f))
+                    for f in F_wktLiterals]
+
+    X = [X, F_strings, F_images, F_wktLiterals]
     # generate fold indices
     folds_idx = mkfolds(X_node_map.shape[0], k)
 
@@ -256,8 +268,10 @@ def run(args, tsv_writer, config):
             for encodings, _, c, _ in F[datatype]:
                 if datatype in ["xsd.string", "ogc.wktLiteral"]:
                     # stored as list of arrays
+                    feature_dim = 0 if datatype == "xsd.string" else 1
+                    feature_size = encodings[0].shape[feature_dim]
                     modules_config.append((datatype, (feature_config['batch_size'],
-                                                      len(encodings),
+                                                      feature_size,
                                                       c)))
                 if datatype in ["blob.image"]:
                     # stored as tensor
