@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
 import logging
+from operator import itemgetter
 
 import torch
 import torch.nn as nn
 import torch.utils.data as td
 
-from mrgcn.data.utils import SparseDataset
+from mrgcn.data.utils import (collate_repetition_padding,
+                              scipy_sparse_to_pytorch_sparse)
 from mrgcn.models.charcnn import CharCNN
 from mrgcn.models.mobilenets import MobileNETS
 from mrgcn.models.rnn import RNN
@@ -40,10 +42,9 @@ class MRGCN(nn.Module):
         self.modality_modules = dict()
         for modality, args in embedding_modules:
             if modality == "xsd.string":
-                batch_size, (nrows, ncols), dim_out = args
+                batch_size, nrows, dim_out = args
                 module = CharCNN(features_in=nrows,
                                  features_out=dim_out,
-                                 sequence_length=ncols,
                                  p_dropout=p_dropout)
                 self.module_list.append(module)
             if modality == "blob.image":
@@ -55,10 +56,9 @@ class MRGCN(nn.Module):
                              p_dropout=p_dropout)
                 self.module_list.append(module)
             if modality == "ogc.wktLiteral":
-                batch_size, (nrows, ncols), dim_out = args
-                module = RNN(features_in=nrows,
+                batch_size, ncols, dim_out = args
+                module = RNN(features_in=ncols,
                              features_out=dim_out,
-                             sequence_length=ncols,
                              p_dropout=p_dropout)
                 self.module_list.append(module)
 
@@ -96,38 +96,42 @@ class MRGCN(nn.Module):
         X = list()
         for modality, F in zip(["xsd.string", "blob.image", "ogc.wktLiteral"],
                                [F_string, F_images, F_wktLiteral]):
-            if modality not in self.modality_modules.keys() or F is None:
+            if modality not in self.modality_modules.keys() or len(F[0]) <= 0:
                 continue
 
-            #logging.debug("Computing modality specific embeddings for {}".format(modality))
-            for i, (encodings, node_idx, C, _) in enumerate(F):
-                module, batch_size = self.modality_modules[modality][i]
+            for i, ((encodings, node_idx, C, _), batches) in enumerate(F):
+                module, _ = self.modality_modules[modality][i]
                 module.to(device)
 
-                # create m datasets; one per seq length bin
-                # create a dataloader per dataset
-                encodings = torch.as_tensor(encodings)  # convert from numpy array
-                if encodings.layout is torch.sparse_coo:
-                    encodings = SparseDataset(encodings)
-                else:
-                    encodings = td.TensorDataset(encodings)
-                data_loader = td.DataLoader(encodings,
-                                            batch_size=batch_size,
-                                            shuffle=False)  # order matters
                 out = list()
-                for batch in data_loader:
-                    # put mini batching here? track i from outer loop?
+                out_node_idx = list()
+                for batch_encoding_idx, batch_node_idx in batches:
+                    if modality in ["xsd.string", "ogc.wktLiteral"]:
+                        # encodings := list of sparse coo matrices
+                        batch = itemgetter(*batch_encoding_idx)(encodings)
+                        time_dim = 0 if modality == "ogc.wktLiteral" else 1
+                        batch = collate_repetition_padding(batch,
+                                                           time_dim)
+                        batch = scipy_sparse_to_pytorch_sparse(batch)
+                        batch = batch.to_dense()
+                    else:
+                        # encodings := numpy array
+                        batch = encodings[batch_encoding_idx]
+                        batch = torch.as_tensor(batch)
+
+                    # forward pass  / add mini batching here?
                     batch_dev = batch.to(device)
                     out_dev = module(batch_dev)
 
                     out_cpu = out_dev.to('cpu')
                     out.append(out_cpu)
+                    out_node_idx.extend(batch_node_idx)
 
                 out = torch.cat(out, dim=0)
 
                 # map output to correct nodes
                 XF = torch.zeros((self.num_nodes, C), dtype=torch.float32)
-                XF[node_idx] = out
+                XF[out_node_idx] = out
 
                 X.append(XF)
 
@@ -136,7 +140,7 @@ class MRGCN(nn.Module):
     def init(self):
         # reinitialze all weights
         for module in self.module_list:
-            if type(module) in (CNN, CharCNN, RGCN):
+            if type(module) in (MobileNETS, CharCNN, RGCN, RNN):
                 module.init()
             else:
                 raise NotImplementedError

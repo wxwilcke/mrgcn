@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from queue import SimpleQueue
+from queue import Queue
 
 
 class XSDHierarchy:
@@ -17,7 +17,7 @@ class XSDHierarchy:
             return
 
         self._index[self._root.name] = self._root
-        q = SimpleQueue()
+        q = Queue()
         for child in self._root.children:
             q.put(child)
 

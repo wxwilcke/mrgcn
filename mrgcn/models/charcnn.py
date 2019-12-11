@@ -4,7 +4,7 @@ import torch.nn as nn
 
 
 class CharCNN(nn.Module):
-    def __init__(self, features_in, features_out, sequence_length, p_dropout=0.0):
+    def __init__(self, features_in, features_out, p_dropout=0.0):
         """
         Character-level Convolutional Neural Network
 
@@ -58,8 +58,5 @@ class CharCNN(nn.Module):
         return X
 
     def init(self):
-        # initialize weights from a uniform distribution following 
-        # "Understanding the difficulty of training deep feedforward 
-        #  neural networks" - Glorot, X. & Bengio, Y. (2010)
         for param in self.parameters():
-            nn.init.xavier_uniform_(param)
+            nn.init.normal_(param)

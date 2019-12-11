@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from itertools import cycle
 import logging
 from os import access, F_OK, R_OK, W_OK
 from os.path import split
@@ -7,6 +8,7 @@ from os.path import split
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import scipy.sparse as sp
 
 
 logger = logging.getLogger(__name__)
@@ -79,3 +81,38 @@ class SparseDataset(Dataset):
 
     def __getitem__(self, idx):
         return torch.as_tensor(self.sp[idx].todense())
+
+def collate_repetition_padding(batch, time_dim, max_batch_length=999):
+    """ batch := a list with sparse coo matrices
+
+        time_dim should be 0 for RNN and 1 for temporal CNN
+    """
+    batch_padded = list()
+
+    max_length = 0
+    for seq in batch:
+        if seq.shape[time_dim] > max_length:
+            max_length = seq.shape[time_dim]
+    max_length = min(max_length, max_batch_length)
+
+    for seq in batch:
+        one_hot_idc = list(seq.row) if time_dim == 1 else list(seq.col)
+        one_hot_idc = one_hot_idc[:max_batch_length]  # truncate if bigger
+        seq_length = len(one_hot_idc)
+
+        c = cycle(one_hot_idc)
+        unfilled = max_length - seq_length
+        if unfilled > 0:
+            one_hot_idc.extend([next(c) for _ in range(unfilled)])
+
+        coordinates = (one_hot_idc, np.array(range(max_length))) if time_dim == 1\
+                else (np.array(range(max_length)), one_hot_idc)
+        shape = (seq.shape[1-time_dim], max_length) if time_dim == 1\
+                else (max_length, seq.shape[1-time_dim])
+
+        batch_padded.append(
+            sp.coo_matrix((np.repeat([1.0], repeats=max_length),
+                          coordinates),
+                         shape=shape, dtype=np.float32))
+
+    return batch_padded
