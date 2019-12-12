@@ -49,7 +49,7 @@ class MRGCN(nn.Module):
                 self.module_list.append(module)
             if modality == "blob.image":
                 batch_size, (nchannels, nrows, ncols), dim_out = args
-                module = CNN(channels_in=nchannels,
+                module = MobileNETS(channels_in=nchannels,
                              height=nrows,
                              width=ncols,
                              features_out=dim_out,
