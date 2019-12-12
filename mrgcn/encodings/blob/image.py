@@ -53,9 +53,8 @@ def generate_features(nodes_map, node_predicate_map, config):
             # assume that all B64-encoded literals are images
             continue
 
-        node._value = node.__str__()  ## empty value bug workaround
-        value = validate(node.value)
-        if value is None:  # if invalid syntax
+        value = str(node)  ## empty value bug workaround
+        if validate(value) is None:  # if invalid syntax
             continue
 
         blob = b64_to_img(value)

@@ -14,6 +14,8 @@ class MobileNETS(nn.Module):
             neural networks for mobile vision applications." arXiv preprint
             arXiv:1704.04861 (2017).
 
+        Adapted to fit smaller image resolution
+
         """
         super().__init__()
 
@@ -21,7 +23,7 @@ class MobileNETS(nn.Module):
             # standard convolutional layer
             return nn.Sequential(
                                 nn.Conv2d(channels_in, channels_out,
-                                          kernel=(3, 3),
+                                          kernel_size=(3, 3),
                                           stride=stride,
                                           padding=1),
                                 nn.BatchNorm2d(channels_out),
@@ -39,7 +41,7 @@ class MobileNETS(nn.Module):
             # depthwise convolutional layer
             return nn.Sequential(
                                 nn.Conv2d(channels_in, channels_out,
-                                          kernel=(3, 3),
+                                          kernel_size=(3, 3),
                                           stride=stride,
                                           padding=1,
                                           groups=channels_in),
@@ -51,41 +53,53 @@ class MobileNETS(nn.Module):
             # pointwise convolutional layer
             return nn.Sequential(
                                 nn.Conv2d(channels_in, channels_out,
-                                          kernel=(1, 1),
+                                          kernel_size=(1, 1),
                                           stride=1,
                                           padding=0),
                                 nn.BatchNorm2d(channels_out),
                                 nn.ReLU(inplace=True)
             )
 
+        #self.conv = nn.Sequential(
+        #    conv_std(  3,   32, 2),  # in H,W = 64, out 32
+        #    conv_ds(  32,   64, 1),  # 32
+        #    conv_ds(  64,  128, 2),  # in 32, out 16
+        #    conv_ds( 128,  128, 1),  # 16
+        #    conv_ds( 128,  256, 2),  # in 16, out 8
+        #    conv_ds( 256,  256, 1),  # 8
+        #    conv_ds( 256,  512, 2),  # in 8, out 4
+        #    conv_ds( 512,  512, 1),  # 4
+        #    conv_ds( 512,  512, 1),  # 4
+        #    conv_ds( 512,  512, 1),  # 4
+        #    conv_ds( 512,  512, 1),  # 4
+        #    conv_ds( 512,  512, 1),  # 4
+        #    conv_ds( 512, 1024, 2),  # in 4, out 2
+        #    conv_ds(1024, 1024, 1),  # 2
+        #    nn.AvgPool2d(7, stride=1)  # in 2, out -4
+        #)
         self.conv = nn.Sequential(
-            conv_std(  3,   32, 2),
-            conv_ds(  32,   64, 1),
-            conv_ds(  64,  128, 2),
-            conv_ds( 128,  128, 1),
-            conv_ds( 128,  256, 2),
-            conv_ds( 256,  256, 1),
-            conv_ds( 256,  512, 2),
-            conv_ds( 512,  512, 1),
-            conv_ds( 512,  512, 1),
-            conv_ds( 512,  512, 1),
-            conv_ds( 512,  512, 1),
-            conv_ds( 512,  512, 1),
-            conv_ds( 512, 1024, 2),
-            conv_ds(1024, 1024, 1),  # wrong stride value, 2, in paper
-            nn.AvgPool2d(7, stride=1)
+            conv_std(  3,   32, 2),  # in H,W = 64, out 32
+            conv_ds(  32,   64, 1),  # 32
+            conv_ds(  64,  128, 2),  # in 32, out 16
+            conv_ds( 128,  128, 1),  # 16
+            conv_ds( 128,  256, 2),  # in 16, out 8
+            conv_ds( 256,  256, 1),  # 8
+            conv_ds( 256,  256, 1),  # 8
+            conv_ds( 256,  256, 1),  # 8
+            conv_ds( 256,  256, 1),  # 8
+            conv_ds( 256,  256, 1),  # 8
+            conv_ds( 256,  512, 2),  # in 8, out 4
+            conv_ds( 512,  512, 1),  # 4
+            nn.AvgPool2d(4, stride=1)  # in 4, out 1
         )
-        self.fc = nn.Linear(1024, features_out)
+        self.fc = nn.Linear(512, features_out)
 
     def forward(self, X):
         X = self.conv(X)
-        X = X.view(-1, 1024)
+        X = X.view(-1, 512)
 
         return self.fc(X)
 
     def init(self):
-        # initialize weights from a uniform distribution following 
-        # "Understanding the difficulty of training deep feedforward 
-        #  neural networks" - Glorot, X. & Bengio, Y. (2010)
         for param in self.parameters():
-            nn.init.xavier_uniform_(param)
+            nn.init.normal_(param)
