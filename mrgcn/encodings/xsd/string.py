@@ -19,8 +19,7 @@ _MAX_ASCII = 255 - _MIN_ASCII  # omit signals
 
 logger = logging.getLogger(__name__)
 
-def generate_features(nodes_map, node_predicate_map, config,
-                      separated_domains=False):
+def generate_features(nodes_map, node_predicate_map, config)
     """ Generate features for XSD string literals
 
     Definition
@@ -48,7 +47,7 @@ def generate_features(nodes_map, node_predicate_map, config,
 
     C = 32
 
-    if separated_domains:
+    if config['share_weights']:
         return generate_relationwise_features(nodes_map, node_predicate_map, C, config)
     else:
         return generate_nodewise_features(nodes_map, C, config)

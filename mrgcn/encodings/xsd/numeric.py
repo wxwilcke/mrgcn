@@ -30,7 +30,7 @@ _XSD_NUMERICAL = {
 
 logger = logging.getLogger(__name__)
 
-def generate_features(node_map, node_predicate_map, config, separated_domains=True):
+def generate_features(node_map, node_predicate_map, config):
     """ Generate encodings for XSD numeric literals
 
     Definition
@@ -54,12 +54,18 @@ def generate_features(node_map, node_predicate_map, config, separated_domains=Tr
     logger.debug("Generating numerical encodings")
     C = 1  # number of items per feature per relation
 
-    if separated_domains:
-        return generate_relationwise_features(node_map, node_predicate_map, C, config)
+    if config['datatype'] == "xsd.numeric":
+        datatype = _XSD_NUMERICAL
     else:
-        return generate_nodewise_features(node_map, C, config)
+        datatype = [config['datatype']]
 
-def generate_nodewise_features(node_map, C, config):
+    if config['share_weights']:
+        return generate_relationwise_features(node_map, node_predicate_map, C,
+                                              config, datatype)
+    else:
+        return generate_nodewise_features(node_map, C, config, datatype)
+
+def generate_nodewise_features(node_map, C, config, datatype):
     """ Stack all vectors without regard of their relation
     """
     m = 0
@@ -71,7 +77,7 @@ def generate_nodewise_features(node_map, C, config):
     for node, i in node_map.items():
         if not isinstance(node, Literal):
             continue
-        if node.datatype is None or node.datatype not in _XSD_NUMERICAL:
+        if node.datatype is None or node.datatype not in datatype:
             continue
 
         value = str(node)  ## empty value bug workaround
@@ -98,7 +104,8 @@ def generate_nodewise_features(node_map, C, config):
 
     return [[encodings[:m], node_idx[:m], C, None]]
 
-def generate_relationwise_features(node_map, node_predicate_map, C, config):
+def generate_relationwise_features(node_map, node_predicate_map, C, config,
+                                   datatype):
     """ Stack vectors row-wise per relation and column stack relations
     """
     n = len(node_predicate_map)
@@ -111,7 +118,7 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config):
     for node, i in node_map.items():
         if not isinstance(node, Literal):
             continue
-        if node.datatype is None or node.datatype not in _XSD_NUMERICAL:
+        if node.datatype is None or node.datatype not in datatype:
             continue
 
         value = str(node)  ## empty value bug workaround

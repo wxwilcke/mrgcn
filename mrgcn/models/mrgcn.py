@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.utils.data as td
 
 from mrgcn.data.utils import (collate_repetition_padding,
-                              scipy_sparse_to_pytorch_sparse)
+                              scipy_sparse_list_to_pytorch_sparse)
 from mrgcn.models.charcnn import CharCNN
 from mrgcn.models.mobilenets import MobileNETS
 from mrgcn.models.rnn import RNN
@@ -57,8 +57,9 @@ class MRGCN(nn.Module):
                 self.module_list.append(module)
             if modality == "ogc.wktLiteral":
                 batch_size, ncols, dim_out = args
-                module = RNN(features_in=ncols,
-                             features_out=dim_out,
+                module = RNN(input_dim=ncols,
+                             output_dim=dim_out,
+                             hidden_dim=ncols*2,
                              p_dropout=p_dropout)
                 self.module_list.append(module)
 
@@ -112,7 +113,7 @@ class MRGCN(nn.Module):
                         time_dim = 0 if modality == "ogc.wktLiteral" else 1
                         batch = collate_repetition_padding(batch,
                                                            time_dim)
-                        batch = scipy_sparse_to_pytorch_sparse(batch)
+                        batch = scipy_sparse_list_to_pytorch_sparse(batch)
                         batch = batch.to_dense()
                     else:
                         # encodings := numpy array

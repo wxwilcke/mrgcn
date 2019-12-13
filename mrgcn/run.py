@@ -156,6 +156,7 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch, device):
     # Log wall-clock time
     t0 = time()
 
+    model.train(True)
     for epoch in range(1, nepoch+1):
         # Single training iteration
         Y_hat = model(dataset['train']['X'], A, device)
@@ -198,7 +199,9 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch, device):
 
 def test_model(A, model, criterion, dataset, device):
     # Predict on full dataset
-    Y_hat = model(dataset['test']['X'], A, device)
+    model.train(False)
+    with torch.no_grad():
+        Y_hat = model(dataset['test']['X'], A, device)
 
     # scores on test set
     test_loss = categorical_crossentropy(Y_hat, dataset['test']['Y'],
