@@ -41,7 +41,7 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     m = 0
     for node, i in nodes_map.items():
-        if type(node) is not Literal:
+        if not isinstance(node, Literal):
             continue
         if node.datatype is None or node.datatype.neq(_OGC_NAMESPACE.wktLiteral):
             continue

@@ -34,26 +34,16 @@ def is_writable(filename):
 def is_gzip(filename):
     return True if filename.endswith('.gz') else False
 
-def scipy_sparse_to_pytorch_sparse(sp_input):
-    t = torch.empty(0)
-    if type(sp_input) is list:
-        n = len(sp_input)
-        nrows, ncols = sp_input[0].shape
-        row_idx = [i for a in sp_input for i in a.nonzero()[0]]
-        t = torch.sparse_coo_tensor([np.repeat(range(n), ncols),
-                                     row_idx,
-                                     np.tile(range(ncols), n)],
-                                    np.repeat([1.0], repeats=n*ncols),
-                                    size=(n, nrows, ncols),
-                                    dtype=torch.float32)
-    else:
-        t = torch.sparse_coo_tensor(torch.LongTensor([sp_input.nonzero()[0],
-                                                      sp_input.nonzero()[1]]),
-                                    torch.Tensor(sp_input.data),
-                                    sp_input.shape,
-                                    dtype=torch.float32)
+def scipy_sparse_list_to_pytorch_sparse(sp_inputs):
+    return torch.stack([scipy_sparse_to_pytorch_sparse(sp) for sp in sp_inputs],
+                       dim = 0)
 
-    return t
+def scipy_sparse_to_pytorch_sparse(sp_input):
+    return torch.sparse_coo_tensor(torch.LongTensor([sp_input.nonzero()[0],
+                                                     sp_input.nonzero()[1]]),
+                                   torch.Tensor(sp_input.data),
+                                   sp_input.shape,
+                                   dtype=torch.float32)
 
 #class SparseDataset(Dataset):
 #    n = 0
@@ -96,23 +86,69 @@ def collate_repetition_padding(batch, time_dim, max_batch_length=999):
     max_length = min(max_length, max_batch_length)
 
     for seq in batch:
-        one_hot_idc = list(seq.row) if time_dim == 1 else list(seq.col)
-        one_hot_idc = one_hot_idc[:max_batch_length]  # truncate if bigger
-        seq_length = len(one_hot_idc)
+        feature_idc = seq.row if time_dim == 1 else seq.col
+        sequence_idc = seq.col if time_dim == 1 else seq.row
 
-        c = cycle(one_hot_idc)
+        data = list(seq.data)
+        feat_idc = list(feature_idc)
+        seq_idc = list(sequence_idc)
+
+        seq_length = seq.shape[time_dim]
         unfilled = max_length - seq_length
         if unfilled > 0:
-            one_hot_idc.extend([next(c) for _ in range(unfilled)])
+            c_data = cycle(seq.data)
+            c_feat = cycle(feature_idc)
 
-        coordinates = (one_hot_idc, np.array(range(max_length))) if time_dim == 1\
-                else (np.array(range(max_length)), one_hot_idc)
+            i = 0
+            t = 0
+            while unfilled > 0:
+                j = 0
+                for c in sequence_idc[i:]:
+                    if c != sequence_idc[i]:
+                        break
+                    j += 1
+
+                data.extend([next(c_data) for _ in range(j)])
+                feat_idc.extend([next(c_feat) for _ in range(j)])
+                seq_idc.extend([seq_length+t for _ in range(j)])
+
+                i += j
+                if i >= len(sequence_idc):
+                    i = 0
+                t += 1
+                unfilled -= 1
+        elif unfilled < 0:  # sequence exceeds max length
+            sequence_idc_rev = [v for v in sequence_idc]
+            sequence_idc_rev.reverse()
+            i = 0
+            k = 0
+            while unfilled < 0:
+                j = 0
+                for c in sequence_idc_rev[i:]:
+                    if c != sequence_idc_rev[i]:
+                        break
+                    j += 1
+
+                i += j
+                k += j
+                if i >= len(sequence_idc):
+                    i = 0
+                unfilled += 1
+
+            data = data[:-k]
+            feat_idc = feat_idc[:-k]
+            seq_idc = seq_idc[:-k]
+        else:
+            pass  # already at desired size
+
+        coordinates = (feat_idc, seq_idc) if time_dim == 1\
+                else (seq_idc, feat_idc)
         shape = (seq.shape[1-time_dim], max_length) if time_dim == 1\
                 else (max_length, seq.shape[1-time_dim])
 
-        batch_padded.append(
-            sp.coo_matrix((np.repeat([1.0], repeats=max_length),
-                          coordinates),
-                         shape=shape, dtype=np.float32))
+        a = sp.coo_matrix((data, coordinates),
+                          shape=shape, dtype=np.float32)
+        batch_padded.append(a)
 
     return batch_padded
+
