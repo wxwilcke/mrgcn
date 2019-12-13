@@ -69,6 +69,8 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
 
     # train model
     nepoch = config['model']['epoch']
+    # Log wall-clock time
+    t0 = time()
     for epoch in train_model(A, model, optimizer, criterion, dataset,
                              nepoch, device):
         # log metrics
@@ -94,6 +96,8 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
             model.load_state_dict(best_state)
             logger.info("Early stopping after no improvement for {} epoch".format(patience))
             break
+
+    logging.info("Training time: {:.2f}s".format(time()-t0))
 
     # test model
     test_loss, test_acc = test_model(A, model, criterion, dataset, device)
@@ -149,6 +153,8 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
 
         # train model
         nepoch = config['model']['epoch']
+        # Log wall-clock time
+        t0 = time()
         for epoch in train_model(A, model, optimizer, criterion, dataset,
                                  nepoch, device):
             # log metrics
@@ -176,6 +182,8 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
                 logger.info("Early stopping after no improvement for {} epoch".format(patience))
                 break
 
+        logging.info("Training time: {:.2f}s".format(time()-t0))
+
         # test model
         test_loss, test_acc = test_model(A, model, criterion, dataset, device)
         results.append((test_loss, test_acc))
@@ -197,9 +205,6 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
 
 def train_model(A, model, optimizer, criterion, dataset, nepoch, device):
     logging.info("Training for {} epoch".format(nepoch))
-    # Log wall-clock time
-    t0 = time()
-
     model.train(True)
     for epoch in range(1, nepoch+1):
         # Single training iteration
@@ -240,8 +245,6 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch, device):
         yield (epoch,
                train_loss, train_acc,
                val_loss, val_acc)
-
-    logging.info("training time: {:.2f}s".format(time()-t0))
 
 def test_model(A, model, criterion, dataset, device):
     # Predict on full dataset
