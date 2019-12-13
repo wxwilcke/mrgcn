@@ -5,7 +5,7 @@ version = 0.1
 name = "AIFB_dummy"
 
 [graph]
-file = "../../datasets/aifb/tmp/aifb_gYear_string_numeric_dummy.nt.gz"
+file = "../../datasets/aifb/tmp/aifb_gYear_string_numeric_img_geo_dummy.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -13,14 +13,14 @@ exclude_properties = []  # use empty list to include all
 normalize = true
 
 [[graph.features]]
-datatype = 'xsd.positiveInteger'
+datatype = 'xsd.numeric'
 include = true
-share_weights = false  # not yet implemented
+share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = true
-share_weights = false  # not yet implemented
+share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.string'
@@ -30,13 +30,13 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
@@ -54,6 +54,8 @@ gpu = false
 [model]
 epoch = 50
 learning_rate = 0.01
+patience = 7  # < 0 to disable
+mini_batch = false
 loss = 'categorical_crossentropy'
 num_bases = 0
 p_dropout = 0.0

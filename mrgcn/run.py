@@ -60,8 +60,11 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
                            weight_decay=config['model']['l2norm'])
     criterion = nn.CrossEntropyLoss()
 
+    # mini batching
+    mini_batch = config['model']['mini_batch']
+
     # early stopping
-    patience = 7
+    patience = config['model']['patience']
     patience_left = patience
     best_score = -1
     delta = 1e-4
@@ -72,7 +75,7 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, model, optimizer, criterion, dataset,
-                             nepoch, device):
+                             nepoch, mini_batch, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -83,6 +86,8 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
 
         # early stopping
         val_loss = epoch[3]
+        if patience <= 0:
+            continue
         if best_score < 0:
             best_score = val_loss
             best_state = model.state_dict()
@@ -144,8 +149,11 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
         dataset = init_fold(X, Y, X_node_map, folds_idx[fold-1],
                             device, config['task']['dataset_ratio'])
 
+        # mini batching
+        mini_batch = config['model']['mini_batch']
+
         # early stopping
-        patience = 7
+        patience = config['model']['patience']
         patience_left = patience
         best_score = -1
         best_state = None
@@ -156,7 +164,7 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
         # Log wall-clock time
         t0 = time()
         for epoch in train_model(A, model, optimizer, criterion, dataset,
-                                 nepoch, device):
+                                 nepoch, mini_batch, device):
             # log metrics
             tsv_writer.writerow([str(fold),
                                  str(epoch[0]),
@@ -168,6 +176,8 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
 
             # early stopping
             val_loss = epoch[3]
+            if patience <= 0:
+                continue
             if best_score < 0:
                 best_score = val_loss
                 best_state = model.state_dict()
@@ -203,13 +213,17 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
 
     return (mean_loss, mean_acc)
 
-def train_model(A, model, optimizer, criterion, dataset, nepoch, device):
+def train_model(A, model, optimizer, criterion, dataset, nepoch, mini_batch, device):
     logging.info("Training for {} epoch".format(nepoch))
     model.train(True)
     for epoch in range(1, nepoch+1):
+        batch_grad_idx = epoch
+        if not mini_batch:
+            batch_grad_idx = -1
+
         # Single training iteration
         Y_hat = model(dataset['train']['X'], A,
-                      batch_grad_idx=epoch,
+                      batch_grad_idx=batch_grad_idx,
                       device=device)
 
         # Training scores

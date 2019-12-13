@@ -13,7 +13,7 @@ exclude_properties = []  # use empty list to include all
 normalize = true
 
 [[graph.features]]
-datatype = 'xsd.positiveInteger'
+datatype = 'xsd.numeric'
 include = true
 share_weights = false  # not yet implemented
 
@@ -54,6 +54,8 @@ gpu = false
 [model]
 epoch = 50
 learning_rate = 0.01
+patience = 7  # < 0 to disable
+mini_batch = false
 loss = 'categorical_crossentropy'
 num_bases = 0
 p_dropout = 0.0
