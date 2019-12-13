@@ -72,13 +72,14 @@ class MRGCN(nn.Module):
                           num_bases, p_dropout, featureless, bias)
         self.module_list.append(self.mrgcn)
 
-    def forward(self, X, A, device=None):
+    def forward(self, X, A, batch_grad_idx=-1, device=None):
         X, F_string, F_images, F_wktLiteral = X
 
         # compute and concat modality-specific embeddings
         XF = self._compute_modality_embeddings(F_string,
                                                F_images,
                                                F_wktLiteral,
+                                               batch_grad_idx,
                                                device)
         if XF is not None:
             X = torch.cat([X,XF], dim=1)
@@ -93,7 +94,8 @@ class MRGCN(nn.Module):
 
         return X
 
-    def _compute_modality_embeddings(self, F_string, F_images, F_wktLiteral, device):
+    def _compute_modality_embeddings(self, F_string, F_images, F_wktLiteral,
+                                     batch_grad_idx, device):
         X = list()
         for modality, F in zip(["xsd.string", "blob.image", "ogc.wktLiteral"],
                                [F_string, F_images, F_wktLiteral]):
@@ -106,7 +108,7 @@ class MRGCN(nn.Module):
 
                 out = list()
                 out_node_idx = list()
-                for batch_encoding_idx, batch_node_idx in batches:
+                for j, (batch_encoding_idx, batch_node_idx) in enumerate(batches, 1):
                     if modality in ["xsd.string", "ogc.wktLiteral"]:
                         # encodings := list of sparse coo matrices
                         batch = itemgetter(*batch_encoding_idx)(encodings)
@@ -120,9 +122,18 @@ class MRGCN(nn.Module):
                         batch = encodings[batch_encoding_idx]
                         batch = torch.as_tensor(batch)
 
-                    # forward pass  / add mini batching here?
+                    # forward pass
                     batch_dev = batch.to(device)
-                    out_dev = module(batch_dev)
+                    if batch_grad_idx < 0:
+                        # compute gradients on whole dataset
+                        out_dev = module(batch_dev)
+                    else:
+                        # compute gradients on one batch per epoch
+                        if batch_grad_idx % j == 0:
+                            out_dev = module(batch_dev)
+                        else:
+                            with torch.no_grad():
+                                out_dev = module(batch_dev)
 
                     out_cpu = out_dev.to('cpu')
                     out.append(out_cpu)
