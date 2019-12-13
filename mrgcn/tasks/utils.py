@@ -146,11 +146,13 @@ def sample_mask(idx, n):
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
 
-def mkbatches(mat, node_idx, C, _, nbins=10):
+def mkbatches(mat, node_idx, C, _, nbins=10, batch_size=-1):
     """ split N x * array in batches
     """
     n = mat.shape[0]  # number of samples
     idc = np.array(range(n), dtype=np.int32)
+    if batch_size > 0:
+        nbins = np.ceil(len(idc)/batch_size)
     idc_assignments = np.array_split(idc, nbins)
 
     node_assignments = [np.array(node_idx, dtype=np.int32)[slce]

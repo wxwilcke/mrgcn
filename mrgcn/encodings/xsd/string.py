@@ -19,7 +19,7 @@ _MAX_ASCII = 255 - _MIN_ASCII  # omit signals
 
 logger = logging.getLogger(__name__)
 
-def generate_features(nodes_map, node_predicate_map, config)
+def generate_features(nodes_map, node_predicate_map, config):
     """ Generate features for XSD string literals
 
     Definition
