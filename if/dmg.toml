@@ -13,9 +13,32 @@ exclude_properties = []  # use empty list to include all
 normalize = true
 
 [[graph.features]]
-datatype = 'gYear'
-include = false
-normalize = true
+datatype = 'xsd.numeric'
+include = true
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.gYear'
+include = true
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.string'
+include = true
+batch_size = 100
+share_weights = false
+
+[[graph.features]]
+datatype = 'blob.image'
+include = true
+batch_size = 100
+share_weights = false
+
+[[graph.features]]
+datatype = 'ogc.wktLiteral'
+include = true
+batch_size = 100
+share_weights = false
 
 [task]
 # node classification
@@ -27,14 +50,15 @@ target_classes = ["https://data.labs.pdok.nl/rce/def/woonhuis",
 				  "https://data.labs.pdok.nl/rce/def/losObject",
 				  "https://data.labs.pdok.nl/rce/def/kerk"]
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = -1  # use < 0 to disable (single run)
+kfolds = 10  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 
 [model]
 epoch = 50
 learning_rate = 0.01
-loss = 'categorical_crossentropy'
+patience = 7  # < 0 to disable
+mini_batch = false
 num_bases = 40
 p_dropout = 0.0
 l2norm = 5e-4
