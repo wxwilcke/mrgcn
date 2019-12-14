@@ -10,7 +10,7 @@ import torch.utils.data as td
 from mrgcn.data.utils import (collate_repetition_padding,
                               scipy_sparse_list_to_pytorch_sparse)
 from mrgcn.models.charcnn import CharCNN
-from mrgcn.models.mobilenets import MobileNETS
+from mrgcn.models.imagecnn import ImageCNN
 from mrgcn.models.rnn import RNN
 from mrgcn.models.rgcn import RGCN
 
@@ -49,7 +49,7 @@ class MRGCN(nn.Module):
                 self.module_list.append(module)
             if modality == "blob.image":
                 batch_size, (nchannels, nrows, ncols), dim_out = args
-                module = MobileNETS(channels_in=nchannels,
+                module = ImageCNN(channels_in=nchannels,
                              height=nrows,
                              width=ncols,
                              features_out=dim_out,
@@ -108,7 +108,8 @@ class MRGCN(nn.Module):
 
                 out = list()
                 out_node_idx = list()
-                for j, (batch_encoding_idx, batch_node_idx) in enumerate(batches, 1):
+                nbatches = len(batches)
+                for j, (batch_encoding_idx, batch_node_idx) in enumerate(batches):
                     if modality in ["xsd.string", "ogc.wktLiteral"]:
                         # encodings := list of sparse coo matrices
                         batch = itemgetter(*batch_encoding_idx)(encodings)
@@ -123,13 +124,16 @@ class MRGCN(nn.Module):
                         batch = torch.as_tensor(batch)
 
                     # forward pass
+                    logger.debug(" {} - batch {} / {}".format(modality,
+                                                              j,
+                                                              nbatches))
                     batch_dev = batch.to(device)
                     if batch_grad_idx < 0:
                         # compute gradients on whole dataset
                         out_dev = module(batch_dev)
                     else:
                         # compute gradients on one batch per epoch
-                        if batch_grad_idx % j == 0:
+                        if batch_grad_idx % nbatches == j:
                             out_dev = module(batch_dev)
                         else:
                             with torch.no_grad():
@@ -152,7 +156,7 @@ class MRGCN(nn.Module):
     def init(self):
         # reinitialze all weights
         for module in self.module_list:
-            if type(module) in (MobileNETS, CharCNN, RGCN, RNN):
+            if type(module) in (ImageCNN, CharCNN, RGCN, RNN):
                 module.init()
             else:
                 raise NotImplementedError

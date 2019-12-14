@@ -5,7 +5,6 @@ from re import fullmatch, sub
 from string import punctuation
 
 import numpy as np
-from nltk.stem import PorterStemmer
 from rdflib.term import Literal
 from rdflib.namespace import XSD
 import scipy.sparse as sp
@@ -62,7 +61,6 @@ def generate_nodewise_features(nodes_map, C, config):
 
     data = list()
 
-    stemmer = PorterStemmer()  # English
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
@@ -73,7 +71,7 @@ def generate_nodewise_features(nodes_map, C, config):
         if validate(node.value) is None:  # if invalid syntax
             continue
 
-        sequence = preprocess(node.value, stemmer)
+        sequence = preprocess(node.value)
         sequence = toASCII(sequence)[:_MAX_CHARS]
         seq_length = len(sequence)
         if seq_length <= 0:
@@ -107,7 +105,6 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     node_idx = dict()
     sequences = dict()
     seq_length_map = dict()
-    stemmer = PorterStemmer()  # English
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
@@ -118,7 +115,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         if validate(node.value) is None:  # if invalid syntax
             continue
 
-        sequence = preprocess(node.value, stemmer)
+        sequence = preprocess(node.value)
         sequence = toASCII(sequence)[:_MAX_CHARS]
         seq_length = len(sequence)
 
@@ -160,12 +157,9 @@ def toASCII(seq):
     except UnicodeEncodeError:
         return []
 
-def preprocess(seq, stemmer):
+def preprocess(seq):
     seq = seq.lower()
     seq = sub('['+punctuation+']', '', seq).split()
-
-    for i in range(len(seq)):
-        seq[i] = stemmer.stem(seq[i])
 
     return " ".join(seq)
 

@@ -217,7 +217,7 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch, mini_batch, dev
     logging.info("Training for {} epoch".format(nepoch))
     model.train(True)
     for epoch in range(1, nepoch+1):
-        batch_grad_idx = epoch
+        batch_grad_idx = epoch - 1
         if not mini_batch:
             batch_grad_idx = -1
 
