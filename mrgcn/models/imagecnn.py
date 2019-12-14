@@ -3,7 +3,7 @@
 import torch.nn as nn
 
 
-class MobileNETS(nn.Module):
+class ImageCNN(nn.Module):
     def __init__(self, channels_in, height, width, features_out=1000, p_dropout=0.0):
         """
         Image Convolutional Neural Network
@@ -60,23 +60,6 @@ class MobileNETS(nn.Module):
                                 nn.ReLU(inplace=True)
             )
 
-        #self.conv = nn.Sequential(
-        #    conv_std(  3,   32, 2),  # in H,W = 64, out 32
-        #    conv_ds(  32,   64, 1),  # 32
-        #    conv_ds(  64,  128, 2),  # in 32, out 16
-        #    conv_ds( 128,  128, 1),  # 16
-        #    conv_ds( 128,  256, 2),  # in 16, out 8
-        #    conv_ds( 256,  256, 1),  # 8
-        #    conv_ds( 256,  512, 2),  # in 8, out 4
-        #    conv_ds( 512,  512, 1),  # 4
-        #    conv_ds( 512,  512, 1),  # 4
-        #    conv_ds( 512,  512, 1),  # 4
-        #    conv_ds( 512,  512, 1),  # 4
-        #    conv_ds( 512,  512, 1),  # 4
-        #    conv_ds( 512, 1024, 2),  # in 4, out 2
-        #    conv_ds(1024, 1024, 1),  # 2
-        #    nn.AvgPool2d(7, stride=1)  # in 2, out -4
-        #)
         self.conv = nn.Sequential(
             conv_std(  3,   32, 2),  # in H,W = 64, out 32
             conv_ds(  32,   64, 1),  # 32

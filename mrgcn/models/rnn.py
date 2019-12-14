@@ -6,38 +6,6 @@ import torch
 import torch.nn as nn
 
 
-#class RNN(nn.Module):
-#    def __init__(self,
-#                 input_dim,
-#                 output_dim,
-#                 hidden_dim,
-#                 sequence_length,
-#                 p_dropout=0.0):
-#        """
-#        Recurrent Neural Network
-#
-#        """
-#        super().__init__()
-#        self.hidden_dim = hidden_dim
-#
-#        self.fc_loop = nn.Linear(input_dim + hidden_dim, hidden_dim)
-#        self.fc_out = nn.Linear(input_dim + hidden_dim, output_dim)
-#        self.f_activation = nn.ReLU()
-#
-#    def forward(self, X, H=None):
-#        if H is None:
-#            H = torch.zeros(self.hidden_dim)
-#
-#        XH = torch.cat([X, H], dim=1)
-#        H  = self.fc_loop(XH)
-#        XH = self.fc_out(XH)
-#
-#        return (self.f_activation(X), H)
-#
-#    def init(self):
-#        for param in self.parameters():
-#            nn.init.normal_(param)
-
 class RNN(nn.Module):
     def __init__(self,
                  input_dim,

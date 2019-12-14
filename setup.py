@@ -23,7 +23,6 @@ setup(
         'rdflib',
         'scipy',
         'pillow',
-        'nltk',
         'toml',
     ],
     packages=['mrgcn'],
