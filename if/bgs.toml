@@ -12,6 +12,34 @@ include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
 normalize = true
 
+[[graph.features]]
+datatype = 'xsd.numeric'
+include = false
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.gYear'
+include = false
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.string'
+include = false
+batch_size = 100
+share_weights = false
+
+[[graph.features]]
+datatype = 'blob.image'
+include = false
+batch_size = 100
+share_weights = false
+
+[[graph.features]]
+datatype = 'ogc.wktLiteral'
+include = false
+batch_size = 100
+share_weights = false
+
 [task]
 # node classification
 instance_type = ''
@@ -19,14 +47,15 @@ target_property = 'http://data.bgs.ac.uk/ref/Lexicon/hasLithogenesis'
 target_property_inv = ''
 target_classes = []
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = 5  # use < 0 to disable (single run)
+kfolds = 10  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 
 [model]
 epoch = 50
 learning_rate = 0.01
-loss = 'categorical_crossentropy'
+patience = 7  # < 0 to disable
+mini_batch = false
 num_bases = 40
 p_dropout = 0.0
 l2norm = 5e-4
