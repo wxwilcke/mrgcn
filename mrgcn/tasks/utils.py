@@ -146,7 +146,7 @@ def sample_mask(idx, n):
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
 
-def mkbatches(mat, node_idx, C, _, nbins=10, batch_size=-1):
+def mkbatches(mat, node_idx, C, _, nbins=10, batch_size=100):
     """ split N x * array in batches
     """
     n = mat.shape[0]  # number of samples
@@ -160,7 +160,8 @@ def mkbatches(mat, node_idx, C, _, nbins=10, batch_size=-1):
 
     return list(zip(idc_assignments, node_assignments))
 
-def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1):
+def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1,
+                        max_size=100):
     """ :param sequences: a list with M arrays of length ?
                     M :- number of nodes with this feature M <= N
         :param node_idx: list that maps sequence idx {0, M} to node idx {0, N}
@@ -214,5 +215,23 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1):
         seq_assignments[bin_ranges_map[length]].append(i)
         node_assignments[bin_ranges_map[length]].append(node_idx[i])
 
-    return list(zip(seq_assignments, node_assignments))
+    if max_size < 0:
+        return list(zip(seq_assignments, node_assignments))
+
+    seq_assignments_final = list()
+    node_assignments_final = list()
+    for i in range(len(seq_assignments)):
+        seq_bin = seq_assignments[i]
+        node_bin = node_assignments[i]
+        if len(seq_bin) > max_size:
+            splits = np.ceil(len(seq_bin)/max_size)
+            seq_assignments_final.extend(np.array_split(seq_bin, splits))
+            node_assignments_final.extend(np.array_split(node_bin, splits))
+
+            continue
+
+        seq_assignments_final.append(seq_bin)
+        node_assignments_final.append(node_bin)
+
+    return list(zip(seq_assignments_final, node_assignments_final))
 
