@@ -23,6 +23,11 @@ include = false
 share_weights = false
 
 [[graph.features]]
+datatype = 'xsd.date'
+include = false
+share_weights = false
+
+[[graph.features]]
 datatype = 'xsd.string'
 include = false
 batch_size = 100
