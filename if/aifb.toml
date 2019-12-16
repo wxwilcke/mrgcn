@@ -5,7 +5,7 @@ version = 0.1
 name = "AIFB"
 
 [graph]
-file = "../../datasets/aifb/aifb.nt.gz"
+file = "../../datasets/aifb/aifb_revised.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -14,17 +14,17 @@ normalize = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 

@@ -21,7 +21,7 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = true
+include = false
 share_weights = false 
 
 [[graph.features]]
@@ -32,7 +32,7 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = true
+include = false
 batch_size = 100
 share_weights = false
 
