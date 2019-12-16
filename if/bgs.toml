@@ -5,7 +5,7 @@ version = 0.1
 name = "BGS"
 
 [graph]
-file = "../../datasets/bgs/bgs.nt.gz"
+file = "../../datasets/bgs/bgs_revised.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -14,7 +14,7 @@ normalize = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
@@ -24,12 +24,12 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
@@ -41,7 +41,7 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 

@@ -12,7 +12,7 @@ from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
 logger = logging.getLogger(__name__)
 
 ENCODINGS_PKG = "mrgcn.encodings"
-EMBEDDING_FEATURES = {"xsd.date", "xsd.gYear", "xsd.numeric"}
+EMBEDDING_FEATURES = {"xsd.boolean", "xsd.date", "xsd.gYear", "xsd.numeric"}
 PREEMBEDDING_FEATURES = {"xsd.string", "blob.image", "ogc.wktLiteral"}
 AVAILABLE_FEATURES = set().union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
 
