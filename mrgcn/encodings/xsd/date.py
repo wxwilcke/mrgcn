@@ -96,10 +96,10 @@ def generate_features(nodes_map, node_predicate_map, config):
     logger.debug("Generated {} unique date encodings".format(m))
 
     # normalization over encodings
-    for i in range(C-1):
+    for i in range(3):
         # skip sign as it can only take values [-1, 1]
-        encodings[:m,i+1:4] = (2*(encodings[:m,i+1:4] - values_min[i]) /
-                              (values_max[i] - values_min[i])) - 1.0
+        encodings[:m,i+1] = (2*(encodings[:m,i+1] - values_min[i]) /
+                            (values_max[i] - values_min[i])) - 1.0
 
     return [[encodings[:m], node_idx[:m], C, None]]
 
