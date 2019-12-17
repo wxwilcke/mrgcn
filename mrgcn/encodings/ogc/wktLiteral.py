@@ -32,7 +32,7 @@ def generate_features(nodes_map, node_predicate_map, config):
                     C :- number of columns for this feature embedding
     """
     logger.debug("Generating wktLiteral features")
-    C = 5  # number of items per feature
+    C = 32  # number of items per feature
 
     n = len(nodes_map)
     node_idx = np.zeros(shape=(n), dtype=np.int32)
@@ -76,6 +76,9 @@ def generate_features(nodes_map, node_predicate_map, config):
         m += 1
 
     logger.debug("Generated {} unique wktLiteral features".format(m))
+
+    if m <= 0:
+        return None
 
     # normalization
     for i in (0, 1):  # only on coordinates

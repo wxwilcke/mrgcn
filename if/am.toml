@@ -5,7 +5,7 @@ version = 0.1
 name = "AM"
 
 [graph]
-file = "../../datasets/am/am.nt.gz"
+file = "../../datasets/am/am_revised.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -14,29 +14,39 @@ normalize = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.date'
+include = true
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.boolean'
+include = true
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 

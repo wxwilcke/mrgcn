@@ -54,7 +54,7 @@ def generate_features(node_map, node_predicate_map, config):
     logger.debug("Generating numerical encodings")
     C = 1  # number of items per feature per relation
 
-    if config['datatype'] == "xsd.numeric":
+    if not config['datatype'] == "xsd.numeric":
         datatype = _XSD_NUMERICAL
     else:
         datatype = [config['datatype']]
@@ -97,6 +97,9 @@ def generate_nodewise_features(node_map, C, config, datatype):
 
     logger.debug("Generated {} unique {} encodings".format(m,
                                                            config['datatype']))
+
+    if m <= 0:
+        return None
 
     # normalization over encodings
     encodings[:m] = (2*(encodings[:m] - value_min) /
@@ -146,6 +149,9 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
 
     logger.debug("Generated {} unique {} encodings".format(m,
                                                            config['datatype']))
+
+    if m <= 0:
+        return None
 
     # normalization over encodings
     for predicate, encodings in relationwise_encodings.items():

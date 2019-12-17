@@ -46,7 +46,7 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     C = 32
 
-    if config['share_weights']:
+    if not config['share_weights']:
         return generate_relationwise_features(nodes_map, node_predicate_map, C, config)
     else:
         return generate_nodewise_features(nodes_map, C, config)
@@ -94,6 +94,9 @@ def generate_nodewise_features(nodes_map, C, config):
         m += 1
 
     logger.debug("Generated {} unique string features".format(m))
+
+    if m <= 0:
+        return None
 
     return [[data, node_idx[:m], C, seq_length_map]]
 
@@ -147,6 +150,9 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         m[predicate] += 1
 
     logger.debug("Generated {} unique string features".format(sum(m.values())))
+
+    if len(m) <= 0:
+        return None
 
     return [[sequences[predicate], node_idx[predicate][:m[predicate]], C, seq_length_map[predicate]]
             for predicate in sequences.keys()]

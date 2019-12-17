@@ -22,7 +22,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     logger.debug("Generating boolean encodings")
     C = 1  # number of items per feature
 
-    if config['share_weights']:
+    if not config['share_weights']:
         return generate_relationwise_features(nodes_map, node_predicate_map, C,
                                               config)
     else:
@@ -55,10 +55,13 @@ def generate_nodewise_features(nodes_map, C, config):
 
     logger.debug("Generated {} unique boolean encodings".format(m))
 
+    if m <= 0:
+        return None
+
     return [[encodings[:m], node_idx[:m], C, None]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
-    n = len(node_predicate_map)
+    n = len(nodes_map)
     m = 0
     relationwise_encodings = dict()
     node_idx = np.zeros(shape=(n), dtype=np.int32)
@@ -85,6 +88,9 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         m += 1
 
     logger.debug("Generated {} unique boolean encodings".format(m))
+
+    if m <= 0:
+        return None
 
     encodings = np.hstack([encodings[:m] for encodings in
                            relationwise_encodings.values()])

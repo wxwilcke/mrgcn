@@ -7,7 +7,7 @@ version = 0.1
 name = "AIFB_dummy"
 
 [graph]
-file = "../../datasets/aifb/tmp/aifb_gYear_string_numeric_img_geo_dummy.nt.gz"
+file = "../../datasets/aifb/tmp/aifb_gYear_string_numeric_img_geo_bool_date_dummy.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -21,7 +21,17 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
+share_weights = false 
+
+[[graph.features]]
+datatype = 'xsd.date'
+include = true
+share_weights = false 
+
+[[graph.features]]
+datatype = 'xsd.boolean'
+include = true
 share_weights = false 
 
 [[graph.features]]
@@ -32,7 +42,7 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
