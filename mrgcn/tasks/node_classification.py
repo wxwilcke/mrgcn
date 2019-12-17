@@ -25,7 +25,7 @@ def generate_task(knowledge_graph, A, targets, config):
 def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureless):
     logger.debug("Starting dataset build")
     # generate target matrix
-    classes = {t[2] for t in target_triples}  # unique classes
+    classes = {str(t[2]) for t in target_triples}  # unique classes
     logger.debug("Found {} instances (statements)".format(len(target_triples)))
     logger.debug("Target classes ({}): {}".format(len(classes), classes))
 
@@ -34,7 +34,7 @@ def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureles
     num_nodes = len(nodes_map)
     num_classes = len(classes_map)
 
-    target_indices = [(nodes_map[x], classes_map[y]) for x, _, y in target_triples]
+    target_indices = [(nodes_map[x], classes_map[str(y)]) for x, _, y in target_triples]
     X_node_idx, Y_class_idx = map(np.array, zip(*target_indices))
 
     # matrix of 1-hot class vectors per node

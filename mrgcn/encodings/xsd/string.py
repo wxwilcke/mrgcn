@@ -132,12 +132,6 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             seq_length_map[predicate] = list()
             node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
 
-        # pad with repetition
-        #c = cycle(sequence)
-        #unfilled = _MAX_CHARS - seq_length
-        #if unfilled > 0:
-        #    sequence.extend([next(c) for _ in range(unfilled)])
-
         a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
                            (sequence, np.array(range(seq_length)))),
                           shape=(_MAX_ASCII, seq_length),
@@ -146,7 +140,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         sequences[predicate].append(a)
 
         seq_length_map[predicate].append(seq_length)
-        node_idx[m[predicate]] = i
+        node_idx[predicate][m[predicate]] = i
         m[predicate] += 1
 
     logger.debug("Generated {} unique string features".format(sum(m.values())))

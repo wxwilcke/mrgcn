@@ -179,6 +179,16 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1,
     IQR = q75 - q25
     cut_off = IQR * 1.5
 
+    if IQR <= 0.0:  # no length difference
+        n = len(sequences)
+        idc = np.array(range(n), dtype=np.int32)
+        nbins = np.ceil(n/max_size)
+        seq_assignments = np.array_split(idc, nbins)
+        node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
+                            for slce in seq_assignments]
+
+        return list(zip(seq_assignments, node_assignments))
+
     outliers_low = list()
     outliers_high = list()
     non_outliers = list()
@@ -194,11 +204,13 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1,
 
     # determine optimal number of bins using the Freedman-Diaconis rule
     h = 2 * IQR / np.power(len(non_outliers), 1/3)
+    uniques = np.unique(non_outliers)
     nbins = min(max_bins,
-                np.round((max(non_outliers)-min(non_outliers)) / h))
+                np.round((max(non_outliers)-min(non_outliers)) / h),
+                len(uniques))
 
     # create bins
-    bin_ranges = np.array_split(np.unique(non_outliers), nbins)
+    bin_ranges = np.array_split(uniques, nbins)
     for outlier_bin in [outliers_low, outliers_high]:
         if len(outlier_bin) <= 0:
             continue

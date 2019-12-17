@@ -82,10 +82,6 @@ def construct_feature_matrix(features, features_enabled, n):
         if feature in PREEMBEDDING_FEATURES:
             # these require additional processing before they can be
             # concatenated to X
-
-            #if feature == "xsd.string":
-            #    for i in range(len(features[feature])):
-            #        features[feature][i][0] = scipy_sparse_to_pytorch_sparse(features[feature][i][0])
             continue
 
         feature_matrix.extend([_mkdense(*feature_encoding, n) for
