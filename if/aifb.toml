@@ -14,7 +14,7 @@ normalize = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = true
+include = false
 share_weights = false
 
 [[graph.features]]
@@ -24,12 +24,12 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = true
+include = false
 share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.boolean'
-include = true
+include = false
 share_weights = false 
 
 [[graph.features]]
@@ -40,13 +40,13 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = true
+include = false
 batch_size = 100
 share_weights = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = true
+include = false
 batch_size = 100
 share_weights = false
 
