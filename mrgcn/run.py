@@ -329,6 +329,9 @@ def run(args, tsv_writer, config):
             if datatype not in F.keys():
                 continue
 
+            logger.debug("Found {} encoding set(s) for datatype {}".format(
+                len(F[datatype]),
+                datatype))
             feature_configs = config['graph']['features']
             feature_config = next((conf for conf in feature_configs
                                    if conf['datatype'] == datatype),

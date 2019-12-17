@@ -82,9 +82,11 @@ class MRGCN(nn.Module):
                                                batch_grad_idx,
                                                device)
         if XF is not None:
+            logger.debug(" Merging structure and node features")
             X = torch.cat([X,XF], dim=1)
 
         # Forward pass through graph convolution layers
+        logger.debug(" Forward pass with input of size {}".format(X.size()))
         self.mrgcn.to(device)
         X_dev = X.to(device)
         A_dev = A.to(device)
@@ -102,6 +104,7 @@ class MRGCN(nn.Module):
             if modality not in self.modality_modules.keys() or len(F[0]) <= 0:
                 continue
 
+            nsets = len(F)
             for i, ((encodings, node_idx, C, _), batches) in enumerate(F):
                 module, _ = self.modality_modules[modality][i]
                 module.to(device)
@@ -113,6 +116,13 @@ class MRGCN(nn.Module):
                     if modality in ["xsd.string", "ogc.wktLiteral"]:
                         # encodings := list of sparse coo matrices
                         batch = itemgetter(*batch_encoding_idx)(encodings)
+                        if type(batch) is not tuple:  # single sample
+                            batch = (batch,)
+                        else:
+                            time_dim = 0 if modality == "ogc.wktLiteral" else 1
+                            batch = collate_repetition_padding(batch,
+                                                               time_dim)
+
                         time_dim = 0 if modality == "ogc.wktLiteral" else 1
                         batch = collate_repetition_padding(batch,
                                                            time_dim)
@@ -124,19 +134,25 @@ class MRGCN(nn.Module):
                         batch = torch.as_tensor(batch)
 
                     # forward pass
-                    logger.debug(" {} - batch {} / {}".format(modality,
-                                                              j,
-                                                              nbatches))
                     batch_dev = batch.to(device)
                     if batch_grad_idx < 0:
                         # compute gradients on whole dataset
+                        logger.debug(" {} (set {} / {}) - batch {} / {} +grad".format(modality,
+                                                                           i+1, nsets,
+                                                                           j+1, nbatches))
                         out_dev = module(batch_dev)
                     else:
                         # compute gradients on one batch per epoch
                         if batch_grad_idx % nbatches == j:
+                            logger.debug(" {} (set {} / {}) - batch {} / {} +grad".format(modality,
+                                                                               i+1, nsets,
+                                                                               j+1, nbatches))
                             out_dev = module(batch_dev)
                         else:
                             with torch.no_grad():
+                                logger.debug(" {} (set {} / {}) - batch {} / {} -grad".format(modality,
+                                                                                   i+1, nsets,
+                                                                                   j+1, nbatches))
                                 out_dev = module(batch_dev)
 
                     out_cpu = out_dev.to('cpu')
