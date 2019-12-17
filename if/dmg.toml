@@ -18,6 +18,16 @@ include = true
 share_weights = false
 
 [[graph.features]]
+datatype = 'xsd.date'
+include = true
+share_weights = false 
+
+[[graph.features]]
+datatype = 'xsd.boolean'
+include = true
+share_weights = false
+
+[[graph.features]]
 datatype = 'xsd.gYear'
 include = true
 share_weights = false

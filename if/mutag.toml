@@ -19,8 +19,13 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
 share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.date'
+include = true
+share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.boolean'
@@ -29,19 +34,19 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 

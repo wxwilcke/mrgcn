@@ -78,6 +78,9 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     logger.debug("Generated {} unique B64-encoded image encodings".format(m))
 
+    if m <= 0:
+        return None
+
     # normalization over channels
     for img in encodings[:m]:
         for ch in range(c):

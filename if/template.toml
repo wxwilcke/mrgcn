@@ -19,7 +19,7 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.boolean'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
