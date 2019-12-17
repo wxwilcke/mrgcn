@@ -315,7 +315,7 @@ def run(args, tsv_writer, config):
     # convert numpy and scipy matrices to pyTorch tensors
     num_nodes = Y.shape[0]
     C = 0  # number of columns in X
-    X = torch.empty((0,C), dtype=torch.float32)
+    X = torch.empty((num_nodes,C), dtype=torch.float32)
     modules_config = list()
     if not featureless:
         features_enabled = features_included(config)
@@ -351,6 +351,9 @@ def run(args, tsv_writer, config):
                                                       c)))
 
                 C += c
+
+    if X.size(1) <= 0 and C <= 0:
+        featureless = True
 
     A = scipy_sparse_to_pytorch_sparse(A)
     Y = torch.as_tensor(Y)
