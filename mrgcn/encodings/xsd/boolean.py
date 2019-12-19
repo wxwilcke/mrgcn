@@ -58,7 +58,7 @@ def generate_nodewise_features(nodes_map, C, config):
     if m <= 0:
         return None
 
-    return [[encodings[:m], node_idx[:m], C, None]]
+    return [[encodings[:m], node_idx[:m], C, None, 1]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     n = len(nodes_map)
@@ -94,9 +94,10 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
 
     encodings = np.hstack([encodings[:m] for encodings in
                            relationwise_encodings.values()])
-    C *= len(relationwise_encodings.keys())
+    npreds = len(relationwise_encodings.keys())
+    C *= npreds
 
-    return [[encodings[:m], node_idx[:m], C, None]]
+    return [[encodings[:m], node_idx[:m], C, None, npreds]]
 
 def validate(value):
     return match(_REGEX_BOOLEAN, value)
