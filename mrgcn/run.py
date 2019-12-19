@@ -298,7 +298,7 @@ def run(args, tsv_writer, config):
     # convert numpy and scipy matrices to pyTorch tensors
     num_nodes = Y.shape[0]
     C = 0  # number of columns in X
-    X = torch.empty((num_nodes,C), dtype=torch.float32)
+    X = [torch.empty((num_nodes,C), dtype=torch.float32)]
     modules_config = list()
     if not featureless:
         features_enabled = features_included(config)
