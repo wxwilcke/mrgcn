@@ -13,7 +13,11 @@ import torch.optim as optim
 from mrgcn.data.io.knowledge_graph import KnowledgeGraph
 from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.io.tsv import TSV
-from mrgcn.data.utils import is_readable, is_writable, scipy_sparse_to_pytorch_sparse
+from mrgcn.data.utils import (is_readable,
+                              is_writable,
+                              scipy_sparse_to_pytorch_sparse,
+                              merge_sparse_encodings_sets,
+                              merge_encodings_sets)
 from mrgcn.encodings import graph_structure
 from mrgcn.encodings.graph_features import construct_feature_matrix, features_included
 from mrgcn.tasks.config import set_seed
@@ -31,22 +35,11 @@ from mrgcn.tasks.utils import (mksplits,
 
 VERSION = 0.1
 
-def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
+def single_run(A, X, Y, C, X_node_map, tsv_writer, device, config,
                modules_config, featureless):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
-
-    # add additional features if available
-    F_strings = F.pop("xsd.string", list())
-    F_strings = [(f, mkbatches_varlength(*f)) for f in F_strings]
-    F_images = F.pop("blob.image", list())
-    F_images = [(f, mkbatches(*f)) for f in F_images]
-    F_wktLiterals = F.pop("ogc.wktLiteral", list())
-    F_wktLiterals = [(f, mkbatches_varlength(*f))
-                    for f in F_wktLiterals]
-
-    X = [X, F_strings, F_images, F_wktLiterals]
 
     # create splits
     dataset = mksplits(X, Y, X_node_map, device,
@@ -112,7 +105,7 @@ def single_run(A, X, F, Y, C, X_node_map, tsv_writer, device, config,
 
     return (test_loss, test_acc)
 
-def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, config,
+def kfold_crossvalidation(A, X, Y, C, X_node_map, k, tsv_writer, device, config,
                           modules_config, featureless):
     tsv_writer.writerow(["fold", "epoch",
                          "training_loss", "training_accurary",
@@ -128,16 +121,6 @@ def kfold_crossvalidation(A, X, F, Y, C, X_node_map, k, tsv_writer, device, conf
     optimizer_state_zero = optimizer.state_dict()  # save initial state
     criterion = nn.CrossEntropyLoss()
 
-    # add additional features if available
-    F_strings = F.pop("xsd.string", list())
-    F_strings = [(f, mkbatches_varlength(*f)) for f in F_strings]
-    F_images = F.pop("blob.image", list())
-    F_images = [(f, mkbatches(*f)) for f in F_images]
-    F_wktLiterals = F.pop("ogc.wktLiteral", list())
-    F_wktLiterals = [(f, mkbatches_varlength(*f))
-                    for f in F_wktLiterals]
-
-    X = [X, F_strings, F_images, F_wktLiterals]
     # generate fold indices
     folds_idx = mkfolds(X_node_map.shape[0], k)
 
@@ -321,8 +304,10 @@ def run(args, tsv_writer, config):
         features_enabled = features_included(config)
         logging.debug("Features included: {}".format(", ".join(features_enabled)))
 
-        X, F = construct_feature_matrix(F, features_enabled, num_nodes)
-        X = torch.as_tensor(X)
+        X, F = construct_feature_matrix(F, features_enabled, num_nodes,
+                                        config['graph']['features'])
+        C += X.shape[1]
+        X = [torch.as_tensor(X)]
 
         # determine configurations
         for datatype in features_enabled:
@@ -332,11 +317,22 @@ def run(args, tsv_writer, config):
             logger.debug("Found {} encoding set(s) for datatype {}".format(
                 len(F[datatype]),
                 datatype))
+
+            if datatype not in ['xsd.string', 'ogc.wktLiteral', 'blob.image']:
+                continue
+
             feature_configs = config['graph']['features']
             feature_config = next((conf for conf in feature_configs
                                    if conf['datatype'] == datatype),
                                   None)
-            for encodings, _, c, _ in F[datatype]:
+
+            # preprocess
+            encoding_sets = F.pop(datatype, list())
+            if feature_config['share_weights'] and datatype == "xsd.string":
+                # note: images and geometries always share weights atm
+                encoding_sets = merge_sparse_encodings_sets(encoding_sets)
+
+            for encodings, _, c, _, _ in encoding_sets:
                 if datatype in ["xsd.string", "ogc.wktLiteral"]:
                     # stored as list of arrays
                     feature_dim = 0 if datatype == "xsd.string" else 1
@@ -352,17 +348,24 @@ def run(args, tsv_writer, config):
 
                 C += c
 
-    if X.size(1) <= 0 and C <= 0:
+            encoding_sets = [(f, mkbatches(*f, batch_size=feature_config['batch_size']))
+                             for f in encoding_sets] if datatype == "blob.image"\
+                    else [(f, mkbatches_varlength(*f, max_size=feature_config['batch_size']))
+                          for f in encoding_sets]
+
+            X.append((datatype, encoding_sets))
+
+    if len(X) <= 1 and X[0].size(1) <= 0:
         featureless = True
 
     A = scipy_sparse_to_pytorch_sparse(A)
     Y = torch.as_tensor(Y)
 
     if config['task']['kfolds'] < 0:
-        loss, accuracy = single_run(A, X, F, Y, C, X_node_map, tsv_writer, device,
+        loss, accuracy = single_run(A, X, Y, C, X_node_map, tsv_writer, device,
                                     config, modules_config, featureless)
     else:
-        loss, accuracy = kfold_crossvalidation(A, X, F, Y, C, X_node_map,
+        loss, accuracy = kfold_crossvalidation(A, X, Y, C, X_node_map,
                                                config['task']['kfolds'],
                                                tsv_writer, device, config,
                                                modules_config, featureless)

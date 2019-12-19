@@ -73,12 +73,10 @@ class MRGCN(nn.Module):
         self.module_list.append(self.mrgcn)
 
     def forward(self, X, A, batch_grad_idx=-1, device=None):
-        X, F_string, F_images, F_wktLiteral = X
+        X, F = X[0], X[1:]
 
         # compute and concat modality-specific embeddings
-        XF = self._compute_modality_embeddings(F_string,
-                                               F_images,
-                                               F_wktLiteral,
+        XF = self._compute_modality_embeddings(F,
                                                batch_grad_idx,
                                                device)
         if XF is not None:
@@ -86,7 +84,8 @@ class MRGCN(nn.Module):
             X = torch.cat([X,XF], dim=1)
 
         # Forward pass through graph convolution layers
-        logger.debug(" Forward pass with input of size {}".format(X.size()))
+        logger.debug(" Forward pass with input of size {} x {}".format(X.size(0),
+                                X.size(1)))
         self.mrgcn.to(device)
         X_dev = X.to(device)
         A_dev = A.to(device)
@@ -96,16 +95,13 @@ class MRGCN(nn.Module):
 
         return X
 
-    def _compute_modality_embeddings(self, F_string, F_images, F_wktLiteral,
-                                     batch_grad_idx, device):
+    def _compute_modality_embeddings(self, F, batch_grad_idx, device):
         X = list()
-        for modality, F in zip(["xsd.string", "blob.image", "ogc.wktLiteral"],
-                               [F_string, F_images, F_wktLiteral]):
-            if modality not in self.modality_modules.keys() or len(F[0]) <= 0:
+        for modality, F_set in F:
+            if modality not in self.modality_modules.keys() or len(F_set[0]) <= 0:
                 continue
 
-            nsets = len(F)
-            for i, ((encodings, node_idx, C, _), batches) in enumerate(F):
+            for i, ((encodings, node_idx, C, _, nsets), batches) in enumerate(F_set):
                 module, _ = self.modality_modules[modality][i]
                 module.to(device)
 

@@ -152,3 +152,30 @@ def collate_repetition_padding(batch, time_dim, max_batch_length=999):
 
     return batch_padded
 
+def merge_sparse_encodings_sets(encodings):
+    encodings_merged = list()
+    node_idx_merged = list()
+    seq_lengths_merged = list()
+    C_max = 0
+
+    for encoding_set, node_idx, C, seq_length_map, _, in encodings:
+        encodings_merged.extend(encoding_set)
+        node_idx_merged.extend(node_idx)
+        seq_lengths_merged.extend(seq_length_map)
+
+        if C > C_max:
+            C_max = C
+
+    return [[encodings_merged, node_idx_merged, C_max, seq_lengths_merged, 1]]
+
+def merge_encodings_sets(encoding_sets):
+    encodings, node_idx, C, seq_length_map, nsets = encoding_sets[0]
+    n = encodings.shape[0]
+    c = int(C/nsets)
+
+    encodings_merged = np.zeros(shape=(n, c), dtype=np.float32)
+    for i in range(nsets):
+        # assume that non-filled values are zero
+        encodings_merged += encodings[:,i*c:(i+1)*c]
+
+    return [[encodings_merged, node_idx, c, seq_length_map, 1]]

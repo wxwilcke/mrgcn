@@ -57,7 +57,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     logger.debug("Generating gYear encodings")
     C = 6  # number of items per feature
 
-    if not config['share_weights']:
+    if True:  #not config['share_weights']:
         return generate_relationwise_features(nodes_map, node_predicate_map, C,
                                               config)
     else:
@@ -118,7 +118,7 @@ def generate_nodewise_features(nodes_map, C, config):
     encodings[:m,1] = (2*(encodings[:m,1] - value_min) /
                         (value_max - value_min)) - 1.0
 
-    return [[encodings[:m], node_idx[:m], C, None]]
+    return [[encodings[:m], node_idx[:m], C, None, 1]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
@@ -180,15 +180,20 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         return None
 
     # normalization over centuries
-    for predicate, encodings in relationwise_encodings.items():
-        encodings[values_idx[predicate]][1] = (2*(encodings[values_idx[predicate]][1] - values_min[predicate]) /
+    for predicate in relationwise_encodings.keys():
+        if values_max[predicate] == values_min[predicate]:
+            relationwise_encodings[predicate][values_idx[predicate],1] = 0.0
+            continue
+
+        relationwise_encodings[predicate][values_idx[predicate],1] = (2*(relationwise_encodings[predicate][values_idx[predicate],1] - values_min[predicate]) /
                                              (values_max[predicate] - values_min[predicate])) -1.0
 
     encodings = np.hstack([encodings[:m] for encodings in
                            relationwise_encodings.values()])
-    C *= len(relationwise_encodings.keys())
+    npreds = len(relationwise_encodings.keys())
+    C *= npreds
 
-    return [[encodings[:m], node_idx[:m], C, None]]
+    return [[encodings[:m], node_idx[:m], C, None, npreds]]
 
 def point(m, rad):
     # place on circle

@@ -54,12 +54,12 @@ def generate_features(node_map, node_predicate_map, config):
     logger.debug("Generating numerical encodings")
     C = 1  # number of items per feature per relation
 
-    if not config['datatype'] == "xsd.numeric":
+    if config['datatype'] == "xsd.numeric":
         datatype = _XSD_NUMERICAL
     else:
         datatype = [config['datatype']]
 
-    if config['share_weights']:
+    if True:  #config['share_weights']:
         return generate_relationwise_features(node_map, node_predicate_map, C,
                                               config, datatype)
     else:
@@ -105,7 +105,7 @@ def generate_nodewise_features(node_map, C, config, datatype):
     encodings[:m] = (2*(encodings[:m] - value_min) /
                      (value_max - value_min)) -1.0
 
-    return [[encodings[:m], node_idx[:m], C, None]]
+    return [[encodings[:m], node_idx[:m], C, None, 1]]
 
 def generate_relationwise_features(node_map, node_predicate_map, C, config,
                                    datatype):
@@ -154,15 +154,20 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
         return None
 
     # normalization over encodings
-    for predicate, encodings in relationwise_encodings.items():
-        encodings[values_idx[predicate]] = (2*(encodings[values_idx[predicate]] - values_min[predicate]) /
+    for predicate in relationwise_encodings.keys():
+        if values_max[predicate] == values_min[predicate]:
+            relationwise_encodings[predicate][values_idx[predicate]] = 0.0
+            continue
+
+        relationwise_encodings[predicate][values_idx[predicate]] = (2*(relationwise_encodings[predicate][values_idx[predicate]] - values_min[predicate]) /
                                              (values_max[predicate] - values_min[predicate])) -1.0
 
     encodings = np.hstack([encodings[:m] for encodings in
                            relationwise_encodings.values()])
-    C *= len(relationwise_encodings.keys())
+    npreds = len(relationwise_encodings.keys())
+    C *= npreds
 
-    return [[encodings[:m], node_idx[:m], C, None]]
+    return [[encodings[:m], node_idx[:m], C, None, npreds]]
 
 def validate(value):
     return match(_REGEX_NUMERIC, value)

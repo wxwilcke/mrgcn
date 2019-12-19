@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def generate_task(knowledge_graph, A, targets, config):
     logger.debug("Generating node classification task")
     F, Y, X_node_idx = build_dataset(knowledge_graph, targets, config)
-    C = sum(c for _, _, c in F.values())  # number of columns in X
+    C = sum(c for _, _, c, _, _ in F.values())  # number of columns in X
     model = build_model(C,
                         Y,
                         A, config)

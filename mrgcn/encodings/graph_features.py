@@ -5,7 +5,7 @@ import logging
 
 import numpy as np
 
-from mrgcn.data.utils import scipy_sparse_to_pytorch_sparse
+from mrgcn.data.utils import scipy_sparse_to_pytorch_sparse, merge_encodings_sets
 from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
 
 
@@ -71,7 +71,7 @@ def feature_module(hierarchy, feature_name):
 
     return None
 
-def construct_feature_matrix(features, features_enabled, n):
+def construct_feature_matrix(features, features_enabled, n, feature_configs):
     feature_matrix = list()
     features_processed = set()
     for feature in features_enabled:
@@ -84,15 +84,22 @@ def construct_feature_matrix(features, features_enabled, n):
             # concatenated to X
             continue
 
+        feature_config = next((conf for conf in feature_configs
+                               if conf['datatype'] == feature),
+                              None)
+        encoding_sets = features[feature]
+        if feature_config['share_weights']:
+            encoding_sets = merge_encodings_sets(encoding_sets)
+
         feature_matrix.extend([_mkdense(*feature_encoding, n) for
-                               feature_encoding in features[feature]])
+                               feature_encoding in encoding_sets])
         features_processed.add(feature)
 
     X = np.empty((n,0), dtype=np.float32) if len(feature_matrix) <= 0 else np.hstack(feature_matrix)
 
     return [X, features]
 
-def _mkdense(encodings, node_idx, c, encodings_length_map, n):
+def _mkdense(encodings, node_idx, c, encodings_length_map, _, n):
     F = np.zeros(shape=(n, c), dtype=np.float32)
     F[node_idx] = encodings
 
