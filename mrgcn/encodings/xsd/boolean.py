@@ -22,7 +22,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     logger.debug("Generating boolean encodings")
     C = 1  # number of items per feature
 
-    if not config['share_weights']:
+    if True:  #not config['share_weights']:
         return generate_relationwise_features(nodes_map, node_predicate_map, C,
                                               config)
     else:

@@ -87,7 +87,7 @@ def generate_features(nodes_map, node_predicate_map, config):
             img[ch] = (2*(img[ch]-values_min[ch]) /
                        (values_max[ch] - values_min[ch])) - 1.0
 
-    return [[encodings[:m], node_idx[:m], C, None]]
+    return [[encodings[:m], node_idx[:m], C, None, 1]]
 
 def b64_to_img(b64string):
     im = Image.open(BytesIO(base64.decodebytes(b64string.encode())))

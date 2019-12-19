@@ -46,7 +46,7 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     C = 32
 
-    if not config['share_weights']:
+    if True:  #not config['share_weights']:
         return generate_relationwise_features(nodes_map, node_predicate_map, C, config)
     else:
         return generate_nodewise_features(nodes_map, C, config)
@@ -77,12 +77,6 @@ def generate_nodewise_features(nodes_map, C, config):
         if seq_length <= 0:
             continue
 
-        # pad with repetition  -- move to preloading
-        #c = cycle(sequence)
-        #unfilled = _MAX_CHARS - seq_length
-        #if unfilled > 0:
-        #    sequence.extend([next(c) for _ in range(unfilled)])
-
         a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
                            (sequence, np.array(range(seq_length)))),
                           shape=(_MAX_ASCII, seq_length),
@@ -98,7 +92,7 @@ def generate_nodewise_features(nodes_map, C, config):
     if m <= 0:
         return None
 
-    return [[data, node_idx[:m], C, seq_length_map]]
+    return [[data, node_idx[:m], C, seq_length_map, 1]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
@@ -148,7 +142,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     if len(m) <= 0:
         return None
 
-    return [[sequences[predicate], node_idx[predicate][:m[predicate]], C, seq_length_map[predicate]]
+    npreds = len(sequences.keys())
+    return [[sequences[predicate], node_idx[predicate][:m[predicate]], C, seq_length_map[predicate], npreds]
             for predicate in sequences.keys()]
 
 def toASCII(seq):

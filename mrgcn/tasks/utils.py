@@ -146,7 +146,7 @@ def sample_mask(idx, n):
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
 
-def mkbatches(mat, node_idx, C, _, nbins=10, batch_size=100):
+def mkbatches(mat, node_idx, C, _, nsets, nbins=10, batch_size=100):
     """ split N x * array in batches
     """
     n = mat.shape[0]  # number of samples
@@ -160,7 +160,7 @@ def mkbatches(mat, node_idx, C, _, nbins=10, batch_size=100):
 
     return list(zip(idc_assignments, node_assignments))
 
-def mkbatches_varlength(sequences, node_idx, C, seq_length_map, max_bins=-1,
+def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
                         max_size=100):
     """ :param sequences: a list with M arrays of length ?
                     M :- number of nodes with this feature M <= N

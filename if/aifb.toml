@@ -14,39 +14,39 @@ normalize = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = true
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = false
+include = true
 share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.boolean'
-include = false
+include = true
 share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-batch_size = 100
-share_weights = false
+batch_size = 200
+share_weights = true
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 batch_size = 100
 share_weights = false
 

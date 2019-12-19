@@ -91,7 +91,7 @@ def generate_features(nodes_map, node_predicate_map, config):
             a.data[idx] = (2*(a.data[idx] - value_min) /
                            (value_max - value_min)) - 1.0
 
-    return [[data, node_idx[:m], C, vec_length_map]]
+    return [[data, node_idx[:m], C, vec_length_map, 1]]
 
 def validate(value):
     return fullmatch(_REGEX_WKTLITERAL, value)
