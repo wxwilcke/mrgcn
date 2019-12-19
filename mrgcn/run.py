@@ -330,6 +330,7 @@ def run(args, tsv_writer, config):
             encoding_sets = F.pop(datatype, list())
             if feature_config['share_weights'] and datatype == "xsd.string":
                 # note: images and geometries always share weights atm
+                logger.debug("weight sharing enabled for {}".format(datatype))
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
 
             for encodings, _, c, _, _ in encoding_sets:
