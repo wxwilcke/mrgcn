@@ -89,6 +89,7 @@ def construct_feature_matrix(features, features_enabled, n, feature_configs):
                               None)
         encoding_sets = features[feature]
         if feature_config['share_weights']:
+            logger.debug("weight sharing enabled for {}".format(feature))
             encoding_sets = merge_encodings_sets(encoding_sets)
 
         feature_matrix.extend([_mkdense(*feature_encoding, n) for
