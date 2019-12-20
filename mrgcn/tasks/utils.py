@@ -3,7 +3,7 @@
 import logging
 
 import numpy as np
-from rdflib.term import URIRef
+from rdflib.term import Literal, URIRef
 import torch
 
 
@@ -18,18 +18,26 @@ def strip_graph(knowledge_graph, config):
     logger.debug("Stripping knowledge graph...")
     # list of target triples (entity-class mapping)
     target_triples = set()
+    separate_literals = config['graph']['structural']['separate_literals']
     if len(target_classes) > 0:
         for target_class in target_classes:
             # assume class is entity
             target_triples |= frozenset(knowledge_graph.triples((None,
                                                           URIRef(target_property),
-                                                          URIRef(target_class))))
+                                                          URIRef(target_class)),
+                                                        separate_literals))
     else:
         target_triples |= frozenset(knowledge_graph.triples((None,
                                                       URIRef(target_property),
-                                                      None)))
+                                                      None),
+                                                    separate_literals))
 
-    knowledge_graph.graph -= target_triples  # strip targets from source
+    if not separate_literals:
+        knowledge_graph.graph -= target_triples  # strip targets from source
+    else:
+        for s, p, o in target_triples:
+            o_source = Literal(str(o), o.language, o.datatype, normalize=None)
+            knowledge_graph.graph.remove((s, p, o_source))
 
     # remove inverse target relations to prevent information leakage
     if target_property_inv != '':
@@ -39,11 +47,13 @@ def strip_graph(knowledge_graph, config):
                 # assume class is entity
                 inv_target_triples |= frozenset(knowledge_graph.triples((URIRef(target_class),
                                                                   URIRef(target_property_inv),
-                                                                  None)))
+                                                                  None),
+                                                                separate_literals))
         else:
             inv_target_triples |= frozenset(knowledge_graph.triples((None,
                                                               URIRef(target_property_inv),
-                                                              None)))
+                                                              None),
+                                                            separate_literals))
         knowledge_graph.graph -= inv_target_triples
 
     m = len(knowledge_graph)

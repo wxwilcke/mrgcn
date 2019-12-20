@@ -10,45 +10,45 @@ file = "../../datasets/bgs/bgs_revised.nt.gz"
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-separate_literals = true
+separate_literals = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
 include = true
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = true
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.date'
 include = true
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.boolean'
 include = true
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
 batch_size = 100
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'blob.image'
 include = true
 batch_size = 100
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
 batch_size = 100
-share_weights = false
+share_weights = true
 
 [task]
 # node classification
