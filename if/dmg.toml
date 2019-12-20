@@ -10,7 +10,7 @@ file = "../../datasets/dmg/dataset.subset/baseline/monumentsT4C_full-dummyimg.nt
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-normalize = true
+separate_literals = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'

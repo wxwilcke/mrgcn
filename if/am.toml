@@ -10,7 +10,7 @@ file = "../../datasets/am/am_revised.nt.gz"
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-normalize = true
+separate_literals = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'

@@ -16,7 +16,8 @@ EMBEDDING_FEATURES = {"xsd.boolean", "xsd.date", "xsd.gYear", "xsd.numeric"}
 PREEMBEDDING_FEATURES = {"xsd.string", "blob.image", "ogc.wktLiteral"}
 AVAILABLE_FEATURES = set().union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
 
-def construct_features(nodes_map, knowledge_graph, feature_configs):
+def construct_features(nodes_map, knowledge_graph, feature_configs,
+                      separate_literals):
     """ Construct specified features for given nodes
 
     Note that normalization occurs per feature, independent of the predicate
@@ -30,7 +31,8 @@ def construct_features(nodes_map, knowledge_graph, feature_configs):
                     C :- number of columns per feature
     """
     hierarchy = XSDHierarchy()
-    node_predicate_map = { o:p for _,p,o in knowledge_graph.triples() }
+    node_predicate_map = { o:p for _,p,o in
+                          knowledge_graph.triples(separate_literals=separate_literals) }
     features = dict()
     for feature_config in feature_configs:
         if not feature_config['include']:
