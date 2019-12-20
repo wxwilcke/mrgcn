@@ -14,41 +14,41 @@ separate_literals = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
-share_weights = false
+include = true
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = true
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = false
-share_weights = false 
+include = true
+share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.boolean'
-include = false
-share_weights = false 
+include = true
+share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 batch_size = 200
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 batch_size = 100
-share_weights = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 batch_size = 100
-share_weights = false
+share_weights = true
 
 [task]
 # node classification
