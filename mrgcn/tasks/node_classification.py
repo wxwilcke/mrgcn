@@ -34,6 +34,8 @@ def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureles
     num_nodes = len(nodes_map)
     num_classes = len(classes_map)
 
+    # note: by converting targets to strings we lose datatype info, but the use
+    # cases where this would matter would be very limited 
     target_indices = [(nodes_map[x], classes_map[str(y)]) for x, _, y in target_triples]
     X_node_idx, Y_class_idx = map(np.array, zip(*target_indices))
 
@@ -45,7 +47,10 @@ def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureles
     if featureless:
         F = dict()
     else:
-        F = construct_features(nodes_map, knowledge_graph, config['graph']['features'])
+        separate_literals = config['graph']['structural']['separate_literals']
+        F = construct_features(nodes_map, knowledge_graph,
+                               config['graph']['features'],
+                               separate_literals)
 
     logger.debug("Completed dataset build")
     return (F, Y, X_node_idx)

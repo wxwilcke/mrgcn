@@ -61,12 +61,13 @@ class KnowledgeGraph:
 
     ### Generators ###
 
-    def atoms(self):
-        self.logger.debug("Yielding atoms")
+    def atoms(self, separate_literals=True):
+        self.logger.debug("Yielding atoms (separated literals: {})".format(
+            separate_literals))
         seen = set()
         for s, p, o in self.graph.triples((None, None, None)):
             for atom in (s, o):
-                if isinstance(atom, Literal):
+                if separate_literals and isinstance(atom, Literal):
                     atom = self.UniqueLiteral(s, p, atom)
                 if atom in seen:
                     continue
@@ -129,10 +130,10 @@ class KnowledgeGraph:
         for p in self.graph.predicates():
             yield(p)
 
-    def triples(self, triple=(None, None, None)):
+    def triples(self, triple=(None, None, None), separate_literals=True):
         self.logger.debug("Yielding triples (triple {})".format(triple))
         for s,p,o in self.graph.triples(triple):
-            if isinstance(o, Literal):
+            if separate_literals and isinstance(o, Literal):
                 o = self.UniqueLiteral(s, p, o)
             yield s, p, o
 

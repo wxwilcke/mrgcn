@@ -9,9 +9,11 @@ import scipy.sparse as sp
 logger = logging.getLogger(__name__)
 
 def generate(knowledge_graph, config):
+    separate_literals = config['graph']['structural']['separate_literals']
     # create mapping to integers [0, ...]
     properties_dict = {prop: i for i, prop in enumerate(knowledge_graph.properties())}
-    nodes_dict = {node: i for i, node in enumerate(knowledge_graph.atoms())}
+    nodes_dict = {node: i for i, node in
+                  enumerate(knowledge_graph.atoms(separate_literals))}
     num_nodes = len(nodes_dict)
 
     # generate adjacency matrix for each property
@@ -20,12 +22,12 @@ def generate(knowledge_graph, config):
                                 properties_dict,
                                 nodes_dict,
                                 adj_shape,
+                                separate_literals,
                                 config['graph']['structural'])
 
     # add identity matrix (self-relations)
     ident = sp.identity(num_nodes).tocsr()
-    if config['graph']['structural']['normalize']:
-        ident = normalize_adjacency_matrix(ident)
+    ident = normalize_adjacency_matrix(ident)
     adjacencies.append(ident)
 
     # stack into a n x nR matrix
@@ -35,10 +37,10 @@ def generate_adjacency_matrices(knowledge_graph,
                                 properties_dict,
                                 nodes_dict,
                                 adj_shape,
+                                separate_literals,
                                 config):
     include_inverse = config['include_inverse_properties']
     exclude_properties = config['exclude_properties']
-    normalize = config['normalize']
 
     logger.debug("Generating {} adjacency matrices of size {}".format(
         len([p for p in properties_dict.keys() if p not in exclude_properties]),
@@ -55,7 +57,8 @@ def generate_adjacency_matrices(knowledge_graph,
         # populate edge array with corresponding node URIs
         for idx, (s, p, o) in enumerate(knowledge_graph.triples((None,
                                                                  prop,
-                                                                 None))):
+                                                                 None),
+                                                               separate_literals)):
             edges[idx] = np.array([nodes_dict[s], nodes_dict[o]])
 
         # split subject (row) and object (col) node URIs
@@ -64,15 +67,13 @@ def generate_adjacency_matrices(knowledge_graph,
         # create adjacency matrix for this property
         data = np.ones(len(row), dtype=np.int8)
         adj = sp.csr_matrix((data, (row, col)), shape=adj_shape, dtype=np.int8)
-        if normalize:
-            adj = normalize_adjacency_matrix(adj)
+        adj = normalize_adjacency_matrix(adj)
         adjacencies.append(adj)
 
         # create adjacency matrix for inverse property
         if include_inverse:
             adj = sp.csr_matrix((data, (col, row)), shape=adj_shape, dtype=np.int8)
-            if normalize:
-                adj = normalize_adjacency_matrix(adj)
+            adj = normalize_adjacency_matrix(adj)
             adjacencies.append(adj)
 
     return adjacencies

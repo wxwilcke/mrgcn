@@ -10,7 +10,7 @@ file = "../../datasets/aifb/aifb_revised.nt.gz"
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-normalize = true
+separate_literals = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
@@ -19,7 +19,7 @@ share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
