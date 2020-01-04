@@ -34,25 +34,26 @@ class CharCNN(nn.Module):
             )
 
         self.conv = nn.Sequential(
-            conv1d(features_in, 256, kernel=7, padding=3),
-            nn.AdaptiveMaxPool1d(16),
-            conv1d(256, 256, kernel=7),
-            nn.AdaptiveMaxPool1d(10),
-            conv1d(256, 256, kernel=3),
-            conv1d(256, 256, kernel=3),
-            conv1d(256, 256, kernel=3),
-            conv1d(256, 256, kernel=3),
-            nn.AdaptiveMaxPool1d(4)  # 1024/256
+            conv1d(features_in, 256, kernel=7, padding=3),  # account for short sequences
+            nn.AdaptiveMaxPool1d(336),   # in variable
+            conv1d(256, 256, kernel=7),  # in 336
+            nn.MaxPool1d(kernel_size=3, stride=3),  # in 330
+            conv1d(256, 256, kernel=3),  # in 110
+            conv1d(256, 256, kernel=3),  # in 108
+            conv1d(256, 256, kernel=3),  # in 106
+            conv1d(256, 256, kernel=3),  # in 104
+            nn.MaxPool1d(kernel_size=3, stride=3)  # in 102, out 34
         )
 
         self.fc = nn.Sequential(
-            linear(1024, 512),
-            linear(512, features_out)
+            linear(8704, 1024),
+            linear(1024, 1024),
+            linear(1024, features_out)
         )
 
     def forward(self, X):
         X = self.conv(X)
-        X = X.view(X.size(0), -1)
+        X = X.view(X.size(0), -1)  # B x 256 x 34 -> B x 8704
         X = self.fc(X)
 
         return X
@@ -60,3 +61,6 @@ class CharCNN(nn.Module):
     def init(self):
         for param in self.parameters():
             nn.init.normal_(param)
+
+def out_dim(seq_length, kernel_size, padding=0, stride=1, dilation=1):
+    return (seq_length+2*padding-dilation*(kernel_size-1)-1)//stride+1

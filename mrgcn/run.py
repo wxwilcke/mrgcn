@@ -349,9 +349,16 @@ def run(args, tsv_writer, config):
 
                 C += c
 
-            encoding_sets = [(f, mkbatches(*f, batch_size=feature_config['batch_size']))
+            nepoch = config['model']['epoch'] if config['model']['mini_batch']\
+                    else -1
+
+            encoding_sets = [(f, mkbatches(*f,
+                                           batch_size=feature_config['batch_size'],
+                                           nepoch=nepoch))
                              for f in encoding_sets] if datatype == "blob.image"\
-                    else [(f, mkbatches_varlength(*f, max_size=feature_config['batch_size']))
+                    else [(f, mkbatches_varlength(*f,
+                                                  max_size=feature_config['batch_size'],
+                                                  nepoch=nepoch))
                           for f in encoding_sets]
 
             X.append((datatype, encoding_sets))
