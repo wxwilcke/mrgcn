@@ -156,13 +156,22 @@ def sample_mask(idx, n):
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
 
-def mkbatches(mat, node_idx, C, _, nsets, nbins=10, batch_size=100):
+def mkbatches(mat, node_idx, C, _, nsets, nbins=10, batch_size=100,
+              nepoch=-1):
     """ split N x * array in batches
     """
     n = mat.shape[0]  # number of samples
     idc = np.array(range(n), dtype=np.int32)
     if batch_size > 0:
         nbins = np.ceil(len(idc)/batch_size)
+
+    # if mini-batches are used, force splitting by a whole number
+    if nepoch > 0 and nepoch%nbins > 0:
+        op = 1
+        if (nepoch/nbins)%1 >= 0.5:
+            op *= -1
+        while nepoch%nbins > 0:
+            nbins += op
     idc_assignments = np.array_split(idc, nbins)
 
     node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
@@ -171,7 +180,7 @@ def mkbatches(mat, node_idx, C, _, nsets, nbins=10, batch_size=100):
     return list(zip(idc_assignments, node_assignments))
 
 def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
-                        max_size=100):
+                        max_size=100, nepoch=-1):
     """ :param sequences: a list with M arrays of length ?
                     M :- number of nodes with this feature M <= N
         :param node_idx: list that maps sequence idx {0, M} to node idx {0, N}
@@ -193,6 +202,14 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
         n = len(sequences)
         idc = np.array(range(n), dtype=np.int32)
         nbins = np.ceil(n/max_size)
+
+        # if mini-batches are used, force splitting by a whole number
+        if nepoch > 0 and nepoch%nbins > 0:
+            op = 1
+            if (nepoch/nbins)%1 >= 0.5:
+                op *= -1
+            while nepoch%nbins > 0:
+                nbins += op
         seq_assignments = np.array_split(idc, nbins)
         node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
                             for slce in seq_assignments]
@@ -219,8 +236,27 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
                 np.round((max(non_outliers)-min(non_outliers)) / h),
                 len(uniques))
 
+    reserved = 0
+    for outlier_bin in [outliers_low, outliers_high]:
+        if len(outlier_bin) > 0:
+            reserved += 1
+    nbins += reserved
+
+    # if mini-batches are used, force splitting by a whole number
+    if nepoch > 0 and nepoch%nbins > 0:
+        op = 1
+        if (nepoch/nbins)%1 >= 0.5:
+            op *= -1
+        while nepoch%nbins > 0:
+            nbins += op
+
+    if nbins < reserved+1:
+        nbins += 1
+        while nepoch%nbins > 0:
+            nbins += 1
+
     # create bins
-    bin_ranges = np.array_split(uniques, nbins)
+    bin_ranges = np.array_split(uniques, nbins-reserved)
     for outlier_bin in [outliers_low, outliers_high]:
         if len(outlier_bin) <= 0:
             continue
@@ -237,7 +273,7 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
         seq_assignments[bin_ranges_map[length]].append(i)
         node_assignments[bin_ranges_map[length]].append(node_idx[i])
 
-    if max_size < 0:
+    if max_size < 0 or nepoch > 0:
         return list(zip(seq_assignments, node_assignments))
 
     seq_assignments_final = list()
@@ -246,9 +282,14 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
         seq_bin = seq_assignments[i]
         node_bin = node_assignments[i]
         if len(seq_bin) > max_size:
+            seq_lengths = np.array(seq_length_map)[seq_bin]
+            seq_lengths, seq_bin, node_bin = zip(*sorted(zip(seq_lengths,
+                                                             seq_bin,
+                                                             node_bin)))
             splits = np.ceil(len(seq_bin)/max_size)
-            seq_assignments_final.extend(np.array_split(seq_bin, splits))
-            node_assignments_final.extend(np.array_split(node_bin, splits))
+            if splits + nbins <= max_bins:
+                seq_assignments_final.extend(np.array_split(seq_bin, splits))
+                node_assignments_final.extend(np.array_split(node_bin, splits))
 
             continue
 
