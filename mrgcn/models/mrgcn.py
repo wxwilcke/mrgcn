@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data as td
 
-from mrgcn.data.utils import (collate_repetition_padding,
+from mrgcn.data.utils import (collate_zero_padding,
                               scipy_sparse_list_to_pytorch_sparse)
 from mrgcn.models.charcnn import CharCNN
 from mrgcn.models.imagecnn import ImageCNN
@@ -36,17 +36,19 @@ class MRGCN(nn.Module):
 
         self.num_nodes = num_nodes
         self.p_dropout = p_dropout
-        self.module_list = nn.ModuleList()
+        self.module_dict = nn.ModuleDict()
 
         # add embedding layers
         self.modality_modules = dict()
+        i, j, k = 0, 0, 0
         for modality, args in embedding_modules:
             if modality == "xsd.string":
                 batch_size, nrows, dim_out = args
                 module = CharCNN(features_in=nrows,
                                  features_out=dim_out,
                                  p_dropout=p_dropout)
-                self.module_list.append(module)
+                self.module_dict["CNN1D_"+str(i)] = module
+                i += 1
             if modality == "blob.image":
                 batch_size, (nchannels, nrows, ncols), dim_out = args
                 module = ImageCNN(channels_in=nchannels,
@@ -54,14 +56,16 @@ class MRGCN(nn.Module):
                              width=ncols,
                              features_out=dim_out,
                              p_dropout=p_dropout)
-                self.module_list.append(module)
+                self.module_dict["CNN2D_"+str(j)] = module
+                j += 1
             if modality == "ogc.wktLiteral":
                 batch_size, ncols, dim_out = args
                 module = RNN(input_dim=ncols,
                              output_dim=dim_out,
                              hidden_dim=ncols*2,
                              p_dropout=p_dropout)
-                self.module_list.append(module)
+                self.module_dict["RNN_"+str(k)] = module
+                k += 1
 
             if modality not in self.modality_modules.keys():
                 self.modality_modules[modality] = list()
@@ -70,7 +74,7 @@ class MRGCN(nn.Module):
         # add graph convolution layers
         self.mrgcn = RGCN(modules, num_relations, num_nodes,
                           num_bases, p_dropout, featureless, bias)
-        self.module_list.append(self.mrgcn)
+        self.module_dict["RGCN"] = self.mrgcn
 
     def forward(self, X, A, batch_grad_idx=-1, device=None):
         X, F = X[0], X[1:]
@@ -80,12 +84,12 @@ class MRGCN(nn.Module):
                                                batch_grad_idx,
                                                device)
         if XF is not None:
-            logger.debug(" Merging structure and node features")
+            #logger.debug(" Merging structure and node features")
             X = torch.cat([X,XF], dim=1)
 
         # Forward pass through graph convolution layers
-        logger.debug(" Forward pass with input of size {} x {}".format(X.size(0),
-                                X.size(1)))
+        #logger.debug(" Forward pass with input of size {} x {}".format(X.size(0),
+        #                        X.size(1)))
         self.mrgcn.to(device)
         X_dev = X.to(device)
         A_dev = A.to(device)
@@ -116,12 +120,9 @@ class MRGCN(nn.Module):
                             batch = (batch,)
                         else:
                             time_dim = 0 if modality == "ogc.wktLiteral" else 1
-                            batch = collate_repetition_padding(batch,
-                                                               time_dim)
+                            batch = collate_zero_padding(batch,
+                                                         time_dim)
 
-                        time_dim = 0 if modality == "ogc.wktLiteral" else 1
-                        batch = collate_repetition_padding(batch,
-                                                           time_dim)
                         batch = scipy_sparse_list_to_pytorch_sparse(batch)
                         batch = batch.to_dense()
                     else:
@@ -167,7 +168,7 @@ class MRGCN(nn.Module):
 
     def init(self):
         # reinitialze all weights
-        for module in self.module_list:
+        for module in self.module_dict.values():
             if type(module) in (ImageCNN, CharCNN, RGCN, RNN):
                 module.init()
             else:
