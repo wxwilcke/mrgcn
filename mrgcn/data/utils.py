@@ -72,7 +72,8 @@ class SparseDataset(Dataset):
     def __getitem__(self, idx):
         return torch.as_tensor(self.sp[idx].todense())
 
-def collate_repetition_padding(batch, time_dim, max_batch_length=999):
+def collate_zero_padding(batch, time_dim, max_batch_length=999,
+                               min_padded_length=1):
     """ batch := a list with sparse coo matrices
 
         time_dim should be 0 for RNN and 1 for temporal CNN
@@ -84,6 +85,7 @@ def collate_repetition_padding(batch, time_dim, max_batch_length=999):
         if seq.shape[time_dim] > max_length:
             max_length = seq.shape[time_dim]
     max_length = min(max_length, max_batch_length)
+    padded_length = max(min_padded_length, max_length)
 
     for seq in batch:
         feature_idc = seq.row if time_dim == 1 else seq.col
@@ -94,7 +96,43 @@ def collate_repetition_padding(batch, time_dim, max_batch_length=999):
         seq_idc = list(sequence_idc)
 
         seq_length = seq.shape[time_dim]
-        unfilled = max_length - seq_length
+
+        coordinates = (feat_idc, seq_idc) if time_dim == 1\
+                else (seq_idc, feat_idc)
+        shape = (seq.shape[1-time_dim], padded_length) if time_dim == 1\
+                else (padded_length, seq.shape[1-time_dim])
+
+        a = sp.coo_matrix((data, coordinates),
+                          shape=shape, dtype=np.float32)
+        batch_padded.append(a)
+
+    return batch_padded
+
+def collate_repetition_padding(batch, time_dim, max_batch_length=999,
+                               min_padded_length=1):
+    """ batch := a list with sparse coo matrices
+
+        time_dim should be 0 for RNN and 1 for temporal CNN
+    """
+    batch_padded = list()
+
+    max_length = 0
+    for seq in batch:
+        if seq.shape[time_dim] > max_length:
+            max_length = seq.shape[time_dim]
+    max_length = min(max_length, max_batch_length)
+    padded_length = max(min_padded_length, max_length)
+
+    for seq in batch:
+        feature_idc = seq.row if time_dim == 1 else seq.col
+        sequence_idc = seq.col if time_dim == 1 else seq.row
+
+        data = list(seq.data)
+        feat_idc = list(feature_idc)
+        seq_idc = list(sequence_idc)
+
+        seq_length = seq.shape[time_dim]
+        unfilled = padded_length - seq_length
         if unfilled > 0:
             c_data = cycle(seq.data)
             c_feat = cycle(feature_idc)
@@ -143,8 +181,8 @@ def collate_repetition_padding(batch, time_dim, max_batch_length=999):
 
         coordinates = (feat_idc, seq_idc) if time_dim == 1\
                 else (seq_idc, feat_idc)
-        shape = (seq.shape[1-time_dim], max_length) if time_dim == 1\
-                else (max_length, seq.shape[1-time_dim])
+        shape = (seq.shape[1-time_dim], padded_length) if time_dim == 1\
+                else (padded_length, seq.shape[1-time_dim])
 
         a = sp.coo_matrix((data, coordinates),
                           shape=shape, dtype=np.float32)

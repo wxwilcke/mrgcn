@@ -57,17 +57,17 @@ target_property = 'http://swrc.ontoware.org/ontology#affiliation'
 target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
 target_classes = []
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = 10  # use < 0 to disable (single run)
+kfolds = -1  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 
 [model]
-epoch = 50
+epoch = 100
 learning_rate = 0.01
 patience = 7  # < 0 to disable
 mini_batch = false
 num_bases = 0
-p_dropout = 0.0
+p_dropout = 0
 l2norm = 0.0
 bias = false
 

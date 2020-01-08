@@ -16,8 +16,7 @@ from mrgcn.data.io.tsv import TSV
 from mrgcn.data.utils import (is_readable,
                               is_writable,
                               scipy_sparse_to_pytorch_sparse,
-                              merge_sparse_encodings_sets,
-                              merge_encodings_sets)
+                              merge_sparse_encodings_sets)
 from mrgcn.encodings import graph_structure
 from mrgcn.encodings.graph_features import construct_feature_matrix, features_included
 from mrgcn.tasks.config import set_seed
@@ -47,8 +46,15 @@ def single_run(A, X, Y, C, X_node_map, tsv_writer, device, config,
 
     # compile model
     model = build_model(C, Y, A, modules_config, config, featureless)
-
-    optimizer = optim.Adam(model.parameters(),
+    modules = {(name.split('.')[1], module)
+               for name, module in model.named_modules() if len(name.split('.')) == 2}
+    params = list()
+    for name, module in modules:
+        if name.startswith("CNN1D"):
+            params.append({"params": module.parameters(), "lr": 1e-3})
+            continue
+        params.append({"params": module.parameters()})
+    optimizer = optim.Adam(params,
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['l2norm'])
     criterion = nn.CrossEntropyLoss()
@@ -114,8 +120,15 @@ def kfold_crossvalidation(A, X, Y, C, X_node_map, k, tsv_writer, device, config,
 
     # compile model
     model = build_model(C, Y, A, modules_config, config, featureless)
-
-    optimizer = optim.Adam(model.parameters(),
+    modules = {(name.split('.')[1], module)
+               for name, module in model.named_modules() if len(name.split('.')) == 2}
+    params = list()
+    for name, module in modules:
+        if name.startswith("CNN1D"):
+            params.append({"params": module.parameters(), "lr": 1e-3})
+            continue
+        params.append({"params": module.parameters()})
+    optimizer = optim.Adam(params,
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['l2norm'])
     optimizer_state_zero = optimizer.state_dict()  # save initial state
@@ -225,6 +238,11 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch, mini_batch, dev
         optimizer.zero_grad()
         train_loss.backward()
         optimizer.step()
+
+        # DEBUG #
+        #for name, param in model.named_parameters():
+        #    logger.info(name + " - grad mean: " + str(float(param.grad.mean())))
+        # DEBUG #
 
         # cast criterion objects to floats to free the memory of the tensors
         # they point to
