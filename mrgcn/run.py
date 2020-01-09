@@ -53,6 +53,9 @@ def single_run(A, X, Y, C, X_node_map, tsv_writer, device, config,
         if name.startswith("CNN1D"):
             params.append({"params": module.parameters(), "lr": 1e-3})
             continue
+        if name.startswith("RNN"):
+            params.append({"params": module.parameters(), "lr": 1e-3})
+            continue
         params.append({"params": module.parameters()})
     optimizer = optim.Adam(params,
                            lr=config['model']['learning_rate'],
@@ -125,6 +128,9 @@ def kfold_crossvalidation(A, X, Y, C, X_node_map, k, tsv_writer, device, config,
     params = list()
     for name, module in modules:
         if name.startswith("CNN1D"):
+            params.append({"params": module.parameters(), "lr": 1e-3})
+            continue
+        if name.startswith("RNN"):
             params.append({"params": module.parameters(), "lr": 1e-3})
             continue
         params.append({"params": module.parameters()})
