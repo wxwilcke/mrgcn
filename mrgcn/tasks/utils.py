@@ -287,9 +287,8 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
                                                              seq_bin,
                                                              node_bin)))
             splits = np.ceil(len(seq_bin)/max_size)
-            if splits + nbins <= max_bins:
-                seq_assignments_final.extend(np.array_split(seq_bin, splits))
-                node_assignments_final.extend(np.array_split(node_bin, splits))
+            seq_assignments_final.extend(np.array_split(seq_bin, splits))
+            node_assignments_final.extend(np.array_split(node_bin, splits))
 
             continue
 
