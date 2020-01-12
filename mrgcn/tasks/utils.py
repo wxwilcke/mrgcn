@@ -205,12 +205,15 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
         nbins = np.ceil(n/max_size)
 
         # if mini-batches are used, force splitting by a whole number
-        if nepoch > 0 and nepoch%nbins > 0:
-            op = 1
-            if (nepoch/nbins)%1 >= 0.5:
-                op *= -1
-            while nepoch%nbins > 0:
-                nbins += op
+        if nepoch >= nbins:
+            nbins = nepoch
+        else:
+            if nepoch > 0 and nepoch%nbins > 0:
+                op = 1
+                if (nepoch/nbins)%1 >= 0.5:
+                    op *= -1
+                while nepoch%nbins > 0:
+                    nbins += op
         seq_assignments = np.array_split(idc, nbins)
         node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
                             for slce in seq_assignments]
@@ -244,17 +247,20 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
     nbins += reserved
 
     # if mini-batches are used, force splitting by a whole number
-    if nepoch > 0 and nepoch%nbins > 0:
-        op = 1
-        if (nepoch/nbins)%1 >= 0.5:
-            op *= -1
-        while nepoch%nbins > 0:
-            nbins += op
+    if nepoch >= nbins:
+        nbins = nepoch
+    else:
+        if nepoch > 0 and nepoch%nbins > 0:
+            op = 1
+            if (nepoch/nbins)%1 >= 0.5:
+                op *= -1
+            while nepoch%nbins > 0:
+                nbins += op
 
-    if nbins < reserved+1:
-        nbins += 1
-        while nepoch%nbins > 0:
+        if nbins < reserved+1:
             nbins += 1
+            while nepoch%nbins > 0:
+                nbins += 1
 
     # create bins
     bin_ranges = np.array_split(uniques, nbins-reserved)
