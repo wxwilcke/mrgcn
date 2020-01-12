@@ -36,7 +36,8 @@ def strip_graph(knowledge_graph, config):
         knowledge_graph.graph -= target_triples  # strip targets from source
     else:
         for s, p, o in target_triples:
-            o_source = Literal(str(o), o.language, o.datatype, normalize=None)
+            o_source = Literal(str(o), o.language, o.datatype, normalize=None)\
+                    if type(o) is Literal else o
             knowledge_graph.graph.remove((s, p, o_source))
 
     # remove inverse target relations to prevent information leakage
