@@ -35,20 +35,23 @@ share_weights = true
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-batch_size = 200
+passes_per_batch = 2
 share_weights = true
+remove_outliers = true
 
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-batch_size = 100
+passes_per_batch = 1
 share_weights = true
+remove_outliers = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
-batch_size = 100
+passes_per_batch = 1
 share_weights = true
+remove_outliers = false
 
 [task]
 # node classification
@@ -62,7 +65,7 @@ seed = -1  # use < 0 for random
 gpu = false
 
 [model]
-epoch = 100
+epoch = 50
 learning_rate = 0.01
 patience = 7  # < 0 to disable
 mini_batch = false
