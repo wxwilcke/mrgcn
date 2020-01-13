@@ -362,27 +362,25 @@ def run(args, tsv_writer, config):
                     # stored as list of arrays
                     feature_dim = 0 if datatype == "xsd.string" else 1
                     feature_size = encodings[0].shape[feature_dim]
-                    modules_config.append((datatype, (feature_config['batch_size'],
+                    modules_config.append((datatype, (feature_config['passes_per_batch'],
                                                       feature_size,
                                                       c)))
                 if datatype in ["blob.image"]:
                     # stored as tensor
-                    modules_config.append((datatype, (feature_config['batch_size'],
+                    modules_config.append((datatype, (feature_config['passes_per_batch'],
                                                       encodings.shape[1:],
                                                       c)))
 
                 C += c
 
-            nepoch = config['model']['epoch'] if config['model']['mini_batch']\
-                    else -1
-
+            nepoch = config['model']['epoch']
             encoding_sets = [(f, mkbatches(*f,
-                                           batch_size=feature_config['batch_size'],
-                                           nepoch=nepoch))
+                                           nepoch=nepoch,
+                                           passes_per_batch=feature_config['passes_per_batch']))
                              for f in encoding_sets] if datatype == "blob.image"\
                     else [(f, mkbatches_varlength(*f,
-                                                  max_size=feature_config['batch_size'],
-                                                  nepoch=nepoch))
+                                                  nepoch=nepoch,
+                                                  passes_per_batch=feature_config['passes_per_batch']))
                           for f in encoding_sets]
 
             X.append((datatype, encoding_sets))

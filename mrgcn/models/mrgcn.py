@@ -3,9 +3,9 @@
 import logging
 from operator import itemgetter
 
+#import psutil
 import torch
 import torch.nn as nn
-import torch.utils.data as td
 
 from mrgcn.data.utils import (collate_zero_padding,
                               scipy_sparse_list_to_pytorch_sparse)
@@ -16,6 +16,7 @@ from mrgcn.models.rgcn import RGCN
 
 
 logger = logging.getLogger(__name__)
+#PROCESS = psutil.Process()  # debug
 
 class MRGCN(nn.Module):
     def __init__(self, modules, embedding_modules, num_relations,
@@ -131,6 +132,8 @@ class MRGCN(nn.Module):
                         batch = torch.as_tensor(batch)
 
                     # forward pass
+                    #print(" {} - {} GB".format(batch.size(),
+                    #                          PROCESS.memory_info().rss/1e9))
                     batch_dev = batch.to(device)
                     if batch_grad_idx < 0:
                         # compute gradients on whole dataset

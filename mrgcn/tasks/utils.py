@@ -157,30 +157,7 @@ def sample_mask(idx, n):
     mask[idx] = 1
     return np.array(mask, dtype=np.bool)
 
-def mkbatches(mat, node_idx, C, _, nsets, nbins=10, batch_size=100,
-              nepoch=-1):
-    """ split N x * array in batches
-    """
-    n = mat.shape[0]  # number of samples
-    idc = np.array(range(n), dtype=np.int32)
-    if batch_size > 0:
-        nbins = np.ceil(len(idc)/batch_size)
-
-    # if mini-batches are used, force splitting by a whole number
-    if nepoch > 0 and nepoch%nbins > 0:
-        op = 1
-        if (nepoch/nbins)%1 >= 0.5:
-            op *= -1
-        while nepoch%nbins > 0:
-            nbins += op
-    idc_assignments = np.array_split(idc, nbins)
-
-    node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
-                        for slce in idc_assignments]
-
-    return list(zip(idc_assignments, node_assignments))
-
-def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
+def mkbatches_varlength_alt(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
                         max_size=100, nepoch=-1):
     """ :param sequences: a list with M arrays of length ?
                     M :- number of nodes with this feature M <= N
@@ -304,3 +281,38 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _, max_bins=-1,
 
     return list(zip(seq_assignments_final, node_assignments_final))
 
+def mkbatches(mat, node_idx, C, _, nsets, nepoch, passes_per_batch=1):
+    """ split N x * array in batches
+    """
+    n = mat.shape[0]  # number of samples
+    idc = np.array(range(n), dtype=np.int32)
+
+    nbins = nepoch
+    if passes_per_batch > 1:
+        nbins = nepoch//passes_per_batch
+
+    idc_assignments = np.array_split(idc, nbins)
+    node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
+                        for slce in idc_assignments]
+
+    return list(zip(idc_assignments, node_assignments))
+
+def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _,
+                            nepoch, passes_per_batch=1):
+    n = len(sequences)
+    # sort on length
+    idc = np.array(range(n), dtype=np.int32)
+    seq_length_map_sorted, node_idx_sorted, sequences_sorted_idc = zip(
+        *sorted(zip(seq_length_map,
+                    node_idx,
+                    idc)))
+
+    nbins = nepoch
+    if passes_per_batch > 1:
+        nbins = nepoch//passes_per_batch
+
+    seq_assignments = np.array_split(sequences_sorted_idc, nbins)
+    node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
+                        for slce in seq_assignments]
+
+    return list(zip(seq_assignments, node_assignments))
