@@ -35,20 +35,23 @@ share_weights = false
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-batch_size = 100
+passes_per_batch = 1
 share_weights = false
+remove_outliers = false
 
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-batch_size = 100
+passes_per_batch = 1
 share_weights = false
+remove_outliers = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
-batch_size = 100
+passes_per_batch = 1
 share_weights = false
+remove_outliers = false
 
 [task]
 # node classification

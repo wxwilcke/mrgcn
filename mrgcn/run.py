@@ -29,7 +29,8 @@ from mrgcn.tasks.utils import (mksplits,
                                mkfolds,
                                strip_graph,
                                mkbatches,
-                               mkbatches_varlength)
+                               mkbatches_varlength,
+                               remove_outliers)
 
 
 VERSION = 0.1
@@ -372,6 +373,10 @@ def run(args, tsv_writer, config):
                                                       c)))
 
                 C += c
+
+            # remove outliers?
+            if feature_config['remove_outliers']:
+                encoding_sets = [remove_outliers(*f) for f in encoding_sets]
 
             nepoch = config['model']['epoch']
             encoding_sets = [(f, mkbatches(*f,

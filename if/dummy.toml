@@ -1,11 +1,13 @@
+### ONLY FOR TESTING ###
+
 # Dataset configuration file
 version = 0.1
 
 # name of the dataset
-name = "MUTAG"
+name = "DUMMY"
 
 [graph]
-file = "../../datasets/mutag/mutag.nt.gz"
+file = "../../datasets/dummy/aifb_gYear_string_numeric_img_geo_bool_date_dummy.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -15,52 +17,52 @@ separate_literals = true
 [[graph.features]]
 datatype = 'xsd.numeric'
 include = true
-share_weights = true
+share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = true
-share_weights = true
+share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.date'
 include = true
-share_weights = true 
+share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.boolean'
 include = true
-share_weights = true
+share_weights = false 
 
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
 passes_per_batch = 1
-share_weights = true
+share_weights = false
 remove_outliers = false
 
 [[graph.features]]
 datatype = 'blob.image'
 include = true
 passes_per_batch = 1
-share_weights = true
+share_weights = false
 remove_outliers = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
 passes_per_batch = 1
-share_weights = true
+share_weights = false
 remove_outliers = false
 
 [task]
 # node classification
 instance_type = ''
-target_property = 'http://dl-learner.org/carcinogenesis#isMutagenic'
-target_property_inv = ''
+target_property = 'http://swrc.ontoware.org/ontology#affiliation'
+target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
 target_classes = []
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = 10  # use < 0 to disable (single run)
+kfolds = 3  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 
@@ -69,9 +71,9 @@ epoch = 50
 learning_rate = 0.01
 patience = 7  # < 0 to disable
 mini_batch = false
-num_bases = 30
+num_bases = 0
 p_dropout = 0.0
-l2norm = 5e-4
+l2norm = 0.0
 bias = false
 
 [[model.layers]]

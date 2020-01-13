@@ -14,41 +14,44 @@ separate_literals = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = true
+include = false
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = true
+include = false
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = true
+include = false
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.boolean'
-include = true
+include = false
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-batch_size = 100
-share_weights = false
+passes_per_batch = 1
+share_weights = true
+remove_outliers = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = true
-batch_size = 100
+include = false
+passes_per_batch = 1
 share_weights = false
+remove_outliers = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = true
-batch_size = 100
+include = false
+passes_per_batch = 1
 share_weights = false
+remove_outliers = false
 
 [task]
 # node classification
@@ -57,9 +60,9 @@ target_property = 'http://purl.org/collections/nl/am/objectCategory'
 target_property_inv = 'http://purl.org/collections/nl/am/material'
 target_classes = []
 dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = 10  # use < 0 to disable (single run)
+kfolds = -1  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
-gpu = true
+gpu = false
 
 [model]
 epoch = 50

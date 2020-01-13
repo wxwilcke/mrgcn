@@ -316,3 +316,32 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _,
                         for slce in seq_assignments]
 
     return list(zip(seq_assignments, node_assignments))
+
+def remove_outliers(sequences, node_idx, C, seq_length_map, nsets):
+    # split outliers
+    q25 = np.quantile(seq_length_map, 0.25)
+    q75 = np.quantile(seq_length_map, 0.75)
+    IQR = q75 - q25
+    cut_off = IQR * 1.5
+
+    if IQR <= 0.0:  # no length difference
+        return [sequences, node_idx, C, seq_length_map, nsets]
+
+    sequences_filtered = list()
+    node_idx_filtered = list()
+    seq_length_map_filtered = list()
+    for i, seq_length in enumerate(seq_length_map):
+        if seq_length < q25 - cut_off or seq_length > q75 + cut_off:
+            # skip outlier
+            continue
+
+        sequences_filtered.append(sequences[i])
+        node_idx_filtered.append(node_idx[i])
+        seq_length_map_filtered.append(seq_length)
+
+    n = len(sequences_filtered)
+    d = len(sequences) - n
+    if d > 0:
+        logger.debug("Filtered {} outliers ({} remain)".format(d, n))
+
+    return [sequences_filtered, node_idx_filtered, C, seq_length_map_filtered, nsets]
