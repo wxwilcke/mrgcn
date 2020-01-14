@@ -12,7 +12,7 @@ import scipy.sparse as sp
 
 _REGEX_CHAR = "[\u0001-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
 _REGEX_STRING = "{}+".format(_REGEX_CHAR)  # skip empty string
-_MAX_CHARS = 256  # one-hot encoded
+_MAX_CHARS = 512  # one-hot encoded
 _VOCAB = [chr(32)] + [chr(i) for i in range(97, 123)] + [chr(i) for i in range(48, 58)]
 _VOCAB_MAP = {v:k for k,v in enumerate(_VOCAB)}
 _VOCAB_MAX_IDX = len(_VOCAB)
@@ -45,7 +45,7 @@ def generate_features(nodes_map, node_predicate_map, config):
               """
     logger.debug("Generating string features")
 
-    C = 32
+    C = 16
 
     if True:  #not config['share_weights']:
         return generate_relationwise_features(nodes_map, node_predicate_map, C, config)
