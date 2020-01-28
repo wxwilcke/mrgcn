@@ -1,5 +1,4 @@
 # Dataset configuration file
-version = 0.1
 
 # name of the dataset
 name = "DMG4C"
@@ -55,15 +54,8 @@ remove_outliers = false
 
 [task]
 # node classification
-instance_type = 'http://dbpedia.org/ontology/Monument'
 target_property = 'https://data.labs.pdok.nl/rce/def/monumentCode'
 target_property_inv = ''
-target_classes = ["https://data.labs.pdok.nl/rce/def/woonhuis", 
-                  "https://data.labs.pdok.nl/rce/def/agrarischGebouw",
-				  "https://data.labs.pdok.nl/rce/def/losObject",
-				  "https://data.labs.pdok.nl/rce/def/kerk"]
-dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = 10  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 

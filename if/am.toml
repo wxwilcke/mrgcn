@@ -1,5 +1,4 @@
 # Dataset configuration file
-version = 0.1
 
 # name of the dataset
 name = "AM"
@@ -55,12 +54,8 @@ remove_outliers = false
 
 [task]
 # node classification
-instance_type = ''
 target_property = 'http://purl.org/collections/nl/am/objectCategory'
 target_property_inv = 'http://purl.org/collections/nl/am/material'
-target_classes = []
-dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = -1  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 

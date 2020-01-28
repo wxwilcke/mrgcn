@@ -2,8 +2,10 @@
 
 from itertools import cycle
 import logging
+import os
 from os import access, F_OK, R_OK, W_OK
 from os.path import split
+import random
 
 import numpy as np
 import torch
@@ -34,6 +36,18 @@ def is_writable(filename):
 def is_gzip(filename):
     return True if filename.endswith('.gz') else False
 
+def set_seed(seed=-1):
+    if seed < 0:
+        seed = np.random.randint(0, 2**32-1)
+
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    logger.debug("Setting seed to {}".format(seed))
+
 def scipy_sparse_list_to_pytorch_sparse(sp_inputs):
     return torch.stack([scipy_sparse_to_pytorch_sparse(sp) for sp in sp_inputs],
                        dim = 0)
@@ -44,19 +58,6 @@ def scipy_sparse_to_pytorch_sparse(sp_input):
                                    torch.Tensor(sp_input.data),
                                    sp_input.shape,
                                    dtype=torch.float32)
-
-#class SparseDataset(Dataset):
-#    n = 0
-#
-#    def __init__(self, sp_input):
-#        self.n = sp_input.size(0)
-#        self.sp = sp_input
-#
-#    def __len__(self):
-#        return self.n
-#
-#    def __getitem__(self, idx):
-#        return self.sp[idx].to_dense()
 
 class SparseDataset(Dataset):
     n = 0
@@ -94,8 +95,6 @@ def collate_zero_padding(batch, time_dim, max_batch_length=999,
         data = list(seq.data)
         feat_idc = list(feature_idc)
         seq_idc = list(sequence_idc)
-
-        seq_length = seq.shape[time_dim]
 
         coordinates = (feat_idc, seq_idc) if time_dim == 1\
                 else (seq_idc, feat_idc)

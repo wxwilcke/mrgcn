@@ -21,12 +21,17 @@ def run(args, config):
        True in [feature['include'] for feature in config['graph']['features']]:
         featureless = False
 
-    with KnowledgeGraph(graph=config['graph']['file']) as kg:
-        targets = strip_graph(kg, config)
-        A, nodes_idx = graph_structure.generate(kg, config)
-        F, Y, X_node_map = build_dataset(kg, nodes_idx, targets, config, featureless)
+    target_triples = dict()
+    for split in ("train", "valid", "test"):
+        with KnowledgeGraph(graph=config['graph'][split]) as kg_split:
+            target_triples[split] = frozenset(kg_split.graph)
 
-    return (A, F, Y, X_node_map)
+    with KnowledgeGraph(graph=config['graph']['file']) as kg:
+        strip_graph(kg, config)
+        A, nodes_idx = graph_structure.generate(kg, config)
+        F, Y = build_dataset(kg, nodes_idx, target_triples, config, featureless)
+
+    return (A, F, Y)
 
 def init_logger(filename, verbose=0):
     logging.basicConfig(filename=filename,
@@ -71,6 +76,6 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     with Tarball(baseFilename+'.tar', 'w') as tb:
-        tb.store(run(args, config), names=['A', 'F', 'Y', 'X_node_map'])
+        tb.store(run(args, config), names=['A', 'F', 'Y'])
 
     logging.shutdown()

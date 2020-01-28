@@ -1,64 +1,63 @@
 # Dataset configuration file
 
 # name of the dataset
-name = "AIFB"
+name = "fb15k"
 
 [graph]
-file = "../../datasets/aifb/aifb_revised_stripped.nt.gz"
-train = "../../datasets/aifb/aifb_train_set.nt.gz"
-valid = "../../datasets/aifb/aifb_valid_set.nt.gz"
-test = "../../datasets/aifb/aifb_test_set.nt.gz"
+file = "../../datasets/fb15k/rdf/
+samples_train = "../../datasets/fb15k/rdf/freebase_mtr100_mte100-train.nt.gz"
+samples_valid = "../../datasets/fb15k/rdf/freebase_mtr100_mte100-valid.nt.gz"
+samples_test = "../../datasets/fb15k/rdf/freebase_mtr100_mte100-test.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-separate_literals = false
+normalize = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'
 include = true
-share_weights = true
-
-[[graph.features]]
-datatype = 'xsd.gYear'
-include = true
-share_weights = true
-
-[[graph.features]]
-datatype = 'xsd.date'
-include = true
-share_weights = true 
+share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.boolean'
 include = true
-share_weights = true 
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.gYear'
+include = true
+share_weights = false
+
+[[graph.features]]
+datatype = 'xsd.date'
+include = true
+share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
-passes_per_batch = 2
-share_weights = true
-remove_outliers = true
+include = true
+passes_per_batch = 1
+share_weights = false
+remove_outliers = false
 
 [[graph.features]]
 datatype = 'blob.image'
 include = true
 passes_per_batch = 1
-share_weights = true
+share_weights = false
 remove_outliers = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
 passes_per_batch = 1
-share_weights = true
+share_weights = false
 remove_outliers = false
 
 [task]
 # node classification
-target_property = 'http://swrc.ontoware.org/ontology#affiliation'
-target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
+target_property_inv = '<URI>'
 seed = -1  # use < 0 for random
 gpu = false
 
@@ -68,7 +67,7 @@ learning_rate = 0.01
 patience = 7  # < 0 to disable
 mini_batch = false
 num_bases = 0
-p_dropout = 0
+p_dropout = 0.0
 l2norm = 0.0
 bias = false
 
