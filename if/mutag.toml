@@ -1,5 +1,4 @@
 # Dataset configuration file
-version = 0.1
 
 # name of the dataset
 name = "MUTAG"
@@ -55,12 +54,8 @@ remove_outliers = false
 
 [task]
 # node classification
-instance_type = ''
 target_property = 'http://dl-learner.org/carcinogenesis#isMutagenic'
 target_property_inv = ''
-target_classes = []
-dataset_ratio = [0.7, 0.2, 0.1]  # train, test, validation
-kfolds = 10  # use < 0 to disable (single run)
 seed = -1  # use < 0 for random
 gpu = false
 

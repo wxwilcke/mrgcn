@@ -3,6 +3,7 @@
 import logging
 
 import numpy as np
+import scipy.sparse as sp
 import torch
 import torch.nn as nn
 
@@ -12,37 +13,10 @@ from mrgcn.models.mrgcn import MRGCN
 
 logger = logging.getLogger(__name__)
 
-def generate_task(knowledge_graph, A, targets, config):
-    logger.debug("Generating node classification task")
-    F, Y, X_node_idx = build_dataset(knowledge_graph, targets, config)
-    C = sum(c for _, _, c, _, _ in F.values())  # number of columns in X
-    model = build_model(C,
-                        Y,
-                        A, config)
-
-    return (F, Y, X_node_idx, model)
-
 def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureless):
     logger.debug("Starting dataset build")
     # generate target matrix
-    classes = {str(t[2]) for t in target_triples}  # unique classes
-    logger.debug("Found {} instances (statements)".format(len(target_triples)))
-    logger.debug("Target classes ({}): {}".format(len(classes), classes))
-
-    # node/class label to integers
-    classes_map = {label:i for i,label in enumerate(classes)}
-    num_nodes = len(nodes_map)
-    num_classes = len(classes_map)
-
-    # note: by converting targets to strings we lose datatype info, but the use
-    # cases where this would matter would be very limited 
-    target_indices = [(nodes_map[x], classes_map[str(y)]) for x, _, y in target_triples]
-    X_node_idx, Y_class_idx = map(np.array, zip(*target_indices))
-
-    # matrix of 1-hot class vectors per node
-    Y = np.zeros((num_nodes, num_classes), dtype=np.int8)
-    for i,j in zip(X_node_idx, Y_class_idx):
-        Y[i, j] = 1
+    Y = mk_target_matrices(target_triples, nodes_map)
 
     if featureless:
         F = dict()
@@ -53,7 +27,31 @@ def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureles
                                separate_literals)
 
     logger.debug("Completed dataset build")
-    return (F, Y, X_node_idx)
+
+    return (F, Y)
+
+def mk_target_matrices(target_triples, nodes_map):
+    classes = {str(c) for split in target_triples.values() for _,_,c in split} # unique classes
+    logger.debug("Target classes ({}): {}".format(len(classes), classes))
+
+    # node/class label to integers
+    classes_map = {label:i for i,label in enumerate(classes)}
+
+    # note: by converting targets to strings we lose datatype info, but the use
+    # cases where this would matter would be very limited 
+    num_nodes = len(nodes_map)
+    num_classes = len(classes_map)
+    Y = dict()
+    for k, split in target_triples.items():
+        logger.debug("Found {} instances ({})".format(len(split), k))
+        target_pair_indices = [(nodes_map[x], classes_map[str(y)]) for x, _, y in split]
+        rows, cols = map(np.array, zip(*target_pair_indices))
+        data = np.ones(len(rows), dtype=np.int8)
+        Y[k] = sp.csr_matrix((data, (rows, cols)),
+                             shape=(num_nodes, num_classes),
+                             dtype=np.int8)
+
+    return Y
 
 def build_model(C, Y, A, modules_config, config, featureless):
     layers = config['model']['layers']
@@ -62,7 +60,7 @@ def build_model(C, Y, A, modules_config, config, featureless):
 
     # get sizes from dataset
     X_dim = C  # == 0 if featureless
-    num_nodes, Y_dim = Y.size()
+    num_nodes, Y_dim = Y['train'].shape
     num_relations = int(A.size()[1]/num_nodes)
 
     modules = list()
@@ -99,14 +97,16 @@ def build_model(C, Y, A, modules_config, config, featureless):
 
     return model
 
-def categorical_accuracy(Y_hat, Y, idx):
+def categorical_accuracy(Y_hat, Y):
+    idx, targets = Y.nonzero()
+    targets = torch.as_tensor(targets, dtype=torch.long)
     _, labels = Y_hat[idx].max(dim=1)
-    _, targets = Y[idx].max(dim=1)
 
     return torch.mean(torch.eq(labels, targets).float())
 
-def categorical_crossentropy(Y_hat, Y, idx, criterion):
+def categorical_crossentropy(Y_hat, Y, criterion):
+    idx, targets = Y.nonzero()
+    targets = torch.as_tensor(targets, dtype=torch.long)
     predictions = Y_hat[idx]
-    _, targets = Y[idx].max(dim=1)
 
     return criterion(predictions, targets)

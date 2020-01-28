@@ -16,34 +16,25 @@ from mrgcn.data.io.tsv import TSV
 from mrgcn.data.utils import (is_readable,
                               is_writable,
                               scipy_sparse_to_pytorch_sparse,
-                              merge_sparse_encodings_sets)
+                              merge_sparse_encodings_sets,
+                              set_seed)
 from mrgcn.encodings import graph_structure
 from mrgcn.encodings.graph_features import construct_feature_matrix, features_included
-from mrgcn.tasks.config import set_seed
 from mrgcn.tasks.node_classification import (build_dataset,
                                              build_model,
                                              categorical_accuracy,
                                              categorical_crossentropy)
-from mrgcn.tasks.utils import (mksplits,
-                               init_fold,
-                               mkfolds,
-                               strip_graph,
+from mrgcn.tasks.utils import (strip_graph,
                                mkbatches,
                                mkbatches_varlength,
                                remove_outliers)
 
 
-VERSION = 0.1
-
-def single_run(A, X, Y, C, X_node_map, tsv_writer, device, config,
+def single_run(A, X, Y, C, tsv_writer, device, config,
                modules_config, featureless):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
-
-    # create splits
-    dataset = mksplits(X, Y, X_node_map, device,
-                            config['task']['dataset_ratio'])
 
     # compile model
     model = build_model(C, Y, A, modules_config, config, featureless)
@@ -77,7 +68,7 @@ def single_run(A, X, Y, C, X_node_map, tsv_writer, device, config,
     nepoch = config['model']['epoch']
     # Log wall-clock time
     t0 = time()
-    for epoch in train_model(A, model, optimizer, criterion, dataset,
+    for epoch in train_model(A, model, optimizer, criterion, X, Y,
                              nepoch, mini_batch, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
@@ -108,115 +99,14 @@ def single_run(A, X, Y, C, X_node_map, tsv_writer, device, config,
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
     # test model
-    test_loss, test_acc = test_model(A, model, criterion, dataset, device)
+    test_loss, test_acc = test_model(A, model, criterion, X, Y, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(test_loss), str(test_acc)])
 
     return (test_loss, test_acc)
 
-def kfold_crossvalidation(A, X, Y, C, X_node_map, k, tsv_writer, device, config,
-                          modules_config, featureless):
-    tsv_writer.writerow(["fold", "epoch",
-                         "training_loss", "training_accurary",
-                         "validation_loss", "validation_accuracy",
-                         "test_loss", "test_accuracy"])
-
-    # compile model
-    model = build_model(C, Y, A, modules_config, config, featureless)
-    modules = {(name.split('.')[1], module)
-               for name, module in model.named_modules() if len(name.split('.')) == 2}
-    params = list()
-    for name, module in modules:
-        if name.startswith("CNN1D"):
-            params.append({"params": module.parameters(), "lr": 1e-3})
-            continue
-        if name.startswith("RNN"):
-            params.append({"params": module.parameters(), "lr": 1e-3})
-            continue
-        params.append({"params": module.parameters()})
-    optimizer = optim.Adam(params,
-                           lr=config['model']['learning_rate'],
-                           weight_decay=config['model']['l2norm'])
-    optimizer_state_zero = optimizer.state_dict()  # save initial state
-    criterion = nn.CrossEntropyLoss()
-
-    # generate fold indices
-    folds_idx = mkfolds(X_node_map.shape[0], k)
-
-    results = []
-    logger.info("Starting {}-fold cross validation".format(k))
-    for fold in range(1, k+1):
-        logger.info("Fold {} / {}".format(fold, k))
-        # initialize fold
-        dataset = init_fold(X, Y, X_node_map, folds_idx[fold-1],
-                            device, config['task']['dataset_ratio'])
-
-        # mini batching
-        mini_batch = config['model']['mini_batch']
-
-        # early stopping
-        patience = config['model']['patience']
-        patience_left = patience
-        best_score = -1
-        best_state = None
-        delta = 1e-4
-
-        # train model
-        nepoch = config['model']['epoch']
-        # Log wall-clock time
-        t0 = time()
-        for epoch in train_model(A, model, optimizer, criterion, dataset,
-                                 nepoch, mini_batch, device):
-            # log metrics
-            tsv_writer.writerow([str(fold),
-                                 str(epoch[0]),
-                                 str(epoch[1]),
-                                 str(epoch[2]),
-                                 str(epoch[3]),
-                                 str(epoch[4]),
-                                 "-1", "-1"])
-
-            # early stopping
-            val_loss = epoch[3]
-            if patience <= 0:
-                continue
-            if best_score < 0:
-                best_score = val_loss
-                best_state = model.state_dict()
-            if val_loss >= best_score - delta:
-                patience_left -= 1
-            else:
-                best_score = val_loss
-                best_state = model.state_dict()
-                patience_left = patience
-            if patience_left <= 0:
-                model.load_state_dict(best_state)
-                logger.info("Early stopping after no improvement for {} epoch".format(patience))
-                break
-
-        logging.info("Training time: {:.2f}s".format(time()-t0))
-
-        # test model
-        test_loss, test_acc = test_model(A, model, criterion, dataset, device)
-        results.append((test_loss, test_acc))
-
-        # log metrics
-        tsv_writer.writerow([str(fold),
-                             "-1", "-1", "-1", "-1", "-1",
-                             str(test_loss), str(test_acc)])
-
-        # reset model and optimizer
-        model.init()
-        optimizer.load_state_dict(optimizer_state_zero)
-
-    mean_loss, mean_acc = tuple(sum(e)/len(e) for e in zip(*results))
-    tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
-                         str(mean_loss), str(mean_acc)])
-
-    return (mean_loss, mean_acc)
-
-def train_model(A, model, optimizer, criterion, dataset, nepoch, mini_batch, device):
+def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device):
     logging.info("Training for {} epoch".format(nepoch))
     model.train(True)
     for epoch in range(1, nepoch+1):
@@ -225,21 +115,17 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch, mini_batch, dev
             batch_grad_idx = -1
 
         # Single training iteration
-        Y_hat = model(dataset['train']['X'], A,
+        Y_hat = model(X, A,
                       batch_grad_idx=batch_grad_idx,
                       device=device)
 
         # Training scores
-        train_loss = categorical_crossentropy(Y_hat, dataset['train']['Y'],
-                                              dataset['train']['idx'], criterion)
-        train_acc = categorical_accuracy(Y_hat, dataset['train']['Y'],
-                                         dataset['train']['idx'])
+        train_loss = categorical_crossentropy(Y_hat, Y['train'], criterion)
+        train_acc = categorical_accuracy(Y_hat, Y['train'])
 
         # validation scores
-        val_loss = categorical_crossentropy(Y_hat, dataset['val']['Y'],
-                                            dataset['val']['idx'], criterion)
-        val_acc = categorical_accuracy(Y_hat, dataset['val']['Y'],
-                                         dataset['val']['idx'])
+        val_loss = categorical_crossentropy(Y_hat, Y['valid'], criterion)
+        val_acc = categorical_accuracy(Y_hat, Y['valid'])
 
         # Zero gradients, perform a backward pass, and update the weights.
         optimizer.zero_grad()
@@ -268,19 +154,17 @@ def train_model(A, model, optimizer, criterion, dataset, nepoch, mini_batch, dev
                train_loss, train_acc,
                val_loss, val_acc)
 
-def test_model(A, model, criterion, dataset, device):
+def test_model(A, model, criterion, X, Y, device):
     # Predict on full dataset
     model.train(False)
     with torch.no_grad():
-        Y_hat = model(dataset['test']['X'], A,
+        Y_hat = model(X, A,
                       batch_grad_idx=-1,
                       device=device)
 
     # scores on test set
-    test_loss = categorical_crossentropy(Y_hat, dataset['test']['Y'],
-                                         dataset['test']['idx'], criterion)
-    test_acc = categorical_accuracy(Y_hat, dataset['test']['Y'],
-                                    dataset['test']['idx'])
+    test_loss = categorical_crossentropy(Y_hat, Y['test'], criterion)
+    test_acc = categorical_accuracy(Y_hat, Y['test'])
 
     test_loss = float(test_loss)
     test_acc = float(test_acc)
@@ -307,10 +191,15 @@ def run(args, tsv_writer, config):
     # prep data
     if args.input is None:
         logging.debug("No tarball supplied - building task prequisites")
+        target_triples = dict()
+        for split in ("train", "valid", "test"):
+            with KnowledgeGraph(graph=config['graph'][split]) as kg_split:
+                target_triples[split] = frozenset(kg_split.graph)
+
         with KnowledgeGraph(graph=config['graph']['file']) as kg:
-            targets = strip_graph(kg, config)
+            strip_graph(kg, config)
             A, nodes_idx = graph_structure.generate(kg, config)
-            F, Y, X_node_map = build_dataset(kg, nodes_idx, targets, config, featureless)
+            F, Y = build_dataset(kg, nodes_idx, target_triples, config, featureless)
     else:
         assert is_readable(args.input)
         logging.debug("Importing prepared tarball")
@@ -318,10 +207,9 @@ def run(args, tsv_writer, config):
             A = tb.get('A')
             F = tb.get('F')
             Y = tb.get('Y')
-            X_node_map = tb.get('X_node_map')
 
     # convert numpy and scipy matrices to pyTorch tensors
-    num_nodes = Y.shape[0]
+    num_nodes = Y["train"].shape[0]
     C = 0  # number of columns in X
     X = [torch.empty((num_nodes,C), dtype=torch.float32)]
     modules_config = list()
@@ -394,28 +282,13 @@ def run(args, tsv_writer, config):
         featureless = True
 
     A = scipy_sparse_to_pytorch_sparse(A)
-    Y = torch.as_tensor(Y)
 
-    if config['task']['kfolds'] < 0:
-        loss, accuracy = single_run(A, X, Y, C, X_node_map, tsv_writer, device,
-                                    config, modules_config, featureless)
-    else:
-        loss, accuracy = kfold_crossvalidation(A, X, Y, C, X_node_map,
-                                               config['task']['kfolds'],
-                                               tsv_writer, device, config,
-                                               modules_config, featureless)
+    loss, accuracy = single_run(A, X, Y, C, tsv_writer, device,
+                                config, modules_config, featureless)
 
     if device == torch.device("cuda"):
         logging.debug("Peak GPU memory used (MB): {}".format(
                       str(torch.cuda.max_memory_allocated()/1.0e6)))
-
-    logging.info("Mean performance: loss {:.4f} / accuracy {:.4f}".format(
-                  loss,
-                  accuracy))
-    if args.verbose < 1:
-        print("Mean performance: loss {:.4f} / accuracy {:.4f}".format(
-                  loss,
-                  accuracy))
 
 def init_logger(filename, verbose=0):
     logging.basicConfig(filename=filename,
@@ -445,9 +318,6 @@ if __name__ == "__main__":
     # load configuration
     assert is_readable(args.config)
     config = toml.load(args.config)
-    if config['version'] != VERSION:
-        raise UserWarning("Supplied config version '{}' differs from expected"+
-                          " version '{}'".format(config['version'], VERSION))
 
     # set output base filename
     baseFilename = "{}{}{}_{}".format(args.output, config['name'], timestamp,\
