@@ -4,7 +4,10 @@
 name = "MUTAG"
 
 [graph]
-file = "../../datasets/mutag/mutag.nt.gz"
+file = "../../datasets/mutag/mutag_stripped.nt.gz"
+train = "../../datasets/mutag/mutag_train_set.nt.gz"
+valid = "../../datasets/mutag/mutag_valid_set.nt.gz"
+test = "../../datasets/mutag/mutag_test_set.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true

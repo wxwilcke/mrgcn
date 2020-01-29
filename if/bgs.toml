@@ -4,7 +4,10 @@
 name = "BGS"
 
 [graph]
-file = "../../datasets/bgs/bgs_revised.nt.gz"
+file = "../../datasets/bgs/bgs_stripped_revised.nt.gz"
+train = "../../datasets/bgs/bgs_train_set.nt.gz"
+valid = "../../datasets/bgs/bgs_valid_set.nt.gz"
+test = "../../datasets/bgs/bgs_test_set.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true

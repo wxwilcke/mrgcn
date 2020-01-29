@@ -4,7 +4,10 @@
 name = "AM"
 
 [graph]
-file = "../../datasets/am/am_revised.nt.gz"
+file = "../../datasets/am/am_stripped_revised_updated.nt.gz"
+train = "../../datasets/am/am_train_set.nt.gz"
+valid = "../../datasets/am/am_valid_set.nt.gz"
+test = "../../datasets/am/am_test_set.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
