@@ -4,7 +4,10 @@
 name = "DMG4C"
 
 [graph]
-file = "../../datasets/dmg/dataset.subset/baseline/monumentsT4C_full-dummyimg.nt.gz"
+file = "../../datasets/dmg/dataset.subset/dmg.nt.gz"
+train = "../../datasets/dmg/dataset.subset/dmg_train_set.nt.gz"
+valid = "../../datasets/dmg/dataset.subset/dmg_valid_set.nt.gz"
+test = "../../datasets/dmg/dataset.subset/dmg_test_set.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true

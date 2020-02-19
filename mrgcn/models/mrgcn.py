@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class MRGCN(nn.Module):
     def __init__(self, modules, embedding_modules, num_relations,
                  num_nodes, num_bases=-1, p_dropout=0.0, featureless=False,
-                 bias=False):
+                 bias=False, link_prediction=False):
         """
         Multimodal Relational Graph Convolutional Network
 
@@ -73,9 +73,10 @@ class MRGCN(nn.Module):
             self.modality_modules[modality].append((module, batch_size))
 
         # add graph convolution layers
-        self.mrgcn = RGCN(modules, num_relations, num_nodes,
-                          num_bases, p_dropout, featureless, bias)
-        self.module_dict["RGCN"] = self.mrgcn
+        self.rgcn = RGCN(modules, num_relations, num_nodes,
+                          num_bases, p_dropout, featureless, bias,
+                          link_prediction)
+        self.module_dict["RGCN"] = self.rgcn
 
     def forward(self, X, A, batch_grad_idx=-1, device=None):
         X, F = X[0], X[1:]
@@ -91,11 +92,11 @@ class MRGCN(nn.Module):
         # Forward pass through graph convolution layers
         #logger.debug(" Forward pass with input of size {} x {}".format(X.size(0),
         #                        X.size(1)))
-        self.mrgcn.to(device)
+        self.rgcn.to(device)
         X_dev = X.to(device)
         A_dev = A.to(device)
 
-        X_dev = self.mrgcn(X_dev, A_dev)
+        X_dev = self.rgcn(X_dev, A_dev)
         X = X_dev.to('cpu')
 
         return X

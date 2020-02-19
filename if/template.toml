@@ -8,7 +8,7 @@ file = "<file>.nt.gz"
 
 train = "<file>.nt.gz"
 valid = "<file>.nt.gz"
-train = "<file>.nt.gz"
+test = "<file>.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true

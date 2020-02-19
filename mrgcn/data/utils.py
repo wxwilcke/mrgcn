@@ -12,6 +12,13 @@ import torch
 from torch.utils.data import Dataset
 import scipy.sparse as sp
 
+from mrgcn.encodings.graph_features import (construct_feature_matrix,
+                                            features_included,
+                                            merge_sparse_encodings_sets)
+from mrgcn.tasks.utils import (mkbatches,
+                               mkbatches_varlength,
+                               remove_outliers)
+
 
 logger = logging.getLogger(__name__)
 
@@ -189,30 +196,73 @@ def collate_repetition_padding(batch, time_dim, max_batch_length=999,
 
     return batch_padded
 
-def merge_sparse_encodings_sets(encodings):
-    encodings_merged = list()
-    node_idx_merged = list()
-    seq_lengths_merged = list()
-    C_max = 0
+def setup_features(F, num_nodes, featureless, config):
+    C = 0  # number of columns in X
+    X = [torch.empty((num_nodes,C), dtype=torch.float32)]
+    modules_config = list()
+    if not featureless:
+        features_enabled = features_included(config)
+        logging.debug("Features included: {}".format(", ".join(features_enabled)))
 
-    for encoding_set, node_idx, C, seq_length_map, _, in encodings:
-        encodings_merged.extend(encoding_set)
-        node_idx_merged.extend(node_idx)
-        seq_lengths_merged.extend(seq_length_map)
+        X, F = construct_feature_matrix(F, features_enabled, num_nodes,
+                                        config['graph']['features'])
+        C += X.shape[1]
+        X = [torch.as_tensor(X)]
 
-        if C > C_max:
-            C_max = C
+        # determine configurations
+        for datatype in features_enabled:
+            if datatype not in F.keys():
+                continue
 
-    return [[encodings_merged, node_idx_merged, C_max, seq_lengths_merged, 1]]
+            logger.debug("Found {} encoding set(s) for datatype {}".format(
+                len(F[datatype]),
+                datatype))
 
-def merge_encodings_sets(encoding_sets):
-    encodings, node_idx, C, seq_length_map, nsets = encoding_sets[0]
-    n = encodings.shape[0]
-    c = int(C/nsets)
+            if datatype not in ['xsd.string', 'ogc.wktLiteral', 'blob.image']:
+                continue
 
-    encodings_merged = np.zeros(shape=(n, c), dtype=np.float32)
-    for i in range(nsets):
-        # assume that non-filled values are zero
-        encodings_merged += encodings[:,i*c:(i+1)*c]
+            feature_configs = config['graph']['features']
+            feature_config = next((conf for conf in feature_configs
+                                   if conf['datatype'] == datatype),
+                                  None)
 
-    return [[encodings_merged, node_idx, c, seq_length_map, 1]]
+            # preprocess
+            encoding_sets = F.pop(datatype, list())
+            if feature_config['share_weights'] and datatype == "xsd.string":
+                # note: images and geometries always share weights atm
+                logger.debug("weight sharing enabled for {}".format(datatype))
+                encoding_sets = merge_sparse_encodings_sets(encoding_sets)
+
+            for encodings, _, c, _, _ in encoding_sets:
+                if datatype in ["xsd.string", "ogc.wktLiteral"]:
+                    # stored as list of arrays
+                    feature_dim = 0 if datatype == "xsd.string" else 1
+                    feature_size = encodings[0].shape[feature_dim]
+                    modules_config.append((datatype, (feature_config['passes_per_batch'],
+                                                      feature_size,
+                                                      c)))
+                if datatype in ["blob.image"]:
+                    # stored as tensor
+                    modules_config.append((datatype, (feature_config['passes_per_batch'],
+                                                      encodings.shape[1:],
+                                                      c)))
+
+                C += c
+
+            # remove outliers?
+            if feature_config['remove_outliers']:
+                encoding_sets = [remove_outliers(*f) for f in encoding_sets]
+
+            nepoch = config['model']['epoch']
+            encoding_sets = [(f, mkbatches(*f,
+                                           nepoch=nepoch,
+                                           passes_per_batch=feature_config['passes_per_batch']))
+                             for f in encoding_sets] if datatype == "blob.image"\
+                    else [(f, mkbatches_varlength(*f,
+                                                  nepoch=nepoch,
+                                                  passes_per_batch=feature_config['passes_per_batch']))
+                          for f in encoding_sets]
+
+            X.append((datatype, encoding_sets))
+
+    return (X, C, modules_config)

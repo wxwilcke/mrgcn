@@ -96,3 +96,4 @@ def remove_outliers(sequences, node_idx, C, seq_length_map, nsets):
         logger.debug("Filtered {} outliers ({} remain)".format(d, n))
 
     return [sequences_filtered, node_idx_filtered, C, seq_length_map_filtered, nsets]
+

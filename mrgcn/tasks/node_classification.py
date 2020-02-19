@@ -1,11 +1,13 @@
 #!/usr/bin/python3
 
 import logging
+from time import time
 
 import numpy as np
 import scipy.sparse as sp
 import torch
 import torch.nn as nn
+import torch.optim as optim
 
 from mrgcn.encodings.graph_features import construct_features
 from mrgcn.models.mrgcn import MRGCN
@@ -13,6 +15,139 @@ from mrgcn.models.mrgcn import MRGCN
 
 logger = logging.getLogger(__name__)
 
+def run(A, X, Y, C, tsv_writer, device, config,
+        modules_config, featureless):
+    tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
+                                  "validation_loss", "validation_accuracy",
+                                  "test_loss", "test_accuracy"])
+
+    # compile model
+    model = build_model(C, Y, A, modules_config, config, featureless)
+    optimizer = optim.Adam(model.parameters(),
+                           lr=config['model']['learning_rate'],
+                           weight_decay=config['model']['l2norm'])
+    criterion = nn.CrossEntropyLoss()
+
+    # mini batching
+    mini_batch = config['model']['mini_batch']
+
+    # early stopping
+    patience = config['model']['patience']
+    patience_left = patience
+    best_score = -1
+    delta = 1e-4
+    best_state = None
+
+    # train model
+    nepoch = config['model']['epoch']
+    # Log wall-clock time
+    t0 = time()
+    for epoch in train_model(A, model, optimizer, criterion, X, Y,
+                             nepoch, mini_batch, device):
+        # log metrics
+        tsv_writer.writerow([str(epoch[0]),
+                             str(epoch[1]),
+                             str(epoch[2]),
+                             str(epoch[3]),
+                             str(epoch[4]),
+                             "-1", "-1"])
+
+        # early stopping
+        val_loss = epoch[3]
+        if patience <= 0:
+            continue
+        if best_score < 0:
+            best_score = val_loss
+            best_state = model.state_dict()
+        if val_loss >= best_score - delta:
+            patience_left -= 1
+        else:
+            best_score = val_loss
+            best_state = model.state_dict()
+            patience_left = patience
+        if patience_left <= 0:
+            model.load_state_dict(best_state)
+            logger.info("Early stopping after no improvement for {} epoch".format(patience))
+            break
+
+    logging.info("Training time: {:.2f}s".format(time()-t0))
+
+    # test model
+    test_loss, test_acc = test_model(A, model, criterion, X, Y, device)
+    # log metrics
+    tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
+                         str(test_loss), str(test_acc)])
+
+    return (test_loss, test_acc)
+
+def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device):
+    logging.info("Training for {} epoch".format(nepoch))
+    model.train(True)
+    for epoch in range(1, nepoch+1):
+        batch_grad_idx = epoch - 1
+        if not mini_batch:
+            batch_grad_idx = -1
+
+        # Single training iteration
+        Y_hat = model(X, A,
+                      batch_grad_idx=batch_grad_idx,
+                      device=device)
+
+        # Training scores
+        train_loss = categorical_crossentropy(Y_hat, Y['train'], criterion)
+        train_acc = categorical_accuracy(Y_hat, Y['train'])
+
+        # validation scores
+        val_loss = categorical_crossentropy(Y_hat, Y['valid'], criterion)
+        val_acc = categorical_accuracy(Y_hat, Y['valid'])
+
+        # Zero gradients, perform a backward pass, and update the weights.
+        optimizer.zero_grad()
+        train_loss.backward()
+        optimizer.step()
+
+        # DEBUG #
+        #for name, param in model.named_parameters():
+        #    logger.info(name + " - grad mean: " + str(float(param.grad.mean())))
+        # DEBUG #
+
+        # cast criterion objects to floats to free the memory of the tensors
+        # they point to
+        train_loss = float(train_loss)
+        train_acc = float(train_acc)
+        val_loss = float(val_loss)
+        val_acc = float(val_acc)
+
+        logging.info("{:04d} ".format(epoch) \
+                     + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
+                                                                  train_acc)
+                     + "| val loss {:.4f} / acc {:.4f}".format(val_loss,
+                                                               val_acc))
+
+        yield (epoch,
+               train_loss, train_acc,
+               val_loss, val_acc)
+
+def test_model(A, model, criterion, X, Y, device):
+    # Predict on full dataset
+    model.train(False)
+    with torch.no_grad():
+        Y_hat = model(X, A,
+                      batch_grad_idx=-1,
+                      device=device)
+
+    # scores on test set
+    test_loss = categorical_crossentropy(Y_hat, Y['test'], criterion)
+    test_acc = categorical_accuracy(Y_hat, Y['test'])
+
+    test_loss = float(test_loss)
+    test_acc = float(test_acc)
+
+    logging.info("Performance on test set: loss {:.4f} / accuracy {:.4f}".format(
+                  test_loss,
+                  test_acc))
+
+    return (test_loss, test_acc)
 def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureless):
     logger.debug("Starting dataset build")
     # generate target matrix

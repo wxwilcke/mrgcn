@@ -56,8 +56,6 @@ share_weights = false
 remove_outliers = false
 
 [task]
-# node classification
-target_property_inv = '<URI>'
 seed = -1  # use < 0 for random
 gpu = false
 
