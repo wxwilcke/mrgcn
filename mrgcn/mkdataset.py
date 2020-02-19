@@ -10,7 +10,8 @@ from mrgcn.data.io.knowledge_graph import KnowledgeGraph
 from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.utils import is_readable, is_writable
 from mrgcn.encodings import graph_structure
-from mrgcn.tasks.node_classification import build_dataset
+import mrgcn.tasks.node_classification as node_classification
+import mrgcn.tasks.link_prediction as link_prediction
 from mrgcn.tasks.utils import strip_graph
 
 def run(args, config):
@@ -21,17 +22,23 @@ def run(args, config):
        True in [feature['include'] for feature in config['graph']['features']]:
         featureless = False
 
-    target_triples = dict()
+    triples = dict()
     for split in ("train", "valid", "test"):
         with KnowledgeGraph(graph=config['graph'][split]) as kg_split:
-            target_triples[split] = frozenset(kg_split.graph)
+            triples[split] = frozenset(kg_split.graph)
 
+    task = config['task']['type']
     with KnowledgeGraph(graph=config['graph']['file']) as kg:
-        strip_graph(kg, config)
-        A, nodes_idx = graph_structure.generate(kg, config)
-        F, Y = build_dataset(kg, nodes_idx, target_triples, config, featureless)
+        if task == "node classification":
+            strip_graph(kg, config)
+            A, nodes_map = graph_structure.generate(kg, config)
+            F, Y = node_classification.build_dataset(kg, nodes_map, triples, config, featureless)
+            nodes_map = None  # not needed anymore
+        elif task == "link prediction":
+            A, nodes_map = graph_structure.generate(kg, config)
+            F, Y = link_prediction.build_dataset(kg, nodes_map, triples, config, featureless)
 
-    return (A, F, Y)
+    return (A, F, Y, nodes_map)
 
 def init_logger(filename, verbose=0):
     logging.basicConfig(filename=filename,
@@ -76,6 +83,6 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     with Tarball(baseFilename+'.tar', 'w') as tb:
-        tb.store(run(args, config), names=['A', 'F', 'Y'])
+        tb.store(run(args, config), names=['A', 'F', 'Y', 'nodes_map'])
 
     logging.shutdown()

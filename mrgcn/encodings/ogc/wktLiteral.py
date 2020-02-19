@@ -47,21 +47,13 @@ def generate_features(nodes_map, node_predicate_map, config):
             continue
 
         value = str(node)  ## empty value bug workaround
-        if validate(value) is None:
-            continue
+        #if validate(value) is None:
+        #    continue
 
         vec = gv.vectorize_wkt(value)[:_MAX_POINTS,:]
         vec_length = vec.shape[0]
         if vec_length <= 0:
             continue
-
-        # pad with repetition  - move to preload phase 
-        #c = cycle(vec)
-        #unfilled = _MAX_POINTS - vec_length
-        #if unfilled > 0:
-        #    vec.extend([next(c) for _ in range(unfilled)])
-
-        #vec = np.array(vec)
 
         # create matrix with time dimension over rows (RNN-like)
         sp_rows, sp_cols = np.where(vec > 0.0)

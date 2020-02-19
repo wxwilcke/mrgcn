@@ -9,7 +9,7 @@ from mrgcn.layers.graph import GraphConvolution
 
 class RGCN(nn.Module):
     def __init__(self, modules, num_relations, num_nodes, num_bases,
-                 p_dropout, featureless, bias):
+                 p_dropout, featureless, bias, link_prediction):
         """
         Relational Graph Convolutional Network
 
@@ -52,6 +52,11 @@ class RGCN(nn.Module):
                                               input_layer=False,
                                               bias=bias)
             self.activations['layer_'+str(i)] = f_activation
+
+        if link_prediction:
+            size = (num_relations, num_nodes, modules[-1][1])
+            self.relations = nn.Parameter(torch.empty(size))
+            nn.init.xavier_uniform_(self.relations)
 
     def forward(self, X, A):
         # Forward pass with full batch

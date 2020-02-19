@@ -69,8 +69,8 @@ def generate_nodewise_features(nodes_map, C, config):
             continue
 
         node._value = str(node)  ## empty value bug workaround
-        if validate(node.value) is None:  # if invalid syntax
-            continue
+        #if validate(node.value) is None:  # if invalid syntax
+        #    continue
 
         sequence = preprocess(node.value)
         sequence = encode(sequence)[:_MAX_CHARS]
@@ -110,8 +110,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             continue
 
         node._value = str(node)  ## empty value bug workaround
-        if validate(node.value) is None:  # if invalid syntax
-            continue
+        #if validate(node.value) is None:  # if invalid syntax
+        #    continue
 
         sequence = preprocess(node.value)
         sequence = encode(sequence)[:_MAX_CHARS]

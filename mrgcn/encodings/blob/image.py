@@ -54,8 +54,8 @@ def generate_features(nodes_map, node_predicate_map, config):
             continue
 
         value = str(node)  ## empty value bug workaround
-        if validate(value) is None:  # if invalid syntax
-            continue
+        #if validate(value) is None:  # if invalid syntax
+        #    continue
 
         blob = b64_to_img(value)
         blob = downsample(blob)
@@ -90,7 +90,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     return [[encodings[:m], node_idx[:m], C, None, 1]]
 
 def b64_to_img(b64string):
-    im = Image.open(BytesIO(base64.decodebytes(b64string.encode())))
+    im = Image.open(BytesIO(base64.urlsafe_b64decode(b64string.encode())))
     if im.mode != _IMG_MODE:
         im = im.convert(_IMG_MODE)
 

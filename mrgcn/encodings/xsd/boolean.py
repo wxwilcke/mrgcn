@@ -43,8 +43,8 @@ def generate_nodewise_features(nodes_map, C, config):
             continue
 
         value = str(node)  ## empty value bug workaround
-        if validate(value) is None:
-            continue
+        #if validate(value) is None:
+        #    continue
 
         b = 1.0 if value == "true" or value == "1" else -1.0
 
@@ -73,8 +73,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             continue
 
         value = str(node)  ## empty value bug workaround
-        if validate(value) is None:
-            continue
+        #if validate(value) is None:
+        #    continue
 
         b = 1.0 if value == "true" or value == "1" else -1.0
 
