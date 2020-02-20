@@ -97,3 +97,9 @@ def remove_outliers(sequences, node_idx, C, seq_length_map, nsets):
 
     return [sequences_filtered, node_idx_filtered, C, seq_length_map_filtered, nsets]
 
+def triples_to_indices(kg, node_map, edge_map, separate_literals=False):
+    data = np.zeros((len(kg), 3), dtype=np.int32)
+    for i, (s, p, o) in enumerate(kg.triples(separate_literals=separate_literals)):
+        data[i] = np.array([node_map[s], edge_map[p], node_map[o]], dtype=np.int32)
+
+    return data

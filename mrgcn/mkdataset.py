@@ -12,9 +12,11 @@ from mrgcn.data.utils import is_readable, is_writable
 from mrgcn.encodings import graph_structure
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
-from mrgcn.tasks.utils import strip_graph
+from mrgcn.tasks.utils import strip_graph, triples_to_indices
 
 def run(args, config):
+    task = config['task']['type']
+    logger.info("Task set to {}".format(task))
     logger.info("Generating data structures")
 
     featureless = True
@@ -22,23 +24,34 @@ def run(args, config):
        True in [feature['include'] for feature in config['graph']['features']]:
         featureless = False
 
-    triples = dict()
-    for split in ("train", "valid", "test"):
-        with KnowledgeGraph(graph=config['graph'][split]) as kg_split:
-            triples[split] = frozenset(kg_split.graph)
+    data = None
+    if task == "node classification":
+        triples = dict()
+        for split in ("train", "valid", "test"):
+            with KnowledgeGraph(graph=config['graph'][split]) as kg_split:
+                triples[split] = frozenset(kg_split.graph)
 
-    task = config['task']['type']
-    with KnowledgeGraph(graph=config['graph']['file']) as kg:
-        if task == "node classification":
+        with KnowledgeGraph(graph=config['graph']['context']) as kg:
             strip_graph(kg, config)
-            A, nodes_map = graph_structure.generate(kg, config)
-            F, Y = node_classification.build_dataset(kg, nodes_map, triples, config, featureless)
-            nodes_map = None  # not needed anymore
-        elif task == "link prediction":
-            A, nodes_map = graph_structure.generate(kg, config)
-            F, Y = link_prediction.build_dataset(kg, nodes_map, triples, config, featureless)
+            A, nodes_map, _ = graph_structure.generate(kg, config)
+            F, Y = node_classification.build_dataset(kg, nodes_map, triples, config,
+                                                     featureless)
+    elif task == "link prediction":
+        with KnowledgeGraph([config['graph']['train'],
+                             config['graph']['valid'],
+                             config['graph']['test']]) as kg:
+            A, nodes_map, edges_map = graph_structure.generate(kg, config)
+            F, Y = link_prediction.build_dataset(kg, nodes_map,
+                                                 config, featureless)
 
-    return (A, F, Y, nodes_map)
+        separate_literals = config['graph']['structural']['separate_literals']
+        data = dict()
+        for split in ("train", "valid", "test"):
+            with KnowledgeGraph(graph=config['graph'][split]) as kg_split:
+                data[split] = triples_to_indices(kg_split, nodes_map, edges_map,
+                                                 separate_literals)
+
+    return (A, F, Y, data)
 
 def init_logger(filename, verbose=0):
     logging.basicConfig(filename=filename,
@@ -83,6 +96,6 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     with Tarball(baseFilename+'.tar', 'w') as tb:
-        tb.store(run(args, config), names=['A', 'F', 'Y', 'nodes_map'])
+        tb.store(run(args, config), names=['A', 'F', 'Y', 'data'])
 
     logging.shutdown()

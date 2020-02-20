@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 def generate(knowledge_graph, config):
     separate_literals = config['graph']['structural']['separate_literals']
     # create mapping to integers [0, ...]
-    properties_dict = {prop: i for i, prop in enumerate(knowledge_graph.properties())}
+    properties_dict = {prop: i for i, prop in
+                       enumerate(set(knowledge_graph.properties()))}
     nodes_dict = {node: i for i, node in
                   enumerate(knowledge_graph.atoms(separate_literals))}
     num_nodes = len(nodes_dict)
@@ -31,7 +32,7 @@ def generate(knowledge_graph, config):
     adjacencies.append(ident)
 
     # stack into a n x nR matrix
-    return [sp.hstack(adjacencies, format="csr"), nodes_dict]
+    return [sp.hstack(adjacencies, format="csr"), nodes_dict, properties_dict]
 
 def generate_adjacency_matrices(knowledge_graph,
                                 properties_dict,

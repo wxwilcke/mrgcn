@@ -8,26 +8,20 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from mrgcn.data.io.knowledge_graph import KnowledgeGraph
 from mrgcn.encodings.graph_features import construct_features
 from mrgcn.models.mrgcn import MRGCN
 
 
 logger = logging.getLogger(__name__)
 
-def run(A, X, C, nodes_map, edges_map, tsv_writer, device, config,
+def run(A, X, C, data, tsv_writer, device, config,
         modules_config, featureless):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
 
-    # load triples
-    data = dict()
-    for split in ("train", "valid", "test"):
-        with KnowledgeGraph(graph=config['graph'][split]) as kg_split:
-            data[split] = set(kg_split.graph)
-
     # compile model
+    num_nodes = A.shape[0]
     model = build_model(C, A, modules_config, config, featureless)
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
@@ -48,7 +42,7 @@ def run(A, X, C, nodes_map, edges_map, tsv_writer, device, config,
     nepoch = config['model']['epoch']
     # Log wall-clock time
     t0 = time()
-    for epoch in train_model(A, X, data, nodes_map, edges_map, model, optimizer,
+    for epoch in train_model(A, X, data, num_nodes, model, optimizer,
                              criterion, nepoch, mini_batch, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
@@ -79,7 +73,7 @@ def run(A, X, C, nodes_map, edges_map, tsv_writer, device, config,
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
     # test model
-    test_loss, test_acc = test_model(A, X, data, nodes_map, edges_map, model,
+    test_loss, test_acc = test_model(A, X, data, num_nodes, model,
                                      criterion, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
@@ -87,47 +81,43 @@ def run(A, X, C, nodes_map, edges_map, tsv_writer, device, config,
 
     return (test_loss, test_acc)
 
-def train_model(A, X, data, nodes_map, edges_map, model, optimizer, criterion,
+def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                 nepoch, mini_batch, device):
     logging.info("Training for {} epoch".format(nepoch))
-    model.train(True)
     for epoch in range(1, nepoch+1):
-        batch_grad_idx = epoch - 1
-        if not mini_batch:
-            batch_grad_idx = -1
-
-        # Single training iteration
-        node_embeddings = model(X, A,
-                                batch_grad_idx=batch_grad_idx,
-                                device=device)
-        edge_embeddings = model.rcgn.relations
-
-
-        # DistMult
+        # MRGCN + DistMult
         scores = dict()
         for split in ('train', 'valid'):
             if split == "train":
+                batch_grad_idx = epoch - 1
+                if not mini_batch:
+                    batch_grad_idx = -1
+
                 model.train()
             else:
+                batch_grad_idx = -1
                 model.eval()
 
+            # Single iteration
+            node_embeddings = model(X, A,
+                                    batch_grad_idx=batch_grad_idx,
+                                    device=device)
+            edge_embeddings = model.rgcn.relations
+
             # sample negative triples
-            nsamples = len(data[split])
+            nsamples = data[split].shape[0]
             neg_samples_idx = np.random.choice(np.arange(nsamples),
                                                nsamples//2,
                                                replace=False)
 
             # embed and score triples
-            n = len(data[split])
-            s_indices = np.zeros(n)
-            p_indices = np.zeros(n)
-            o_indices = np.zeros(n)
-            for i, (s, p, o) in enumerate(data[split]):
-                s_idx = nodes_map[s]
-                p_idx = edges_map[p]
-                o_idx = nodes_map[o]
+            s_indices = np.zeros(nsamples)
+            p_indices = np.zeros(nsamples)
+            o_indices = np.zeros(nsamples)
+            for i in range(nsamples):
+                s_idx, p_idx, o_idx = data[split][i]
                 if i in neg_samples_idx:
-                    corrupt_idx = np.random.choice(np.arange(nsamples))
+                    corrupt_idx = np.random.choice(np.arange(num_nodes))
                     if np.random.rand() > 0.5:
                         # corrupt head
                         s_idx = corrupt_idx
@@ -143,13 +133,14 @@ def train_model(A, X, data, nodes_map, edges_map, model, optimizer, criterion,
                                    edge_embeddings[p_indices],
                                    node_embeddings[o_indices])
 
-            # create labels; positive samples are 1, negative 1
-            Y = np.ones(n, dtype=np.int8)
+            # create labels; positive samples are 1, negative 0
+            Y = np.ones(nsamples, dtype=np.int8)
             Y[neg_samples_idx] = 0
 
             # scores
-            scores[split] = (binary_crossentropy(Y_hat, Y, criterion),
-                             compute_accuracy(Y_hat, Y))
+            loss = binary_crossentropy(Y_hat, Y, criterion)
+            scores[split] = (float(loss),
+                             float(compute_accuracy(Y_hat, Y)))
 
             if split == "train":
                 # Zero gradients, perform a backward pass, and update the weights.
@@ -157,56 +148,39 @@ def train_model(A, X, data, nodes_map, edges_map, model, optimizer, criterion,
                 scores[split][0].backward()  # training loss
                 optimizer.step()
 
-        # DEBUG #
-        #for name, param in model.named_parameters():
-        #    logger.info(name + " - grad mean: " + str(float(param.grad.mean())))
-        # DEBUG #
+            logging.info("{:04d} ".format(epoch) \
+                         + "| train loss {:.4f} / acc {:.4f}".format(scores["train"][0],
+                                                                     scores["train"][1])
+                         + "| val loss {:.4f} / acc {:.4f}".format(scores["valid"][0],
+                                                                   scores["valid"][1]))
 
-        # cast criterion objects to floats to free the memory of the tensors
-        # they point to
-        train_loss = float(scores["train"][0])
-        train_acc = float(scores["train"][1])
-        val_loss = float(scores["valid"][0])
-        val_acc = float(scores["valid"][1])
-        del scores
+            yield (epoch, scores["train"][0], scores["train"][1],
+                   scores["valid"][0], scores["valid"][1])
 
-        logging.info("{:04d} ".format(epoch) \
-                     + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
-                                                                  train_acc)
-                     + "| val loss {:.4f} / acc {:.4f}".format(val_loss,
-                                                               val_acc))
-
-        yield (epoch,
-               train_loss, train_acc,
-               val_loss, val_acc)
-
-def test_model(A, X, data, nodes_map, edges_map, model, criterion, device):
+def test_model(A, X, data, num_nodes, model, criterion, device):
     # Predict on full dataset
     model.train(False)
     with torch.no_grad():
         node_embeddings = model(X, A,
                                 batch_grad_idx=-1,
                                 device=device)
-        edge_embeddings = model.rcgn.relations
+        edge_embeddings = model.rgcn.relations
 
     # DistMult
     # sample negative triples
-    nsamples = len(data["test"])
+    nsamples = data["test"].shape[0]
     neg_samples_idx = np.random.choice(np.arange(nsamples),
                                        nsamples//2,
                                        replace=False)
 
     # embed and score triples
-    n = len(data["test"])
-    s_indices = np.zeros(n)
-    p_indices = np.zeros(n)
-    o_indices = np.zeros(n)
-    for i, (s, p, o) in enumerate(data["test"]):
-        s_idx = nodes_map[s]
-        p_idx = edges_map[p]
-        o_idx = nodes_map[o]
+    s_indices = np.zeros(nsamples)
+    p_indices = np.zeros(nsamples)
+    o_indices = np.zeros(nsamples)
+    for i in range(nsamples):
+        s_idx, p_idx, o_idx = data["test"][i]
         if i in neg_samples_idx:
-            corrupt_idx = np.random.choice(np.arange(nsamples))
+            corrupt_idx = np.random.choice(np.arange(num_nodes))
             if np.random.rand() > 0.5:
                 # corrupt head
                 s_idx = corrupt_idx
@@ -222,8 +196,8 @@ def test_model(A, X, data, nodes_map, edges_map, model, criterion, device):
                            edge_embeddings[p_indices],
                            node_embeddings[o_indices])
 
-    # create labels; positive samples are 1, negative 1
-    Y = np.ones(n, dtype=np.int8)
+    # create labels; positive samples are 1, negative 0
+    Y = np.ones(nsamples, dtype=np.int8)
     Y[neg_samples_idx] = 0
 
     # scores on test set
@@ -237,13 +211,15 @@ def test_model(A, X, data, nodes_map, edges_map, model, criterion, device):
                   test_loss,
                   test_acc))
 
-def build_dataset(knowledge_graph, nodes_map, config, featureless):
+    return (test_loss, test_acc)
+
+def build_dataset(kg, nodes_map, config, featureless):
     logger.debug("Starting dataset build")
     if featureless:
         F = dict()
     else:
         separate_literals = config['graph']['structural']['separate_literals']
-        F = construct_features(nodes_map, knowledge_graph,
+        F = construct_features(nodes_map, kg,
                                config['graph']['features'],
                                separate_literals)
 
@@ -299,6 +275,7 @@ def binary_crossentropy(Y_hat, Y, criterion):
 
 def compute_accuracy(Y_hat, Y):
     Y = torch.as_tensor(Y, dtype=torch.long)
+    Y_hat = torch.round(Y_hat)
     return torch.mean(torch.eq(Y_hat, Y).float())
 
 def score_distmult(self, s, p, o):

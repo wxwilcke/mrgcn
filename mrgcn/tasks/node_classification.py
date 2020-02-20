@@ -82,13 +82,13 @@ def run(A, X, Y, C, tsv_writer, device, config,
 
 def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device):
     logging.info("Training for {} epoch".format(nepoch))
-    model.train(True)
     for epoch in range(1, nepoch+1):
         batch_grad_idx = epoch - 1
         if not mini_batch:
             batch_grad_idx = -1
 
         # Single training iteration
+        model.train()
         Y_hat = model(X, A,
                       batch_grad_idx=batch_grad_idx,
                       device=device)
@@ -97,14 +97,15 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device
         train_loss = categorical_crossentropy(Y_hat, Y['train'], criterion)
         train_acc = categorical_accuracy(Y_hat, Y['train'])
 
-        # validation scores
-        val_loss = categorical_crossentropy(Y_hat, Y['valid'], criterion)
-        val_acc = categorical_accuracy(Y_hat, Y['valid'])
-
         # Zero gradients, perform a backward pass, and update the weights.
         optimizer.zero_grad()
         train_loss.backward()
         optimizer.step()
+
+        # validation scores
+        model.eval()
+        val_loss = categorical_crossentropy(Y_hat, Y['valid'], criterion)
+        val_acc = categorical_accuracy(Y_hat, Y['valid'])
 
         # DEBUG #
         #for name, param in model.named_parameters():
@@ -148,6 +149,7 @@ def test_model(A, model, criterion, X, Y, device):
                   test_acc))
 
     return (test_loss, test_acc)
+
 def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureless):
     logger.debug("Starting dataset build")
     # generate target matrix
