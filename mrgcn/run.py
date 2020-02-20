@@ -18,7 +18,7 @@ from mrgcn.data.utils import (is_readable,
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
-def run(A, X, Y, C, nodes_map, tsv_writer, device, config,
+def run(A, X, Y, C, data, tsv_writer, device, config,
         modules_config, featureless):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
@@ -31,7 +31,7 @@ def run(A, X, Y, C, nodes_map, tsv_writer, device, config,
                                                       modules_config,
                                                       featureless)
     elif task == "link prediction":
-        test_loss, test_acc = link_prediction.run(A, X, C, nodes_map,
+        test_loss, test_acc = link_prediction.run(A, X, C, data,
                                                   tsv_writer, device, config,
                                                   modules_config, featureless)
 
@@ -56,7 +56,7 @@ def main(args, tsv_writer, config):
         A = tb.get('A')
         F = tb.get('F')
         Y = tb.get('Y')  # empty if doing link prediction
-        nodes_map = tb.get('nodes_map')  # empty if doing node classification
+        data = tb.get('data')  # empty if doing node classification
 
     # prep data
     num_nodes = A.shape[0]
@@ -65,7 +65,7 @@ def main(args, tsv_writer, config):
     if len(X) <= 1 and X[0].size(1) <= 0:
         featureless = True
 
-    loss, accuracy = run(A, X, Y, C, nodes_map, tsv_writer, device,
+    loss, accuracy = run(A, X, Y, C, data, tsv_writer, device,
                          config, modules_config, featureless)
 
     if device == torch.device("cuda"):

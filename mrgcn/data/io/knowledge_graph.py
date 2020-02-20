@@ -26,6 +26,8 @@ class KnowledgeGraph:
             if type(graph) is Graph:
                 self.graph = graph
             elif type(graph) is str:
+                self.graph = self._read([graph])
+            elif type(graph) is list:
                 self.graph = self._read(graph)
             else:
                 raise TypeError(":: Wrong input type: {}; requires path to RDF"
@@ -36,16 +38,16 @@ class KnowledgeGraph:
         self._property_distribution = Counter(self.graph.predicates())
         self.logger.debug("Knowledge Graph ({} facts) succesfully imported".format(len(self.graph)))
 
-    def _read(self, path=None):
-        assert is_readable(path)
+    def _read(self, paths=None):
         graph = Graph()
-
-        if not is_gzip(path):
-            graph.parse(path, format=guess_format(path))
-        else:
-            self.logger.debug("Input recognized as gzip file")
-            with gzip.open(path, 'rb') as f:
-                graph.parse(f, format=guess_format(path[:-3]))
+        for path in paths:
+            assert is_readable(path)
+            if not is_gzip(path):
+                graph.parse(path, format=guess_format(path))
+            else:
+                self.logger.debug("Input recognized as gzip file")
+                with gzip.open(path, 'rb') as f:
+                    graph.parse(f, format=guess_format(path[:-3]))
 
         return graph
 

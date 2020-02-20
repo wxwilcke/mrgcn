@@ -1,10 +1,10 @@
-# Dataset configuration file
+# Dataset configuration context
 
 # name of the dataset
 name = "BGS"
 
 [graph]
-file = "../../datasets/bgs/bgs_stripped_revised.nt.gz"
+context = "../../datasets/bgs/bgs_stripped_revised.nt.gz"
 train = "../../datasets/bgs/bgs_train_set.nt.gz"
 valid = "../../datasets/bgs/bgs_valid_set.nt.gz"
 test = "../../datasets/bgs/bgs_test_set.nt.gz"

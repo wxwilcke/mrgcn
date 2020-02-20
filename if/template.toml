@@ -1,14 +1,14 @@
-# Dataset configuration file
+# Dataset configuration context
 
 # name of the dataset
 name = "<name>"
 
 [graph]
-file = "<file>.nt.gz"
+context = "<file>.nt.gz"
 
-train = "<file>.nt.gz"
-valid = "<file>.nt.gz"
-test = "<file>.nt.gz"
+train = "<context>.nt.gz"
+valid = "<context>.nt.gz"
+test = "<context>.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true

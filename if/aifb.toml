@@ -1,10 +1,10 @@
-# Dataset configuration file
+# Dataset configuration context
 
 # name of the dataset
 name = "AIFB"
 
 [graph]
-file = "../../datasets/aifb/aifb_revised_stripped.nt.gz"
+context = "../../datasets/aifb/aifb_revised_stripped.nt.gz"
 train = "../../datasets/aifb/aifb_train_set.nt.gz"
 valid = "../../datasets/aifb/aifb_valid_set.nt.gz"
 test = "../../datasets/aifb/aifb_test_set.nt.gz"

@@ -2,3 +2,4 @@
 *.tar
 *.pyc
 *.bak
+*.egg-info

@@ -4,7 +4,7 @@
 name = "DUMMY"
 
 [graph]
-file = "../../datasets/dummy/context.nt.gz"
+context = "../../datasets/dummy/context.nt.gz"
 
 train = "../../datasets/dummy/train.nt.gz"
 valid = "../../datasets/dummy/valid.nt.gz"
