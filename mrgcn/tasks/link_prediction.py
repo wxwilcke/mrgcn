@@ -30,6 +30,7 @@ def run(A, X, C, data, tsv_writer, device, config,
 
     # mini batching
     mini_batch = config['model']['mini_batch']
+    distmult_batch_size = config['model']['distmult_batch_size']
 
     # early stopping
     patience = config['model']['patience']
@@ -43,7 +44,8 @@ def run(A, X, C, data, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, X, data, num_nodes, model, optimizer,
-                             criterion, nepoch, mini_batch, device):
+                             criterion, nepoch, mini_batch,
+                             distmult_batch_size, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -74,7 +76,7 @@ def run(A, X, C, data, tsv_writer, device, config,
 
     # test model
     test_loss, test_acc = test_model(A, X, data, num_nodes, model,
-                                     criterion, device)
+                                     criterion, distmult_batch_size, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(test_loss), str(test_acc)])
@@ -82,8 +84,17 @@ def run(A, X, C, data, tsv_writer, device, config,
     return (test_loss, test_acc)
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, mini_batch, device):
+                nepoch, mini_batch, distmult_batch_size, device):
     logging.info("Training for {} epoch".format(nepoch))
+
+    # create batches
+    batches = dict()
+    for split in ('train', 'valid'):
+        nsamples = data[split].shape[0]
+        nbatches = max(1, min(nepoch, nsamples//distmult_batch_size))
+        batches[split] = np.array_split(np.arange(nsamples),
+                                        nbatches)
+
     for epoch in range(1, nepoch+1):
         # MRGCN + DistMult
         scores = dict()
@@ -104,37 +115,39 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                                     device=device)
             edge_embeddings = model.rgcn.relations
 
+            # compute DistMult score for batch
+            nbatches = len(batches[split])
+            batch_id = (epoch - 1) % nbatches
+            logger.debug(" DistMult {} batch {} / {}".format(split,
+                                                             batch_id+1,
+                                                             nbatches))
+
+            batch = batches[split][batch_id]
+            batch_data = data[split][batch]
+            nsamples = len(batch)
+
             # sample negative triples
-            nsamples = data[split].shape[0]
+            ncorrupt = nsamples//5
             neg_samples_idx = np.random.choice(np.arange(nsamples),
-                                               nsamples//2,
+                                               ncorrupt,
                                                replace=False)
+            mask = np.random.choice(np.array([0, 1], dtype=np.bool),
+                                    ncorrupt)
+            corrupt_head_idx = neg_samples_idx[mask]
+            corrupt_tail_idx = neg_samples_idx[~mask]
 
-            # embed and score triples
-            s_indices = np.zeros(nsamples)
-            p_indices = np.zeros(nsamples)
-            o_indices = np.zeros(nsamples)
-            for i in range(nsamples):
-                s_idx, p_idx, o_idx = data[split][i]
-                if i in neg_samples_idx:
-                    corrupt_idx = np.random.choice(np.arange(num_nodes))
-                    if np.random.rand() > 0.5:
-                        # corrupt head
-                        s_idx = corrupt_idx
-                    else:
-                        # corrupt tail
-                        o_idx = corrupt_idx
+            batch_data[corrupt_head_idx, 0] = np.random.choice(np.arange(num_nodes),
+                                                               len(corrupt_head_idx))
+            batch_data[corrupt_tail_idx, 2] = np.random.choice(np.arange(num_nodes),
+                                                               len(corrupt_tail_idx))
 
-                s_indices[i] = s_idx
-                p_indices[i] = p_idx
-                o_indices[i] = o_idx
-
-            Y_hat = score_distmult(node_embeddings[s_indices],
-                                   edge_embeddings[p_indices],
-                                   node_embeddings[o_indices])
+            # compute score
+            Y_hat = score_distmult(node_embeddings[batch_data[:, 0]],
+                                   edge_embeddings[batch_data[:, 1]],
+                                   node_embeddings[batch_data[:, 2]])
 
             # create labels; positive samples are 1, negative 0
-            Y = np.ones(nsamples, dtype=np.int8)
+            Y = torch.ones(nsamples, dtype=torch.float32)
             Y[neg_samples_idx] = 0
 
             # scores
@@ -145,19 +158,20 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
             if split == "train":
                 # Zero gradients, perform a backward pass, and update the weights.
                 optimizer.zero_grad()
-                scores[split][0].backward()  # training loss
+                loss.backward()  # training loss
                 optimizer.step()
 
-            logging.info("{:04d} ".format(epoch) \
-                         + "| train loss {:.4f} / acc {:.4f}".format(scores["train"][0],
-                                                                     scores["train"][1])
-                         + "| val loss {:.4f} / acc {:.4f}".format(scores["valid"][0],
-                                                                   scores["valid"][1]))
+        logging.info("{:04d} ".format(epoch) \
+                     + "| train loss {:.4f} / acc {:.4f} ".format(scores["train"][0],
+                                                                 scores["train"][1])
+                     + "| val loss {:.4f} / acc {:.4f}".format(scores["valid"][0],
+                                                               scores["valid"][1]))
 
-            yield (epoch, scores["train"][0], scores["train"][1],
-                   scores["valid"][0], scores["valid"][1])
+        yield (epoch, scores["train"][0], scores["train"][1],
+               scores["valid"][0], scores["valid"][1])
 
-def test_model(A, X, data, num_nodes, model, criterion, device):
+def test_model(A, X, data, num_nodes, model, criterion,
+               distmult_batch_size, device):
     # Predict on full dataset
     model.train(False)
     with torch.no_grad():
@@ -166,46 +180,48 @@ def test_model(A, X, data, num_nodes, model, criterion, device):
                                 device=device)
         edge_embeddings = model.rgcn.relations
 
-    # DistMult
-    # sample negative triples
+    # compute DistMult score in batches
     nsamples = data["test"].shape[0]
-    neg_samples_idx = np.random.choice(np.arange(nsamples),
-                                       nsamples//2,
-                                       replace=False)
+    batches = np.array_split(np.arange(nsamples),
+                             max(1, nsamples//distmult_batch_size))
+    nbatches = len(batches)
+    scores = {"loss": 0.0, "acc": 0.0}
+    for batch_id, batch in enumerate(batches, 1):
+        logger.debug(" DistMult test batch {} / {}".format(batch_id,
+                                                           nbatches))
+        batch_data = data["test"][batch]
+        nsamples = len(batch)
 
-    # embed and score triples
-    s_indices = np.zeros(nsamples)
-    p_indices = np.zeros(nsamples)
-    o_indices = np.zeros(nsamples)
-    for i in range(nsamples):
-        s_idx, p_idx, o_idx = data["test"][i]
-        if i in neg_samples_idx:
-            corrupt_idx = np.random.choice(np.arange(num_nodes))
-            if np.random.rand() > 0.5:
-                # corrupt head
-                s_idx = corrupt_idx
-            else:
-                # corrupt tail
-                o_idx = corrupt_idx
+        # sample negative triples
+        ncorrupt = nsamples//5
+        neg_samples_idx = np.random.choice(np.arange(nsamples),
+                                           ncorrupt,
+                                           replace=False)
+        mask = np.random.choice(np.array([0, 1], dtype=np.bool),
+                                ncorrupt)
+        corrupt_head_idx = neg_samples_idx[mask]
+        corrupt_tail_idx = neg_samples_idx[~mask]
 
-        s_indices[i] = s_idx
-        p_indices[i] = p_idx
-        o_indices[i] = o_idx
+        batch_data[corrupt_head_idx, 0] = np.random.choice(np.arange(num_nodes),
+                                                           len(corrupt_head_idx))
+        batch_data[corrupt_tail_idx, 2] = np.random.choice(np.arange(num_nodes),
+                                                           len(corrupt_tail_idx))
 
-    Y_hat = score_distmult(node_embeddings[s_indices],
-                           edge_embeddings[p_indices],
-                           node_embeddings[o_indices])
+        # compute score
+        Y_hat = score_distmult(node_embeddings[batch_data[:, 0]],
+                               edge_embeddings[batch_data[:, 1]],
+                               node_embeddings[batch_data[:, 2]])
 
-    # create labels; positive samples are 1, negative 0
-    Y = np.ones(nsamples, dtype=np.int8)
-    Y[neg_samples_idx] = 0
+        # create labels; positive samples are 1, negative 0
+        Y = torch.ones(nsamples, dtype=torch.float32)
+        Y[neg_samples_idx] = 0
 
-    # scores on test set
-    test_loss = binary_crossentropy(Y_hat, Y, criterion)
-    test_acc = compute_accuracy(Y_hat, Y)
+        # scores on test set
+        scores["loss"] += float(binary_crossentropy(Y_hat, Y, criterion))
+        scores["acc"]  += float(compute_accuracy(Y_hat, Y))
 
-    test_loss = float(test_loss)
-    test_acc = float(test_acc)
+    test_loss = scores["loss"] / nbatches
+    test_acc  = scores["acc"] / nbatches
 
     logging.info("Performance on test set: loss {:.4f} / accuracy {:.4f}".format(
                   test_loss,
@@ -278,5 +294,5 @@ def compute_accuracy(Y_hat, Y):
     Y_hat = torch.round(Y_hat)
     return torch.mean(torch.eq(Y_hat, Y).float())
 
-def score_distmult(self, s, p, o):
+def score_distmult(s, p, o):
     return torch.sum(s * p * o, dim=1)

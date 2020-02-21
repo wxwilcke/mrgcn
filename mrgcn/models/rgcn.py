@@ -54,7 +54,8 @@ class RGCN(nn.Module):
             self.activations['layer_'+str(i)] = f_activation
 
         if link_prediction:
-            size = (num_relations, num_nodes, modules[-1][1])
+            # simulate diag(R) with R = (r x n x h) by vectors (r x h)
+            size = (num_relations, modules[-1][1])
             self.relations = nn.Parameter(torch.empty(size))
             nn.init.xavier_uniform_(self.relations)
 

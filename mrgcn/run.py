@@ -25,6 +25,7 @@ def run(A, X, Y, C, data, tsv_writer, device, config,
                                   "test_loss", "test_accuracy"])
 
     task = config['task']['type']
+    logger.info("Starting {} task".format(task))
     if task == "node classification":
         test_loss, test_acc = node_classification.run(A, X, Y, C, tsv_writer,
                                                       device, config,
