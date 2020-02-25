@@ -31,12 +31,13 @@ def run(A, X, Y, C, data, tsv_writer, device, config,
                                                       device, config,
                                                       modules_config,
                                                       featureless)
-    elif task == "link prediction":
-        test_loss, test_acc = link_prediction.run(A, X, C, data,
-                                                  tsv_writer, device, config,
-                                                  modules_config, featureless)
+        return (test_loss, test_acc)
 
-    return (test_loss, test_acc)
+    elif task == "link prediction":
+        test_mrr, test_hits_at_k = link_prediction.run(A, X, C, data,
+                                                       tsv_writer, device, config,
+                                                        modules_config, featureless)
+        return (test_mrr, test_hits_at_k)
 
 def main(args, tsv_writer, config):
     set_seed(config['task']['seed'])
@@ -66,14 +67,16 @@ def main(args, tsv_writer, config):
     if len(X) <= 1 and X[0].size(1) <= 0:
         featureless = True
 
-    loss, accuracy = run(A, X, Y, C, data, tsv_writer, device,
-                         config, modules_config, featureless)
+    task = config['task']['type']
+    out = run(A, X, Y, C, data, tsv_writer, device,
+              config, modules_config, featureless)
 
-    if device == torch.device("cuda"):
-        logging.debug("Peak GPU memory used (MB): {}".format(
-                      str(torch.cuda.max_memory_allocated()/1.0e6)))
-
-    print("loss {:.4f} / accuracy {:.4f}".format(loss, accuracy))
+    if task == "node classification":
+        print("loss {:.4f} / accuracy {:.4f}".format(out[0], out[1]))
+    elif task == "link prediction":
+        print("MRR (raw) {:.4f}".format(out[0])
+              + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
+                                          k,v in out[1].items()]))
 
 def init_logger(filename, verbose=0):
     logging.basicConfig(filename=filename,
