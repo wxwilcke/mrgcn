@@ -31,6 +31,7 @@ def run(A, X, C, data, tsv_writer, device, config,
     # mini batching
     mini_batch = config['model']['mini_batch']
     distmult_batch_size = config['model']['distmult_batch_size']
+    mrr_batch_size = config['model']['mrr_batch_size']
 
     # early stopping
     patience = config['model']['patience']
@@ -45,7 +46,7 @@ def run(A, X, C, data, tsv_writer, device, config,
     t0 = time()
     for epoch in train_model(A, X, data, num_nodes, model, optimizer,
                              criterion, nepoch, mini_batch,
-                             distmult_batch_size, device):
+                             distmult_batch_size, mrr_batch_size, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -77,7 +78,7 @@ def run(A, X, C, data, tsv_writer, device, config,
 
     # test model
     test_mrr, test_hits_at_k = test_model(A, X, data, num_nodes, model,
-                                          criterion, distmult_batch_size, device)
+                                          criterion, mrr_batch_size, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
                          str(test_mrr), str(test_hits_at_k[1]),
@@ -86,14 +87,16 @@ def run(A, X, C, data, tsv_writer, device, config,
     return (test_mrr, test_hits_at_k)
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, mini_batch, distmult_batch_size, device):
+                nepoch, mini_batch, distmult_batch_size, mrr_batch_size,
+                device):
     logging.info("Training for {} epoch".format(nepoch))
 
     # create batches
     batches = dict()
-    for split in ('train', 'valid'):
+    for split, batch_size in zip(('train', 'valid'),
+                                 (distmult_batch_size, mrr_batch_size)):
         nsamples = data[split].shape[0]
-        nbatches = max(1, min(nepoch, nsamples//distmult_batch_size))
+        nbatches = max(1, min(nepoch, nsamples//batch_size))
         batches[split] = np.array_split(np.arange(nsamples),
                                         nbatches)
 
@@ -193,10 +196,10 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
         yield (epoch, loss, mrr_raw, hits_at_k[1], hits_at_k[3], hits_at_k[10])
 
 def test_model(A, X, data, num_nodes, model, criterion,
-               distmult_batch_size, device):
+               mrr_batch_size, device):
     nsamples = data["test"].shape[0]
     batches = np.array_split(np.arange(nsamples),
-                             max(1, nsamples//distmult_batch_size))
+                             max(1, nsamples//mrr_batch_size))
     nbatches = len(batches)
 
     model.eval()
@@ -296,11 +299,6 @@ def binary_crossentropy(Y_hat, Y, criterion):
     # Y := labels in [0, 1]
     # Y_hat[i] == Y[i] -> i is same triple
     return criterion(Y_hat, Y)
-
-def compute_accuracy(Y_hat, Y):
-    Y = torch.as_tensor(Y, dtype=torch.long)
-    Y_hat = torch.round(Y_hat)
-    return torch.mean(torch.eq(Y_hat, Y).float())
 
 def score_distmult(s, p, o):
     return torch.sum(s * p * o, dim=1)
