@@ -15,43 +15,43 @@ separate_literals = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
-share_weights = false
+include = true
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.boolean'
-include = false
-share_weights = false
+include = true
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
-share_weights = false
+include = true
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = false
-share_weights = false
+include = true
+share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 passes_per_batch = 1
-share_weights = false
+share_weights = true
 remove_outliers = false
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 passes_per_batch = 1
-share_weights = false
+share_weights = true
 remove_outliers = false
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 passes_per_batch = 1
-share_weights = false
+share_weights = true
 remove_outliers = false
 
 [task]
@@ -62,17 +62,15 @@ gpu = false
 [model]
 epoch = 200
 learning_rate = 0.01
-patience = 7  # < 0 to disable
+patience = -1  # < 0 to disable
 mini_batch = false
 distmult_batch_size = 1e5
-num_bases = 0
+mrr_batch_size = 5e3
+num_bases = 2
 p_dropout = 0.0
-l2norm = 0.0
+l2norm = 0.01
 bias = false
 
 [[model.layers]]
 type = 'mrgcn'
-hidden_nodes = 16
-
-[[model.layers]]
-type = 'mrgcn'
+hidden_nodes = 200
