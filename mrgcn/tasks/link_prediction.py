@@ -258,7 +258,6 @@ def build_dataset(kg, nodes_map, config, featureless):
 
 def build_model(C, A, modules_config, config, featureless):
     layers = config['model']['layers']
-    assert len(layers) >= 2
     logger.debug("Starting model build")
 
     # get sizes from dataset
