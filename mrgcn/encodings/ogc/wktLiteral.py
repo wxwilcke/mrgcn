@@ -135,10 +135,17 @@ class GeomScalerSparse:
     def get_full_stop_index(self, geometry_vector):
         full_stop_slice = geometry_vector[:, self.FULL_STOP_INDEX]\
                 if self.time_dim == 0 else geometry_vector[self.FULL_STOP_INDEX, :]
-        full_stop_point_index = sp.find(full_stop_slice == 1.0)[self.time_dim][0]
+        full_stop_point_index = sp.find(full_stop_slice == 1.0)[self.time_dim]
+
+        if len(full_stop_point_index) <= 0:
+            # we lack an end point (trimmed?)
+            full_stop_point_index = geometry_vector.shape[self.time_dim]
+        else:
+            full_stop_point_index = full_stop_point_index[0]
 
         if full_stop_point_index == 0:
-            full_stop_point_index = -1
+            # we're a point
+            full_stop_point_index = 1
 
         return full_stop_point_index
 
@@ -146,5 +153,5 @@ class GeomScalerSparse:
         full_stop_point_index = self.get_full_stop_index(geometry_vector)
         geom_mean = geometry_vector[:full_stop_point_index, :2].mean(axis=0)\
                 if self.time_dim == 0 else geometry_vector[:2, :full_stop_point_index].mean(axis=1)
-        return geom_mean
 
+        return geom_mean
