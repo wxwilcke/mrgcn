@@ -17,7 +17,8 @@ from mrgcn.encodings.graph_features import (construct_feature_matrix,
                                             merge_sparse_encodings_sets)
 from mrgcn.tasks.utils import (mkbatches,
                                mkbatches_varlength,
-                               remove_outliers)
+                               remove_outliers,
+                               trim_outliers)
 
 
 logger = logging.getLogger(__name__)
@@ -81,10 +82,11 @@ class SparseDataset(Dataset):
         return torch.as_tensor(self.sp[idx].todense())
 
 def collate_zero_padding(batch, time_dim, max_batch_length=999,
-                               min_padded_length=1):
+                               min_padded_length=3):
     """ batch := a list with sparse coo matrices
 
         time_dim should be 0 for RNN and 1 for temporal CNN
+        min_padded_length >= 3 to allow smallest CNN to support it
     """
     batch_padded = list()
 
@@ -96,26 +98,17 @@ def collate_zero_padding(batch, time_dim, max_batch_length=999,
     padded_length = max(min_padded_length, max_length)
 
     for seq in batch:
-        feature_idc = seq.row if time_dim == 1 else seq.col
-        sequence_idc = seq.col if time_dim == 1 else seq.row
+        shape = (seq.shape[0], padded_length) if time_dim == 1\
+                else (padded_length, seq.shape[1])
 
-        data = list(seq.data)
-        feat_idc = list(feature_idc)
-        seq_idc = list(sequence_idc)
-
-        coordinates = (feat_idc, seq_idc) if time_dim == 1\
-                else (seq_idc, feat_idc)
-        shape = (seq.shape[1-time_dim], padded_length) if time_dim == 1\
-                else (padded_length, seq.shape[1-time_dim])
-
-        a = sp.coo_matrix((data, coordinates),
+        a = sp.coo_matrix((seq.data, (seq.row, seq.col)),
                           shape=shape, dtype=np.float32)
         batch_padded.append(a)
 
     return batch_padded
 
 def collate_repetition_padding(batch, time_dim, max_batch_length=999,
-                               min_padded_length=1):
+                               min_padded_length=3):
     """ batch := a list with sparse coo matrices
 
         time_dim should be 0 for RNN and 1 for temporal CNN
@@ -228,15 +221,35 @@ def setup_features(F, num_nodes, featureless, config):
 
             # preprocess
             encoding_sets = F.pop(datatype, list())
-            if feature_config['share_weights'] and datatype == "xsd.string":
+            weight_sharing = feature_config['share_weights']
+            if weight_sharing and datatype == "xsd.string":
                 # note: images and geometries always share weights atm
                 logger.debug("weight sharing enabled for {}".format(datatype))
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
 
-            for encodings, _, c, _, _ in encoding_sets:
-                if datatype in ["xsd.string", "ogc.wktLiteral"]:
+            for encodings, node_idx, c, seq_lengths, nsets in encoding_sets:
+                if datatype in ["xsd.string"]:
                     # stored as list of arrays
-                    feature_dim = 0 if datatype == "xsd.string" else 1
+                    feature_dim = 0
+                    feature_size = encodings[0].shape[feature_dim]
+
+                    model_size = "M"  # medium, seq length >= 12
+                    if not weight_sharing or nsets <= 1:
+                        seq_length_min = min(seq_lengths)
+                        if seq_length_min < 20:
+                            model_size = "S"
+                        elif seq_length_min < 50:
+                            model_size = "M"
+                        else:
+                            model_size = "L"
+
+                    modules_config.append((datatype, (feature_config['passes_per_batch'],
+                                                      feature_size,
+                                                      c,
+                                                      model_size)))
+                if datatype in ["ogc.wktLiteral"]:
+                    # stored as list of arrays
+                    feature_dim = 0  # set to 1 for RNN
                     feature_size = encodings[0].shape[feature_dim]
                     modules_config.append((datatype, (feature_config['passes_per_batch'],
                                                       feature_size,
@@ -249,20 +262,30 @@ def setup_features(F, num_nodes, featureless, config):
 
                 C += c
 
-            # remove outliers?
-            if feature_config['remove_outliers']:
-                encoding_sets = [remove_outliers(*f) for f in encoding_sets]
+            # deal with outliers?
+            if datatype in ["ogc.wktLiteral", "xsd.string"]:
+                if feature_config['remove_outliers']:
+                    encoding_sets = [remove_outliers(*f) for f in encoding_sets]
+                if feature_config['trim_outliers']:
+                    feature_dim = 0  # set to 1 for RNN
+                    encoding_sets = [trim_outliers(*f, feature_dim) for f in encoding_sets]
 
             nepoch = config['model']['epoch']
-            encoding_sets = [(f, mkbatches(*f,
-                                           nepoch=nepoch,
-                                           passes_per_batch=feature_config['passes_per_batch']))
-                             for f in encoding_sets] if datatype == "blob.image"\
-                    else [(f, mkbatches_varlength(*f,
-                                                  nepoch=nepoch,
-                                                  passes_per_batch=feature_config['passes_per_batch']))
-                          for f in encoding_sets]
+            encoding_sets_batched = list()
+            for f in encoding_sets:
+                if datatype == "blob.image":
+                    encoding_sets_batched.append((f, mkbatches(*f,
+                                                      nepoch=nepoch,
+                                                      passes_per_batch=feature_config['passes_per_batch'])))
+                elif datatype == "ogc.wktLiteral":
+                    encoding_sets_batched.append((f, mkbatches_varlength(*f,
+                                                                nepoch=nepoch,
+                                                                passes_per_batch=feature_config['passes_per_batch'])))
+                elif datatype == "xsd.string":
+                    encoding_sets_batched.append((f, mkbatches_varlength(*f,
+                                                                nepoch=nepoch,
+                                                                passes_per_batch=feature_config['passes_per_batch'])))
 
-            X.append((datatype, encoding_sets))
+            X.append((datatype, encoding_sets_batched))
 
     return (X, C, modules_config)

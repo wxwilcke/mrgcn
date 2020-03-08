@@ -57,7 +57,10 @@ def generate_features(nodes_map, node_predicate_map, config):
         #if validate(value) is None:  # if invalid syntax
         #    continue
 
-        blob = b64_to_img(value)
+        try:
+            blob = b64_to_img(value)
+        except:
+            continue
         blob = downsample(blob)
 
         # add to matrix structures

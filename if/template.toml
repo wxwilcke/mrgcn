@@ -40,6 +40,7 @@ datatype = 'xsd.string'
 include = true
 passes_per_batch = 1
 share_weights = false
+trim_outliers = false
 remove_outliers = false
 
 [[graph.features]]
@@ -47,6 +48,7 @@ datatype = 'blob.image'
 include = true
 passes_per_batch = 1
 share_weights = false
+trim_outliers = false
 remove_outliers = false
 
 [[graph.features]]

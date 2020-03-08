@@ -10,8 +10,9 @@ import torch.nn as nn
 from mrgcn.data.utils import (collate_zero_padding,
                               scipy_sparse_list_to_pytorch_sparse)
 from mrgcn.models.charcnn import CharCNN
+from mrgcn.models.geomcnn import GeomCNN
 from mrgcn.models.imagecnn import ImageCNN
-from mrgcn.models.rnn import RNN
+#from mrgcn.models.rnn import RNN
 from mrgcn.models.rgcn import RGCN
 
 
@@ -44,11 +45,12 @@ class MRGCN(nn.Module):
         i, j, k = 0, 0, 0
         for modality, args in embedding_modules:
             if modality == "xsd.string":
-                batch_size, nrows, dim_out = args
+                batch_size, nrows, dim_out, model_size = args
                 module = CharCNN(features_in=nrows,
                                  features_out=dim_out,
-                                 p_dropout=p_dropout)
-                self.module_dict["CNN1D_"+str(i)] = module
+                                 p_dropout=p_dropout,
+                                 size=model_size)
+                self.module_dict["CharCNN_"+str(i)] = module
                 i += 1
             if modality == "blob.image":
                 batch_size, (nchannels, nrows, ncols), dim_out = args
@@ -57,15 +59,20 @@ class MRGCN(nn.Module):
                              width=ncols,
                              features_out=dim_out,
                              p_dropout=p_dropout)
-                self.module_dict["CNN2D_"+str(j)] = module
+                self.module_dict["ImageCNN_"+str(j)] = module
                 j += 1
             if modality == "ogc.wktLiteral":
-                batch_size, ncols, dim_out = args
-                module = RNN(input_dim=ncols,
-                             output_dim=dim_out,
-                             hidden_dim=ncols*2,
-                             p_dropout=p_dropout)
-                self.module_dict["RNN_"+str(k)] = module
+                batch_size, nrows, dim_out = args
+                module = GeomCNN(features_in=nrows,
+                                 features_out=dim_out,
+                                 p_dropout=p_dropout)
+                self.module_dict["GeomCNN_"+str(k)] = module
+                #batch_size, ncols, dim_out = args
+                #module = RNN(input_dim=ncols,
+                #             output_dim=dim_out,
+                #             hidden_dim=ncols*2,
+                #             p_dropout=p_dropout)
+                #self.module_dict["RNN_"+str(k)] = module
                 k += 1
 
             if modality not in self.modality_modules.keys():
@@ -121,7 +128,7 @@ class MRGCN(nn.Module):
                         if type(batch) is not tuple:  # single sample
                             batch = (batch,)
                         else:
-                            time_dim = 0 if modality == "ogc.wktLiteral" else 1
+                            time_dim = 1 # if modality == "xsd.string" else 0  ## uncomment for RNN
                             batch = collate_zero_padding(batch,
                                                          time_dim)
 
@@ -173,7 +180,8 @@ class MRGCN(nn.Module):
     def init(self):
         # reinitialze all weights
         for module in self.module_dict.values():
-            if type(module) in (ImageCNN, CharCNN, RGCN, RNN):
+            #if type(module) in (ImageCNN, CharCNN, RGCN, RNN):
+            if type(module) in (ImageCNN, CharCNN, GeomCNN, RGCN):
                 module.init()
             else:
                 raise NotImplementedError

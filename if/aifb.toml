@@ -12,7 +12,7 @@ test = "../../datasets/aifb/aifb_test_set.nt.gz"
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-separate_literals = false
+separate_literals = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'
@@ -36,9 +36,10 @@ share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 passes_per_batch = 2
 share_weights = true
+trim_outliers = false
 remove_outliers = true
 
 [[graph.features]]
@@ -46,6 +47,7 @@ datatype = 'blob.image'
 include = true
 passes_per_batch = 1
 share_weights = true
+trim_outliers = false
 remove_outliers = false
 
 [[graph.features]]
@@ -56,7 +58,7 @@ share_weights = true
 remove_outliers = false
 
 [task]
-# node classification
+type = "node classification"
 target_property = 'http://swrc.ontoware.org/ontology#affiliation'
 target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
 seed = -1  # use < 0 for random

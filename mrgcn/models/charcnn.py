@@ -4,10 +4,13 @@ import torch.nn as nn
 
 
 class CharCNN(nn.Module):
-    def __init__(self, features_in, features_out, p_dropout=0.0):
+    def __init__(self, features_in, features_out, p_dropout=0.0, size="M"):
         """
         Character-level Convolutional Neural Network
 
+        features_in  :: size of alphabet (nrows of input matrix, default 37)
+        features_out :: size of final layer
+        size         :: 'S' small, 'M' medium, or 'L' large network
 
         Based on architecture described in:
 
@@ -17,43 +20,89 @@ class CharCNN(nn.Module):
         """
         super().__init__()
 
-        def conv1d(features_in, features_out, kernel, padding=0):
-            return nn.Sequential(
-                nn.Conv1d(features_in, features_out,
-                          kernel_size=kernel,
-                          padding=padding,
-                          stride=1),
-                nn.ReLU(inplace=True)
-            )
-
-        def linear(features_in, features_out):
-            return nn.Sequential(
-                nn.Linear(features_in, features_out),
+        if size == "S":
+            # sequence length >= 3
+            self.conv = nn.Sequential(
+                nn.Conv1d(features_in, 64, kernel_size=7, padding=3),
                 nn.ReLU(inplace=True),
-                nn.Dropout(p=p_dropout)
+                nn.MaxPool1d(kernel_size=3, stride=3),  # len/3
+
+                nn.Conv1d(64, 64, kernel_size=7, padding=3),
+                nn.ReLU(inplace=True),
+                nn.Conv1d(64, 64, kernel_size=7, padding=3),
+                nn.ReLU(inplace=True),
+                nn.AdaptiveMaxPool1d(4)
             )
 
-        self.conv = nn.Sequential(
-            conv1d(features_in, 256, kernel=7, padding=3),  # account for short sequences
-            nn.AdaptiveMaxPool1d(336),   # in variable
-            conv1d(256, 256, kernel=7),  # in 336
-            nn.MaxPool1d(kernel_size=3, stride=3),  # in 330
-            conv1d(256, 256, kernel=3),  # in 110
-            conv1d(256, 256, kernel=3),  # in 108
-            conv1d(256, 256, kernel=3),  # in 106
-            conv1d(256, 256, kernel=3),  # in 104
-            nn.MaxPool1d(kernel_size=3, stride=3)  # in 102, out 34
-        )
+            self.fc = nn.Sequential(
+                nn.Linear(256, 32),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=p_dropout),
 
-        self.fc = nn.Sequential(
-            linear(8704, 1024),
-            linear(1024, 1024),
-            linear(1024, features_out)
-        )
+                nn.Linear(32, features_out)
+            )
+        elif size == "M":
+            # sequence length >= 12
+            self.conv = nn.Sequential(
+                nn.Conv1d(features_in, 64, kernel_size=7, padding=3),
+                nn.ReLU(inplace=True),
+                nn.MaxPool1d(kernel_size=2, stride=2),  # len/2
+
+                nn.Conv1d(64, 64, kernel_size=7, padding=3),
+                nn.ReLU(inplace=True),
+                nn.MaxPool1d(kernel_size=2, stride=2),  # len/4
+
+                nn.Conv1d(64, 64, kernel_size=7, padding=3),
+                nn.ReLU(inplace=True),
+                nn.Conv1d(64, 64, kernel_size=7, padding=2),  # (len/4) - 2
+                nn.ReLU(inplace=True),
+                nn.AdaptiveMaxPool1d(8)
+            )
+
+            self.fc = nn.Sequential(
+                nn.Linear(512, 256),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=p_dropout),
+
+                nn.Linear(256, 64),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=p_dropout),
+
+                nn.Linear(64, features_out)
+            )
+        elif size == "L":
+            # sequence length >= 30
+            self.conv = nn.Sequential(
+                nn.Conv1d(features_in, 64, kernel_size=7, padding=3),
+                nn.ReLU(inplace=True),
+                nn.MaxPool1d(kernel_size=3, stride=3),  # len/3
+
+                nn.Conv1d(64, 128, kernel_size=8),  # len/3 - 7
+                nn.ReLU(inplace=True),
+                nn.MaxPool1d(kernel_size=3, stride=3),  # (len/3 - 7)/3
+
+                nn.Conv1d(128, 128, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Conv1d(128, 128, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.AdaptiveMaxPool1d(8)
+            )
+
+            self.fc = nn.Sequential(
+                nn.Linear(1024, 512),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=p_dropout),
+
+                nn.Linear(512, 128),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=p_dropout),
+
+                nn.Linear(128, features_out)
+            )
 
     def forward(self, X):
         X = self.conv(X)
-        X = X.view(X.size(0), -1)  # B x 256 x 34 -> B x 8704
+        X = X.view(X.size(0), -1)
         X = self.fc(X)
 
         return X

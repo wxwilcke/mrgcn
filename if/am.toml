@@ -39,6 +39,7 @@ datatype = 'xsd.string'
 include = true
 passes_per_batch = 1
 share_weights = true
+trim_outliers = false
 remove_outliers = false
 
 [[graph.features]]
@@ -53,10 +54,11 @@ datatype = 'ogc.wktLiteral'
 include = false
 passes_per_batch = 1
 share_weights = false
+trim_outliers = false
 remove_outliers = false
 
 [task]
-# node classification
+type = 'node classification'
 target_property = 'http://purl.org/collections/nl/am/objectCategory'
 target_property_inv = 'http://purl.org/collections/nl/am/material'
 seed = -1  # use < 0 for random
