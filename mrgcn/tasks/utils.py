@@ -68,6 +68,34 @@ def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _,
 
     return list(zip(seq_assignments, node_assignments))
 
+def trim_outliers(sequences, node_idx, C, seq_length_map, nsets, feature_dim=0):
+    # split outliers
+    q25 = np.quantile(seq_length_map, 0.25)
+    q75 = np.quantile(seq_length_map, 0.75)
+    IQR = q75 - q25
+    cut_off = IQR * 1.5
+
+    if IQR <= 0.0:  # no length difference
+        return [sequences, node_idx, C, seq_length_map, nsets]
+
+    sequences_trimmed = list()
+    seq_length_map_trimmed = list()
+    for i, seq_length in enumerate(seq_length_map):
+        sequence = sequences[i]
+        if seq_length > q75 + cut_off:
+            sequence = sequence[:, :q75+cut_off] if feature_dim == 0\
+                else sequence[:q75+cut_off, :]
+
+        sequences_trimmed.append(sequence)
+        seq_length_map_trimmed.append(sequence.shape[1-feature_dim])
+
+    n = len(sequences_trimmed)
+    d = len(sequences) - n
+    if d > 0:
+        logger.debug("Trimmed {} outliers)".format(d))
+
+    return [sequences_trimmed, node_idx, C, seq_length_map_trimmed, nsets]
+
 def remove_outliers(sequences, node_idx, C, seq_length_map, nsets):
     # split outliers
     q25 = np.quantile(seq_length_map, 0.25)

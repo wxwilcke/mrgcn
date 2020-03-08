@@ -18,42 +18,43 @@ separate_literals = true
 [[graph.features]]
 datatype = 'xsd.numeric'
 include = false
-share_weights = false 
+share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = false
-share_weights = false 
+share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.date'
 include = false
-share_weights = false 
+share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.boolean'
 include = false
-share_weights = false 
+share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 passes_per_batch = 1
-share_weights = false
+share_weights = true
+trim_outliers = false
 remove_outliers = false
 
 [[graph.features]]
 datatype = 'blob.image'
 include = false
 passes_per_batch = 1
-share_weights = false
-remove_outliers = false
+share_weights = true
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = false
-passes_per_batch = 1
-share_weights = false
+passes_per_batch = 4
+share_weights = true
+trim_outliers = false
 remove_outliers = false
 
 [task]
@@ -67,7 +68,7 @@ seed = -1  # use < 0 for random
 gpu = false
 
 [model]
-epoch = 50
+epoch = 100
 learning_rate = 0.01
 patience = 7  # < 0 to disable
 mini_batch = false

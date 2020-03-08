@@ -307,7 +307,7 @@ class Tarball:
 
     def _store_py(self, f, name):
         buff = BytesIO()
-        pickle.dump(f, buff, protocol=-1)
+        pickle.dump(f, buff, protocol=4)
 
         size = len(buff.getbuffer())
         buff.seek(0)
