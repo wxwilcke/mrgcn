@@ -122,15 +122,19 @@ class MRGCN(nn.Module):
                 out_node_idx = list()
                 nbatches = len(batches)
                 for j, (batch_encoding_idx, batch_node_idx) in enumerate(batches):
+                    if len(batch_encoding_idx) <= 0:
+                        # dirty bug fix
+                        continue
+
                     if modality in ["xsd.string", "ogc.wktLiteral"]:
                         # encodings := list of sparse coo matrices
                         batch = itemgetter(*batch_encoding_idx)(encodings)
                         if type(batch) is not tuple:  # single sample
                             batch = (batch,)
-                        else:
-                            time_dim = 1 # if modality == "xsd.string" else 0  ## uncomment for RNN
-                            batch = collate_zero_padding(batch,
-                                                         time_dim)
+
+                        time_dim = 1 # if modality == "xsd.string" else 0  ## uncomment for RNN
+                        batch = collate_zero_padding(batch,
+                                                     time_dim)
 
                         batch = scipy_sparse_list_to_pytorch_sparse(batch)
                         batch = batch.to_dense()

@@ -12,7 +12,7 @@ test = "../../datasets/bgs/bgs_test_set.nt.gz"
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-separate_literals = false
+separate_literals = true
 
 [[graph.features]]
 datatype = 'xsd.numeric'

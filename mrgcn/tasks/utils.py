@@ -82,9 +82,10 @@ def trim_outliers(sequences, node_idx, C, seq_length_map, nsets, feature_dim=0):
     seq_length_map_trimmed = list()
     for i, seq_length in enumerate(seq_length_map):
         sequence = sequences[i]
-        if seq_length > q75 + cut_off:
-            sequence = sequence.tolil()[:, :q75+cut_off].tocoo() if feature_dim == 0\
-                else sequence.tolil()[:q75+cut_off, :].tocoo()
+        threshold = int(q75 + cut_off)
+        if seq_length > threshold:
+            sequence = sequence.tolil()[:, :threshold].tocoo() if feature_dim == 0\
+                else sequence.tolil()[:threshold, :].tocoo()
 
         sequences_trimmed.append(sequence)
         seq_length_map_trimmed.append(sequence.shape[1-feature_dim])
