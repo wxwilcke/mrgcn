@@ -58,15 +58,19 @@ def generate_features(nodes_map, node_predicate_map, config, time_dim=1):
         if vec_length <= 0:
             continue
 
-        # create matrix with time dimension over rows 
+        # add means 
+        mean_x = np.mean(vec[:,0])
+        mean_y = np.mean(vec[:,1])
+        vec = np.hstack([np.vstack([[mean_x, mean_y]]*vec_length), vec])
+
         sp_rows, sp_cols = np.where(vec > 0.0)
         if time_dim == 0:
             a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_rows, sp_cols)),
-                              shape=(vec_length, _GEOVECTORIZER_VEC_LENGTH),
+                              shape=(vec_length, _GEOVECTORIZER_VEC_LENGTH+2),
                               dtype=np.float64)
         else:  # time_dim == 1
             a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_cols, sp_rows)),
-                              shape=(_GEOVECTORIZER_VEC_LENGTH, vec_length),
+                              shape=(_GEOVECTORIZER_VEC_LENGTH+2, vec_length),
                               dtype=np.float64)
 
         data.append(a)
@@ -105,8 +109,8 @@ class GeomScalerSparse:
         for index, geometry in enumerate(geometry_vectors):
             full_stop_point_index = self.get_full_stop_index(geometry)
 
-            x_and_y_coords = geometry[:full_stop_point_index, :2]\
-                    if self.time_dim == 0 else geometry[:2, :full_stop_point_index]
+            x_and_y_coords = geometry[:full_stop_point_index, 2:4]\
+                    if self.time_dim == 0 else geometry[2:4, :full_stop_point_index]
             min_maxs.append([
                 np.min(x_and_y_coords - means[index]),
                 np.max(x_and_y_coords - means[index])
@@ -122,11 +126,11 @@ class GeomScalerSparse:
             stop_index = self.get_full_stop_index(geometry) + 1
             geometry_copy = geometry.copy().tolil()
             if self.time_dim == 0:
-                geometry_copy[:stop_index, :2] -= means[index]
-                geometry_copy[:stop_index, :2] /= self.scale_factor
+                geometry_copy[:stop_index, 2:4] -= means[index]
+                geometry_copy[:stop_index, 2:4] /= self.scale_factor
             else:
-                geometry_copy[:2, :stop_index] -= means[index]
-                geometry_copy[:2, :stop_index] /= self.scale_factor
+                geometry_copy[2:4, :stop_index] -= means[index]
+                geometry_copy[2:4, :stop_index] /= self.scale_factor
 
             localized.append(geometry_copy.tocoo())
 
@@ -151,7 +155,7 @@ class GeomScalerSparse:
 
     def localized_mean(self, geometry_vector):
         full_stop_point_index = self.get_full_stop_index(geometry_vector)
-        geom_mean = geometry_vector[:full_stop_point_index, :2].mean(axis=0)\
-                if self.time_dim == 0 else geometry_vector[:2, :full_stop_point_index].mean(axis=1)
+        geom_mean = geometry_vector[:full_stop_point_index, 2:4].mean(axis=0)\
+                if self.time_dim == 0 else geometry_vector[2:4, :full_stop_point_index].mean(axis=1)
 
         return geom_mean
