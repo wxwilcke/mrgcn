@@ -15,7 +15,7 @@ from mrgcn.models.mrgcn import MRGCN
 logger = logging.getLogger(__name__)
 
 def run(A, X, C, data, tsv_writer, device, config,
-        modules_config, featureless):
+        modules_config, featureless, test_split):
     tsv_writer.writerow(["epoch", "train_loss",
                          "valid_mrr_raw", "valid_H@1", "valid_H@3", "valid_H@10",
                          "test_mrr_raw", "test_H@1", "test_H@3", "test_H@10"])
@@ -77,14 +77,14 @@ def run(A, X, C, data, tsv_writer, device, config,
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
     # test model
-    test_mrr, test_hits_at_k = test_model(A, X, data, num_nodes, model,
-                                          criterion, mrr_batch_size, device)
+    mrr, hits_at_k = test_model(A, X, data, num_nodes, model,
+                                criterion, mrr_batch_size, test_split, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
-                         str(test_mrr), str(test_hits_at_k[1]),
-                         str(test_hits_at_k[3]), str(test_hits_at_k[10])])
+                         str(mrr), str(hits_at_k[1]),
+                         str(hits_at_k[3]), str(hits_at_k[10])])
 
-    return (test_mrr, test_hits_at_k)
+    return (mrr, hits_at_k)
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                 nepoch, mini_batch, distmult_batch_size, mrr_batch_size,
@@ -196,8 +196,8 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
         yield (epoch, loss, mrr_raw, hits_at_k[1], hits_at_k[3], hits_at_k[10])
 
 def test_model(A, X, data, num_nodes, model, criterion,
-               mrr_batch_size, device):
-    nsamples = data["test"].shape[0]
+               mrr_batch_size, test_split, device):
+    nsamples = data[test_split].shape[0]
     batches = np.array_split(np.arange(nsamples),
                              max(1, nsamples//mrr_batch_size))
     nbatches = len(batches)
@@ -214,7 +214,7 @@ def test_model(A, X, data, num_nodes, model, criterion,
         for batch_id, batch in enumerate(batches, 1):
             logger.debug(" DistMult test batch {} / {}".format(batch_id,
                                                                nbatches))
-            batch_data = data["test"][batch]
+            batch_data = data[test_split][batch]
             nsamples = len(batch)
 
             h = batch_data[:, 0]
@@ -234,7 +234,7 @@ def test_model(A, X, data, num_nodes, model, criterion,
     for k in hits_at_k.keys():
         hits_at_k[k] = hits_at_k[k] / nbatches
 
-    logging.info("Performance on test set: MRR (raw) {:.4f}".format(mrr)
+    logging.info("Performance on {} set: MRR (raw) {:.4f}".format(test_split, mrr)
                  + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
                                               k,v in hits_at_k.items()]))
 
