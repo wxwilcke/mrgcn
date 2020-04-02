@@ -16,7 +16,7 @@ from mrgcn.models.mrgcn import MRGCN
 logger = logging.getLogger(__name__)
 
 def run(A, X, Y, C, tsv_writer, device, config,
-        modules_config, featureless):
+        modules_config, featureless, test_split):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
@@ -73,12 +73,12 @@ def run(A, X, Y, C, tsv_writer, device, config,
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
     # test model
-    test_loss, test_acc = test_model(A, model, criterion, X, Y, device)
+    loss, acc = test_model(A, model, criterion, X, Y, test_split, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
-                         str(test_loss), str(test_acc)])
+                         str(loss), str(acc)])
 
-    return (test_loss, test_acc)
+    return (loss, acc)
 
 def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device):
     logging.info("Training for {} epoch".format(nepoch))
@@ -129,7 +129,7 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device
                train_loss, train_acc,
                val_loss, val_acc)
 
-def test_model(A, model, criterion, X, Y, device):
+def test_model(A, model, criterion, X, Y, test_split, device):
     # Predict on full dataset
     model.train(False)
     with torch.no_grad():
@@ -137,18 +137,19 @@ def test_model(A, model, criterion, X, Y, device):
                       batch_grad_idx=-1,
                       device=device)
 
-    # scores on test set
-    test_loss = categorical_crossentropy(Y_hat, Y['test'], criterion)
-    test_acc = categorical_accuracy(Y_hat, Y['test'])
+    # scores on set
+    loss = categorical_crossentropy(Y_hat, Y[test_split], criterion)
+    acc = categorical_accuracy(Y_hat, Y[test_split])
 
-    test_loss = float(test_loss)
-    test_acc = float(test_acc)
+    loss = float(loss)
+    acc = float(acc)
 
-    logging.info("Performance on test set: loss {:.4f} / accuracy {:.4f}".format(
-                  test_loss,
-                  test_acc))
+    logging.info("Performance on {} set: loss {:.4f} / accuracy {:.4f}".format(
+                  test_split,
+                  loss,
+                  acc))
 
-    return (test_loss, test_acc)
+    return (loss, acc)
 
 def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureless):
     logger.debug("Starting dataset build")

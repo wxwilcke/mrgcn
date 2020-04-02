@@ -19,7 +19,7 @@ import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
 def run(A, X, Y, C, data, tsv_writer, device, config,
-        modules_config, featureless):
+        modules_config, featureless, test_split):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
@@ -27,20 +27,23 @@ def run(A, X, Y, C, data, tsv_writer, device, config,
     task = config['task']['type']
     logger.info("Starting {} task".format(task))
     if task == "node classification":
-        test_loss, test_acc = node_classification.run(A, X, Y, C, tsv_writer,
-                                                      device, config,
-                                                      modules_config,
-                                                      featureless)
-        return (test_loss, test_acc)
+        loss, acc = node_classification.run(A, X, Y, C, tsv_writer,
+                                              device, config,
+                                              modules_config,
+                                              featureless, test_split)
+        return (loss, acc)
 
     elif task == "link prediction":
-        test_mrr, test_hits_at_k = link_prediction.run(A, X, C, data,
-                                                       tsv_writer, device, config,
-                                                        modules_config, featureless)
-        return (test_mrr, test_hits_at_k)
+        mrr, hits_at_k = link_prediction.run(A, X, C, data,
+                                               tsv_writer, device, config,
+                                               modules_config,
+                                               featureless, test_split)
+        return (mrr, hits_at_k)
 
 def main(args, tsv_writer, config):
     set_seed(config['task']['seed'])
+
+    test_split = 'test' if args.test else 'valid' # use test split?
 
     featureless = True
     if 'features' in config['graph'].keys() and\
@@ -69,7 +72,7 @@ def main(args, tsv_writer, config):
 
     task = config['task']['type']
     out = run(A, X, Y, C, data, tsv_writer, device,
-              config, modules_config, featureless)
+              config, modules_config, featureless, test_split)
 
     if task == "node classification":
         print("loss {:.4f} / accuracy {:.4f}".format(out[0], out[1]))
@@ -101,6 +104,8 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", help="Optional prepared input file (tar)", default=None)
     parser.add_argument("-o", "--output", help="Output directory", default="/tmp/")
     parser.add_argument("-v", "--verbose", help="Increase output verbosity", action='count', default=0)
+    parser.add_argument("--test", help="Report accuracy on test set rather than on validation set",
+                        action='store_true')
     args = parser.parse_args()
 
     # load configuration
