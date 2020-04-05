@@ -14,10 +14,6 @@ class RGCN(nn.Module):
         Relational Graph Convolutional Network
 
         PARAMETERS
-            modules:    list with tuples (input dimension,
-                                          output dimension,
-                                          layer type,
-                                          activation function)
         """
         super().__init__()
 

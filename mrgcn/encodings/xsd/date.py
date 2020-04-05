@@ -41,9 +41,6 @@ def generate_features(nodes_map, node_predicate_map, config):
     -- v[8:10]: \d,\d : point on circle representing day
 
 
-    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
-    :param config: configuration dictionary
-    :returns: ...
     """
     logger.debug("Generating date encodings")
     C = 10  # number of items per feature

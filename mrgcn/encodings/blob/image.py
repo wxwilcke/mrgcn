@@ -20,18 +20,7 @@ logger = logging.getLogger(__name__)
 def generate_features(nodes_map, node_predicate_map, config):
     """ Generate encodings for images as XSD B64-encoded literals
 
-    Returns an N-D array A and an vector b, such that A[i] holds the matrix
-    representation of the image belonging to node b[i].
 
-    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
-    :param config: configuration dictionary
-    :returns: numpy array M x Ch x W x H;
-                    M :- number of nodes with an image, such that M <= N
-                    Ch :- number of channels for this colour space
-                    W :- width number of pixels
-                    H :- height in number of pixels
-              numpy array 1 x M;
-                    M :- number of nodes with an image, such that M <= N
     """
     logger.debug("Generating B64-encoded image encodings")
     W, H = _IMG_SIZE

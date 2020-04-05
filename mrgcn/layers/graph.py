@@ -9,7 +9,7 @@ class GraphConvolution(nn.Module):
                  bias=False, input_layer=False, featureless=False,
                  shared_bases_weights=False):
         """
-        Multimodal Relational Graph Convolutional Layer
+        Relational Graph Convolutional Layer
         """
         super().__init__()
 
