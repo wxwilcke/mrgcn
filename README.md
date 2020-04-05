@@ -16,7 +16,7 @@ Once installed, we must first prepare our dataset by running
 python mrgcn/mkdataset.py --config ./if/<name>.toml --output ./data/ -vv
 ```
 
-This will create a tar file (`<NAME[unix_time]>.tar`) with all data necessary to run subsequent experiments. To include all supported modalities in the dataset, ensure that `include` is set to `true` is the configuration file (we can include/exclude these during training as long as they are included here). The original graph is now no longer needed. Note that we must here choose between letting literal values with the same value become one node (`separate_literals = false`) or keep them as as many nodes as there are literals (`separate_literals = true`). We thus need to create two dataset variations per graph if we want to train on both.
+This will create a tar file (`<NAME[unix_time]>.tar`) with all data necessary to run subsequent experiments. To include all supported modalities in the dataset, ensure that `include` is set to `true` in the configuration file for all modalities (we can include/exclude these during training as long as they are included here). The original graph is now no longer needed. Note that we must here choose between letting literal values with the same value become one node (`separate_literals = false`) or keep them as as many nodes as there are literals (`separate_literals = true`). We thus need to create two dataset variations per graph if we want to train on both.
 
 Run the Multimodal R-GCN on the prepared dataset by running:
 
