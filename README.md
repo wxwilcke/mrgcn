@@ -28,7 +28,7 @@ This will report the CE loss and accuracy on the validation set. Use the `--test
 
 ## Reproduction 
 
-To reproduce our classification experiments we need the configuration files for `AIFB`, `MUTAG`, `BGS`, `AM`, `DMG`, and `SYNTH` as available in the `./if/` folder, and the accompanying graphs which are available [here](https://gitlab.com/wxwilcke/mmkg). Use the version of this repository tagged as `v1.0`.
+To reproduce our classification experiments we need the configuration files for `AIFB`, `MUTAG`, `BGS`, `AM`, `DMG`, and `SYNTH` as available in the `./if/` folder, and the accompanying graphs which are available [here](https://gitlab.com/wxwilcke/mmkg). Use the version of this repository tagged as [v1.0](https://gitlab.com/wxwilcke/mrgcn/-/tags/v1.0).
 
 ## Supported data types
 
