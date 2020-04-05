@@ -43,13 +43,6 @@ def generate_features(node_map, node_predicate_map, config):
     - a vector v of length C = 1
     -- v[0] : \d+ : numerical value(s)
 
-    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
-    :param config: configuration dictionary
-    :returns: numpy array M x C;
-                    M :- number of nodes with a gYear feature, such that M <= N
-                    C :- number of columns for this feature embedding
-              numpy array 1 x M;
-                    M :- number of nodes with a gYear feature, such that M <= N
     """
     logger.debug("Generating numerical encodings")
     C = 1  # number of items per feature per relation

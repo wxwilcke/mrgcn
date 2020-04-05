@@ -46,13 +46,6 @@ def generate_features(nodes_map, node_predicate_map, config):
     -- v[4:6] : \d,\d   : individual years; points on circle
 
 
-    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
-    :param config: configuration dictionary
-    :returns: numpy array M x C;
-                    M :- number of nodes with a gYear feature, such that M <= N
-                    C :- number of columns for this feature embedding
-              numpy array 1 x M;
-                    M :- number of nodes with a gYear feature, such that M <= N
     """
     logger.debug("Generating gYear encodings")
     C = 6  # number of items per feature

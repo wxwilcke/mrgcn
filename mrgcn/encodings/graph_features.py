@@ -22,12 +22,6 @@ def construct_features(nodes_map, knowledge_graph, feature_configs,
     Note that normalization occurs per feature, independent of the predicate
     it is linked with. Future work should separate these.
 
-    :param nodes_map: list of node labels (URIs) with node idx {0, N}
-    :param feature_config: list of features to construct, given as dicts
-    :returns: numpy array N x (F * C);
-                    N :- number of nodes
-                    F :- number of features
-                    C :- number of columns per feature
     """
     hierarchy = XSDHierarchy()
     node_predicate_map = { o:p for _,p,o in

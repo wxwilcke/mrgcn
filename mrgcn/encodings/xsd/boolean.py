@@ -15,9 +15,6 @@ logger = logging.getLogger(__name__)
 def generate_features(nodes_map, node_predicate_map, config):
     """ Generate encodings for XSD boolean literals
 
-    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
-    :param config: configuration dictionary
-    :returns: ...
     """
     logger.debug("Generating boolean encodings")
     C = 1  # number of items per feature

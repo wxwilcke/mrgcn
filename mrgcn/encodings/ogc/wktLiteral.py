@@ -27,11 +27,6 @@ def generate_features(nodes_map, node_predicate_map, config, time_dim=1):
 
     time_dim == 0 for RNN, 1 for CNN
 
-    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
-    :param config: configuration dictionary
-    :returns: numpy array N x C;
-                    N :- number of nodes
-                    C :- number of columns for this feature embedding
     """
     logger.debug("Generating wktLiteral features")
     C = 16  # number of items per feature
