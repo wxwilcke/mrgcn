@@ -105,9 +105,9 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
     """ Stack vectors row-wise per relation and column stack relations
     """
     n = len(node_predicate_map)
-    m = 0
+    m = dict()
     relationwise_encodings = dict()
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
+    node_idx = dict()
     values_idx = dict()
     values_min = dict()
     values_max = dict()
@@ -125,6 +125,8 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
         predicate = node_predicate_map[node]
         if predicate not in relationwise_encodings.keys():
             relationwise_encodings[predicate] = np.zeros(shape=(n, C), dtype=np.float32)
+            node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
+            m[predicate] = 0
             values_min[predicate] = None
             values_max[predicate] = None
             values_idx[predicate] = list()
@@ -135,15 +137,16 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
             values_min[predicate] = value
 
         # add to matrix structures
-        relationwise_encodings[predicate][m] = [value]
-        node_idx[m] = i
-        values_idx[predicate].append(m)
-        m += 1
+        relationwise_encodings[predicate][m[predicate]] = [value]
+        node_idx[predicate][m[predicate]] = i
+        values_idx[predicate].append(m[predicate])
+        m[predicate] += 1
 
-    logger.debug("Generated {} unique {} encodings".format(m,
-                                                           config['datatype']))
+    logger.debug("Generated {} unique {} encodings".format(
+        sum(m.values()),
+        config['datatype']))
 
-    if m <= 0:
+    if len(m) <= 0:
         return None
 
     # normalization over encodings
@@ -155,12 +158,10 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
         relationwise_encodings[predicate][values_idx[predicate]] = (2*(relationwise_encodings[predicate][values_idx[predicate]] - values_min[predicate]) /
                                              (values_max[predicate] - values_min[predicate])) -1.0
 
-    encodings = np.hstack([encodings[:m] for encodings in
-                           relationwise_encodings.values()])
     npreds = len(relationwise_encodings.keys())
-    C *= npreds
 
-    return [[encodings[:m], node_idx[:m], C, None, npreds]]
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], C, None, npreds]
+            for pred, encodings in relationwise_encodings.items()]
 
 def validate(value):
     return match(_REGEX_NUMERIC, value)

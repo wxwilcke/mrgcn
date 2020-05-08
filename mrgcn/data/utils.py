@@ -13,12 +13,8 @@ from torch.utils.data import Dataset
 import scipy.sparse as sp
 
 from mrgcn.encodings.graph_features import (construct_feature_matrix,
-                                            features_included,
-                                            merge_sparse_encodings_sets)
-from mrgcn.tasks.utils import (mkbatches,
-                               mkbatches_varlength,
-                               remove_outliers,
-                               trim_outliers)
+                                            construct_preembeddings,
+                                            features_included)
 
 
 logger = logging.getLogger(__name__)
@@ -196,96 +192,26 @@ def setup_features(F, num_nodes, featureless, config):
     if not featureless:
         features_enabled = features_included(config)
         logging.debug("Features included: {}".format(", ".join(features_enabled)))
+        for datatype in features_enabled:
+            if datatype in F.keys():
+                logger.debug("Found {} encoding set(s) for datatype {}".format(
+                    len(F[datatype]),
+                    datatype))
+            else:
+                logger.debug("Missing encoding set(s) for datatype {}".format(
+                    datatype))
 
-        X, F = construct_feature_matrix(F, features_enabled, num_nodes,
-                                        config['graph']['features'])
+        # create N x M feature matrix for direct encodings
+        X = construct_feature_matrix(F, features_enabled, num_nodes,
+                                     config['graph']['features'])
         C += X.shape[1]
         X = [torch.as_tensor(X)]
 
-        # determine configurations
-        for datatype in features_enabled:
-            if datatype not in F.keys():
-                continue
-
-            logger.debug("Found {} encoding set(s) for datatype {}".format(
-                len(F[datatype]),
-                datatype))
-
-            if datatype not in ['xsd.string', 'ogc.wktLiteral', 'blob.image']:
-                continue
-
-            feature_configs = config['graph']['features']
-            feature_config = next((conf for conf in feature_configs
-                                   if conf['datatype'] == datatype),
-                                  None)
-
-            # preprocess
-            encoding_sets = F.pop(datatype, list())
-            weight_sharing = feature_config['share_weights']
-            if weight_sharing and datatype == "xsd.string":
-                # note: images and geometries always share weights atm
-                logger.debug("weight sharing enabled for {}".format(datatype))
-                encoding_sets = merge_sparse_encodings_sets(encoding_sets)
-
-            for encodings, node_idx, c, seq_lengths, nsets in encoding_sets:
-                if datatype in ["xsd.string"]:
-                    # stored as list of arrays
-                    feature_dim = 0
-                    feature_size = encodings[0].shape[feature_dim]
-
-                    model_size = "M"  # medium, seq length >= 12
-                    if not weight_sharing or nsets <= 1:
-                        seq_length_min = min(seq_lengths)
-                        if seq_length_min < 20:
-                            model_size = "S"
-                        elif seq_length_min < 50:
-                            model_size = "M"
-                        else:
-                            model_size = "L"
-
-                    modules_config.append((datatype, (feature_config['passes_per_batch'],
-                                                      feature_size,
-                                                      c,
-                                                      model_size)))
-                if datatype in ["ogc.wktLiteral"]:
-                    # stored as list of arrays
-                    feature_dim = 0  # set to 1 for RNN
-                    feature_size = encodings[0].shape[feature_dim]
-                    modules_config.append((datatype, (feature_config['passes_per_batch'],
-                                                      feature_size,
-                                                      c)))
-                if datatype in ["blob.image"]:
-                    # stored as tensor
-                    modules_config.append((datatype, (feature_config['passes_per_batch'],
-                                                      encodings.shape[1:],
-                                                      c)))
-
-                C += c
-
-            # deal with outliers?
-            if datatype in ["ogc.wktLiteral", "xsd.string"]:
-                if feature_config['remove_outliers']:
-                    encoding_sets = [remove_outliers(*f) for f in encoding_sets]
-                if feature_config['trim_outliers']:
-                    feature_dim = 0  # set to 1 for RNN
-                    encoding_sets = [trim_outliers(*f, feature_dim) for f in encoding_sets]
-
-            nepoch = config['model']['epoch']
-            encoding_sets_batched = list()
-            for f in encoding_sets:
-                if datatype == "blob.image":
-                    encoding_sets_batched.append((f, mkbatches(*f,
-                                                      nepoch=nepoch,
-                                                      passes_per_batch=feature_config['passes_per_batch'])))
-                elif datatype == "ogc.wktLiteral":
-                    encoding_sets_batched.append((f, mkbatches_varlength(*f,
-                                                                nepoch=nepoch,
-                                                                passes_per_batch=feature_config['passes_per_batch'])))
-                elif datatype == "xsd.string":
-                    encoding_sets_batched.append((f, mkbatches_varlength(*f,
-                                                                nepoch=nepoch,
-                                                                passes_per_batch=feature_config['passes_per_batch'])))
-
-            X.append((datatype, encoding_sets_batched))
+        # create batched pre-embedding representations for neural encodings
+        preembeddings, modules_config, c = construct_preembeddings(F, features_enabled, num_nodes,
+                                                                   config['model']['epoch'],
+                                                                   config['graph']['features'])
+        C += c
+        X.extend(preembeddings)
 
     return (X, C, modules_config)

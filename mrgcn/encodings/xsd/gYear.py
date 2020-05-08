@@ -50,7 +50,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     logger.debug("Generating gYear encodings")
     C = 6  # number of items per feature
 
-    if True:  #not config['share_weights']:
+    if True:
         return generate_relationwise_features(nodes_map, node_predicate_map, C,
                                               config)
     else:
@@ -117,9 +117,9 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
     """
     n = len(nodes_map)
-    m = 0
+    m = dict()
     relationwise_encodings = dict()
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
+    node_idx = dict()
     values_idx = dict()
     values_min = dict()
     values_max = dict()
@@ -137,6 +137,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         predicate = node_predicate_map[node]
         if predicate not in relationwise_encodings.keys():
             relationwise_encodings[predicate] = np.zeros(shape=(n, C), dtype=np.float32)
+            node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
+            m[predicate] = 0
             values_min[predicate] = None
             values_max[predicate] = None
             values_idx[predicate] = list()
@@ -162,14 +164,15 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             values_min[predicate] = c
 
         # add to matrix structures
-        relationwise_encodings[predicate][m] = [sign, c, d1, d2, y1, y2]
-        node_idx[m] = i
-        values_idx[predicate].append(m)
-        m += 1
+        relationwise_encodings[predicate][m[predicate]] = [sign, c, d1, d2, y1, y2]
+        node_idx[predicate][m[predicate]] = i
+        values_idx[predicate].append(m[predicate])
+        m[predicate] += 1
 
-    logger.debug("Generated {} unique gYear encodings".format(m))
+    logger.debug("Generated {} unique gYear encodings".format(
+        sum(m.values())))
 
-    if m <= 0:
+    if len(m) <= 0:
         return None
 
     # normalization over centuries
@@ -181,12 +184,10 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         relationwise_encodings[predicate][values_idx[predicate],1] = (2*(relationwise_encodings[predicate][values_idx[predicate],1] - values_min[predicate]) /
                                              (values_max[predicate] - values_min[predicate])) -1.0
 
-    encodings = np.hstack([encodings[:m] for encodings in
-                           relationwise_encodings.values()])
     npreds = len(relationwise_encodings.keys())
-    C *= npreds
 
-    return [[encodings[:m], node_idx[:m], C, None, npreds]]
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], C, None, npreds]
+            for pred, encodings in relationwise_encodings.items()]
 
 def point(m, rad):
     # place on circle
