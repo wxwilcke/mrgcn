@@ -47,7 +47,7 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     C = 16
 
-    if True:  #not config['share_weights']:
+    if True:
         return generate_relationwise_features(nodes_map, node_predicate_map, C, config)
     else:
         return generate_nodewise_features(nodes_map, C, config)

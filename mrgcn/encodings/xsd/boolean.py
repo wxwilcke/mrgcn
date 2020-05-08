@@ -59,9 +59,9 @@ def generate_nodewise_features(nodes_map, C, config):
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     n = len(nodes_map)
-    m = 0
+    m = dict()
     relationwise_encodings = dict()
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
+    node_idx = dict()
 
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
@@ -78,23 +78,24 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         predicate = node_predicate_map[node]
         if predicate not in relationwise_encodings.keys():
             relationwise_encodings[predicate] = np.zeros(shape=(n, C), dtype=np.float32)
+            node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
+            m[predicate] = 0
 
         # add to matrix structures
-        relationwise_encodings[predicate][m] = [b]
-        node_idx[m] = i
-        m += 1
+        relationwise_encodings[predicate][m[predicate]] = [b]
+        node_idx[predicate][m[predicate]] = i
+        m[predicate] += 1
 
-    logger.debug("Generated {} unique boolean encodings".format(m))
+    logger.debug("Generated {} unique boolean encodings".format(
+        sum(m.values())))
 
-    if m <= 0:
+    if len(m) <= 0:
         return None
 
-    encodings = np.hstack([encodings[:m] for encodings in
-                           relationwise_encodings.values()])
     npreds = len(relationwise_encodings.keys())
-    C *= npreds
 
-    return [[encodings[:m], node_idx[:m], C, None, npreds]]
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], C, None, npreds]
+            for pred, encodings in relationwise_encodings.items()]
 
 def validate(value):
     return match(_REGEX_BOOLEAN, value)
