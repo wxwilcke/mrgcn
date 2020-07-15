@@ -2,7 +2,7 @@
 
 import csv
 import logging
-
+from tempfile import TemporaryFile
 
 class TSV:
     """ TSV Class
@@ -12,9 +12,18 @@ class TSV:
     _tsv = None
     _writer = None
 
-    def __init__(self, path=None, mode='r'):
-        self.logger = logging.getLogger(__name__)
+    def __init__(self, path=None, mode='r', temporary=False):
+        self.logger = logging.getLogger()
         self.logger.debug("Initiating TSV")
+
+        if temporary:
+            if 'r' in mode:
+                raise ValueError("::Cannot read from temporary file")
+            self._tsv = TemporaryFile(mode='w')
+            self.logger.debug("Storing to temporary file")
+            self._writer = csv.writer(self._tsv, delimiter="\t")
+
+            return
 
         if path is None:
             raise ValueError("::No path supplied")
