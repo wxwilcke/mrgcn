@@ -81,11 +81,8 @@ def main(args, tsv_writer, config):
               + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
                                           k,v in out[1].items()]))
 
-def init_logger(filename, verbose=0):
-    logging.basicConfig(filename=filename,
-                        format='[%(asctime)s] %(module)s/%(funcName)s | %(levelname)s: %(message)s',
-                        level=logging.DEBUG)
-
+def init_logger(filename, dry_run, verbose=0):
+    handlers = list()
     if verbose > 0:
         stream_handler = logging.StreamHandler()
 
@@ -94,7 +91,20 @@ def init_logger(filename, verbose=0):
             level = logging.DEBUG
         stream_handler.setLevel(level)
 
-        logging.getLogger().addHandler(stream_handler)
+        handlers.append(stream_handler)
+
+    if not dry_run:
+        file_handler = logging.FileHandler(filename)
+        file_handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('[%(asctime)s] %(module)s/%(funcName)s | %(levelname)s: %(message)s')
+        file_handler.setFormatter(formatter)
+
+        handlers.append(file_handler)
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(message)s",
+        handlers=handlers)
 
 if __name__ == "__main__":
     timestamp = int(time())
@@ -104,6 +114,8 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", help="Optional prepared input file (tar)", default=None)
     parser.add_argument("-o", "--output", help="Output directory", default="/tmp/")
     parser.add_argument("-v", "--verbose", help="Increase output verbosity", action='count', default=0)
+    parser.add_argument("--dry_run", help="Suppress writing output files to disk",
+                        action='store_true')
     parser.add_argument("--test", help="Report accuracy on test set rather than on validation set",
                         action='store_true')
     args = parser.parse_args()
@@ -119,10 +131,10 @@ if __name__ == "__main__":
                                              timestamp, getpid())
     assert is_writable(baseFilename)
 
-    init_logger(baseFilename+'.log', args.verbose)
-    logger = logging.getLogger(__name__)
+    init_logger(baseFilename+'.log', args.dry_run, args.verbose)
+    logger = logging.getLogger()
 
-    tsv_writer = TSV(baseFilename+'.tsv', 'w')
+    tsv_writer = TSV(baseFilename+'.tsv', 'w', args.dry_run)
 
     # log parameters
     logger.debug("Arguments:\n{}".format(
