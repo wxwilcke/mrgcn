@@ -18,29 +18,25 @@ from mrgcn.data.utils import (is_readable,
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
-def run(A, X, Y, C, data, tsv_writer, device, config,
+def run(A, X, Y, C, data, acc_writer, device, config,
         modules_config, featureless, test_split):
-    tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
-                                  "validation_loss", "validation_accuracy",
-                                  "test_loss", "test_accuracy"])
-
     task = config['task']['type']
-    logger.info("Starting {} task".format(task))
+    logging.info("Starting {} task".format(task))
     if task == "node classification":
-        loss, acc = node_classification.run(A, X, Y, C, tsv_writer,
-                                              device, config,
-                                              modules_config,
-                                              featureless, test_split)
-        return (loss, acc)
+        loss, acc, labels, targets = node_classification.run(A, X, Y, C, acc_writer,
+                                                          device, config,
+                                                          modules_config,
+                                                          featureless, test_split)
+        return (loss, acc, labels, targets)
 
     elif task == "link prediction":
         mrr, hits_at_k = link_prediction.run(A, X, C, data,
-                                               tsv_writer, device, config,
+                                               acc_writer, device, config,
                                                modules_config,
                                                featureless, test_split)
         return (mrr, hits_at_k)
 
-def main(args, tsv_writer, config):
+def main(args, acc_writer, out_writer, config):
     set_seed(config['task']['seed'])
 
     test_split = 'test' if args.test else 'valid' # use test split?
@@ -62,6 +58,8 @@ def main(args, tsv_writer, config):
         F = tb.get('F')
         Y = tb.get('Y')  # empty if doing link prediction
         data = tb.get('data')  # empty if doing node classification
+        sample_map = tb.get('sample_map')  # empty if doing link prediction
+        class_map = tb.get('class_map')  # empty if doing link prediction
 
     # prep data
     num_nodes = A.shape[0]
@@ -71,18 +69,41 @@ def main(args, tsv_writer, config):
         featureless = True
 
     task = config['task']['type']
-    out = run(A, X, Y, C, data, tsv_writer, device,
+    out = run(A, X, Y, C, data, acc_writer, device,
               config, modules_config, featureless, test_split)
 
     if task == "node classification":
-        print("loss {:.4f} / accuracy {:.4f}".format(out[0], out[1]))
+        loss, acc, labels, targets = out
+        out_writer.writerow(['X', 'Y_hat', 'Y'])
+        for i in range(len(labels)):
+            out_writer.writerow([sample_map[test_split][i],
+                                 class_map[labels[i]],
+                                 class_map[targets[i]]])
+
+        print("loss {:.4f} / accuracy {:.4f}".format(loss, acc))
     elif task == "link prediction":
-        print("MRR (raw) {:.4f}".format(out[0])
+        mrr, hits = out
+        print("MRR (raw) {:.4f}".format(mrr)
               + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
-                                          k,v in out[1].items()]))
+                                          k,v in hits.items()]))
 
 def init_logger(filename, dry_run, verbose=0):
-    handlers = list()
+    if dry_run:
+        level = logging.CRITICAL
+        if verbose == 1:
+            level = logging.INFO
+        elif verbose >= 2:
+            level = logging.DEBUG
+
+        logging.basicConfig(format='%(message)s',
+                            level=level)
+
+        return
+
+    logging.basicConfig(filename=filename,
+                        format='[%(asctime)s] %(module)s/%(funcName)s | %(levelname)s: %(message)s',
+                        level=logging.DEBUG)
+
     if verbose > 0:
         stream_handler = logging.StreamHandler()
 
@@ -91,20 +112,7 @@ def init_logger(filename, dry_run, verbose=0):
             level = logging.DEBUG
         stream_handler.setLevel(level)
 
-        handlers.append(stream_handler)
-
-    if not dry_run:
-        file_handler = logging.FileHandler(filename)
-        file_handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('[%(asctime)s] %(module)s/%(funcName)s | %(levelname)s: %(message)s')
-        file_handler.setFormatter(formatter)
-
-        handlers.append(file_handler)
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(message)s",
-        handlers=handlers)
+        logging.getLogger().addHandler(stream_handler)
 
 if __name__ == "__main__":
     timestamp = int(time())
@@ -132,17 +140,18 @@ if __name__ == "__main__":
     assert is_writable(baseFilename)
 
     init_logger(baseFilename+'.log', args.dry_run, args.verbose)
-    logger = logging.getLogger()
 
-    tsv_writer = TSV(baseFilename+'.tsv', 'w', args.dry_run)
+    acc_writer = TSV(baseFilename+'_acc.tsv', 'w', args.dry_run)
+    out_writer = TSV(baseFilename+'_out.tsv', 'w', args.dry_run)\
+            if config['task']['type'] == "node classification" else None
 
     # log parameters
-    logger.debug("Arguments:\n{}".format(
+    logging.debug("Arguments:\n{}".format(
         "\n".join(["\t{}: {}".format(arg, getattr(args, arg)) for arg in vars(args)])))
-    logger.debug("Configuration:\n{}".format(
+    logging.debug("Configuration:\n{}".format(
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     # run training
-    main(args, tsv_writer, config)
+    main(args, acc_writer, out_writer, config)
 
     logging.shutdown()

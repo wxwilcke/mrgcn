@@ -13,7 +13,7 @@ from mrgcn.encodings.graph_features import construct_features
 from mrgcn.models.mrgcn import MRGCN
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 def run(A, X, Y, C, tsv_writer, device, config,
         modules_config, featureless, test_split):
@@ -73,12 +73,12 @@ def run(A, X, Y, C, tsv_writer, device, config,
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
     # test model
-    loss, acc = test_model(A, model, criterion, X, Y, test_split, device)
+    loss, acc, labels, targets = test_model(A, model, criterion, X, Y, test_split, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(loss), str(acc)])
 
-    return (loss, acc)
+    return (loss, acc, labels, targets)
 
 def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device):
     logging.info("Training for {} epoch".format(nepoch))
@@ -95,7 +95,7 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device
 
         # Training scores
         train_loss = categorical_crossentropy(Y_hat, Y['train'], criterion)
-        train_acc = categorical_accuracy(Y_hat, Y['train'])
+        train_acc = categorical_accuracy(Y_hat, Y['train'])[0]
 
         # Zero gradients, perform a backward pass, and update the weights.
         optimizer.zero_grad()
@@ -105,7 +105,7 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device
         # validation scores
         model.eval()
         val_loss = categorical_crossentropy(Y_hat, Y['valid'], criterion)
-        val_acc = categorical_accuracy(Y_hat, Y['valid'])
+        val_acc = categorical_accuracy(Y_hat, Y['valid'])[0]
 
         # DEBUG #
         #for name, param in model.named_parameters():
@@ -139,7 +139,7 @@ def test_model(A, model, criterion, X, Y, test_split, device):
 
     # scores on set
     loss = categorical_crossentropy(Y_hat, Y[test_split], criterion)
-    acc = categorical_accuracy(Y_hat, Y[test_split])
+    acc, labels, targets = categorical_accuracy(Y_hat, Y[test_split])
 
     loss = float(loss)
     acc = float(acc)
@@ -149,12 +149,12 @@ def test_model(A, model, criterion, X, Y, test_split, device):
                   loss,
                   acc))
 
-    return (loss, acc)
+    return (loss, acc, labels, targets)
 
 def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureless):
     logger.debug("Starting dataset build")
     # generate target matrix
-    Y = mk_target_matrices(target_triples, nodes_map)
+    Y, sample_map, class_map = mk_target_matrices(target_triples, nodes_map)
 
     if featureless:
         F = dict()
@@ -166,30 +166,37 @@ def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureles
 
     logger.debug("Completed dataset build")
 
-    return (F, Y)
+    return (F, Y, sample_map, class_map)
 
 def mk_target_matrices(target_triples, nodes_map):
     classes = {str(c) for split in target_triples.values() for _,_,c in split} # unique classes
     logger.debug("Target classes ({}): {}".format(len(classes), classes))
 
-    # node/class label to integers
-    classes_map = {label:i for i,label in enumerate(classes)}
+    # node/class label to integers; sorted to make consistent over runs
+    class_map = sorted(list(classes))
+    class_map_inv = {label:i for i,label in enumerate(classes)}
 
     # note: by converting targets to strings we lose datatype info, but the use
     # cases where this would matter would be very limited 
     num_nodes = len(nodes_map)
-    num_classes = len(classes_map)
+    num_classes = len(class_map)
+    sample_map = dict()
     Y = dict()
-    for k, split in target_triples.items():
+    for k, split in sorted(target_triples.items()):
         logger.debug("Found {} instances ({})".format(len(split), k))
-        target_pair_indices = [(nodes_map[x], classes_map[str(y)]) for x, _, y in split]
+        target_pair_indices = list()
+        sample_map[k] = list()
+        for x, _, y in split:
+            target_pair_indices.append((nodes_map[x], class_map_inv[str(y)]))
+            sample_map[k].append(x)
+
         rows, cols = map(np.array, zip(*target_pair_indices))
         data = np.ones(len(rows), dtype=np.int8)
         Y[k] = sp.csr_matrix((data, (rows, cols)),
                              shape=(num_nodes, num_classes),
                              dtype=np.int8)
 
-    return Y
+    return (Y, sample_map, class_map)
 
 def build_model(C, Y, A, modules_config, config, featureless):
     layers = config['model']['layers']
@@ -240,7 +247,7 @@ def categorical_accuracy(Y_hat, Y):
     targets = torch.as_tensor(targets, dtype=torch.long)
     _, labels = Y_hat[idx].max(dim=1)
 
-    return torch.mean(torch.eq(labels, targets).float())
+    return (torch.mean(torch.eq(labels, targets).float()), labels, targets)
 
 def categorical_crossentropy(Y_hat, Y, criterion):
     idx, targets = Y.nonzero()

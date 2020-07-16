@@ -19,7 +19,7 @@ class KnowledgeGraph:
     _property_distribution = {}
 
     def __init__(self, graph=None):
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger()
         self.logger.debug("Initiating Knowledge Graph")
 
         if graph is not None:
