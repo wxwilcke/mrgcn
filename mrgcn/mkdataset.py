@@ -16,8 +16,8 @@ from mrgcn.tasks.utils import strip_graph, triples_to_indices
 
 def run(args, config):
     task = config['task']['type']
-    logger.info("Task set to {}".format(task))
-    logger.info("Generating data structures")
+    logging.info("Task set to {}".format(task))
+    logging.info("Generating data structures")
 
     featureless = True
     if 'features' in config['graph'].keys() and\
@@ -25,6 +25,8 @@ def run(args, config):
         featureless = False
 
     data = None
+    sample_map = None
+    class_map = None
     if task == "node classification":
         triples = dict()
         for split in ("train", "valid", "test"):
@@ -34,8 +36,11 @@ def run(args, config):
         with KnowledgeGraph(graph=config['graph']['context']) as kg:
             strip_graph(kg, config)
             A, nodes_map, _ = graph_structure.generate(kg, config)
-            F, Y = node_classification.build_dataset(kg, nodes_map, triples, config,
-                                                     featureless)
+            F, Y, sample_map, class_map = node_classification.build_dataset(kg,
+                                                                            nodes_map,
+                                                                            triples,
+                                                                            config,
+                                                                            featureless)
     elif task == "link prediction":
         with KnowledgeGraph([config['graph']['train'],
                              config['graph']['valid'],
@@ -51,9 +56,21 @@ def run(args, config):
                 data[split] = triples_to_indices(kg_split, nodes_map, edges_map,
                                                  separate_literals)
 
-    return (A, F, Y, data)
+    return (A, F, Y, data, sample_map, class_map)
 
-def init_logger(filename, verbose=0):
+def init_logger(filename, dry_run, verbose=0):
+    if dry_run:
+        level = logging.CRITICAL
+        if verbose == 1:
+            level = logging.INFO
+        elif verbose >= 2:
+            level = logging.DEBUG
+
+        logging.basicConfig(format='%(message)s',
+                            level=level)
+
+        return
+
     logging.basicConfig(filename=filename,
                         format='[%(asctime)s] %(module)s/%(funcName)s | %(levelname)s: %(message)s',
                         level=logging.DEBUG)
@@ -74,7 +91,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", help="Configuration file (toml)", required=True, default=None)
     parser.add_argument("-o", "--output", help="Output directory", default="/tmp/")
-    parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
+    parser.add_argument("-v", "--verbose", help="Increase output verbosity", action='count', default=0)
+    parser.add_argument("--dry_run", help="Suppress writing output files to disk",
+                        action='store_true')
     args = parser.parse_args()
 
     assert is_readable(args.config)
@@ -85,17 +104,19 @@ if __name__ == "__main__":
                     else "{}/{}{}".format(args.output, config['name'], timestamp)
     assert is_writable(baseFilename)
 
-    init_logger(baseFilename+'.log', args.verbose)
-    logger = logging.getLogger(__name__)
-
+    init_logger(baseFilename+'.log', args.dry_run, args.verbose)
 
     # log parameters
-    logger.info("Arguments:\n{}".format(
+    logging.debug("Arguments:\n{}".format(
         "\n".join(["\t{}: {}".format(arg, getattr(args, arg)) for arg in vars(args)])))
-    logger.info("Configuration:\n{}".format(
+    logging.debug("Configuration:\n{}".format(
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
-    with Tarball(baseFilename+'.tar', 'w') as tb:
-        tb.store(run(args, config), names=['A', 'F', 'Y', 'data'])
+    out = run(args, config)
+    if not args.dry_run:
+        with Tarball(baseFilename+'.tar', 'w') as tb:
+            tb.store(out, names=['A', 'F', 'Y', 'data', 'sample_map', 'class_map'])
+
+        logging.info('Dataset saved as {}'.format(baseFilename+'.tar'))
 
     logging.shutdown()
