@@ -43,6 +43,18 @@ def generate_features(node_map, node_predicate_map, config):
     - a vector v of length C = 1
     -- v[0] : \d+ : numerical value(s)
 
+    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
+    :param node_predicate_map: dictionary of node labels (URIs): {predicates}
+    :param config: configuration dictionary
+    :returns: list of length P with lists Q of length 4;
+                P :- number of predicates that link to nodes with this feature
+                Q :- [enc, node_idx, C, None];
+                    enc :- numpy array M x C;
+                        M :- number of nodes with this feature, such that M <= N
+                    node_idx :- numpy vector of length M, mapping seq index to node id
+                    C :- desired output dimension of encoder
+                    None :- not used here
+
     """
     logger.debug("Generating numerical encodings")
     C = 1  # number of items per feature per relation
@@ -108,7 +120,6 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
     m = dict()
     relationwise_encodings = dict()
     node_idx = dict()
-    values_idx = dict()
     values_min = dict()
     values_max = dict()
     for node, i in node_map.items():
@@ -122,25 +133,23 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
             continue
         value = float(value)
 
-        predicate = node_predicate_map[node]
-        if predicate not in relationwise_encodings.keys():
-            relationwise_encodings[predicate] = np.zeros(shape=(n, C), dtype=np.float32)
-            node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
-            m[predicate] = 0
-            values_min[predicate] = None
-            values_max[predicate] = None
-            values_idx[predicate] = list()
+        for predicate in node_predicate_map[node]:
+            if predicate not in relationwise_encodings.keys():
+                relationwise_encodings[predicate] = np.zeros(shape=(n, C), dtype=np.float32)
+                node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
+                m[predicate] = 0
+                values_min[predicate] = None
+                values_max[predicate] = None
 
-        if values_max[predicate] is None or value > values_max[predicate]:
-            values_max[predicate] = value
-        if values_min[predicate] is None or value < values_min[predicate]:
-            values_min[predicate] = value
+            if values_max[predicate] is None or value > values_max[predicate]:
+                values_max[predicate] = value
+            if values_min[predicate] is None or value < values_min[predicate]:
+                values_min[predicate] = value
 
-        # add to matrix structures
-        relationwise_encodings[predicate][m[predicate]] = [value]
-        node_idx[predicate][m[predicate]] = i
-        values_idx[predicate].append(m[predicate])
-        m[predicate] += 1
+            # add to matrix structures
+            relationwise_encodings[predicate][m[predicate]] = [value]
+            node_idx[predicate][m[predicate]] = i
+            m[predicate] += 1
 
     logger.debug("Generated {} unique {} encodings".format(
         sum(m.values()),
@@ -150,13 +159,15 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
         return None
 
     # normalization over encodings
-    for predicate in relationwise_encodings.keys():
-        if values_max[predicate] == values_min[predicate]:
-            relationwise_encodings[predicate][values_idx[predicate]] = 0.0
+    for pred in relationwise_encodings.keys():
+        idx = np.arange(m[pred])
+        if values_max[pred] == values_min[pred]:
+            relationwise_encodings[pred][idx] = 0.0
             continue
 
-        relationwise_encodings[predicate][values_idx[predicate]] = (2*(relationwise_encodings[predicate][values_idx[predicate]] - values_min[predicate]) /
-                                             (values_max[predicate] - values_min[predicate])) -1.0
+        relationwise_encodings[pred][idx] =\
+                (2*(relationwise_encodings[pred][idx] - values_min[pred]) /
+                             (values_max[pred] - values_min[pred])) -1.0
 
     npreds = len(relationwise_encodings.keys())
 
