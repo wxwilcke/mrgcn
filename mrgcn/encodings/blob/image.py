@@ -23,9 +23,19 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     """
     logger.debug("Generating B64-encoded image encodings")
-    W, H = _IMG_SIZE
-
     C = 128
+
+
+    if True:  #config['share_weights']:
+        return generate_relationwise_features(nodes_map, node_predicate_map, C,
+                                              config)
+    else:
+        return generate_nodewise_features(nodes_map, C, config)
+
+def generate_nodewise_features(nodes_map, C, config):
+    """ Stack all vectors without regard of their relation
+    """
+    W, H = _IMG_SIZE
     m = 0
     n = len(nodes_map)
     c = len([c for c in _IMG_MODE if c.isupper() or c == '1'])
@@ -74,12 +84,87 @@ def generate_features(nodes_map, node_predicate_map, config):
         return None
 
     # normalization over channels
-    for img in encodings[:m]:
+    for i in range(encodings[:m].shape[0]):
+        img = encodings[:m][i]
         for ch in range(c):
             img[ch] = (2*(img[ch]-values_min[ch]) /
                        (values_max[ch] - values_min[ch])) - 1.0
+            encodings[:m][i] = img
 
     return [[encodings[:m], node_idx[:m], C, None, 1]]
+
+def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
+    W, H = _IMG_SIZE
+    c = len([c for c in _IMG_MODE if c.isupper() or c == '1'])
+ 
+    n = len(nodes_map)
+    m = dict()
+    relationwise_encodings = dict()
+    node_idx = dict()
+    values_min = dict()
+    values_max = dict()
+
+    for node, i in nodes_map.items():
+        if not isinstance(node, Literal):
+            continue
+        if node.datatype is None or node.datatype.neq(XSD.b64string):
+            # assume that all B64-encoded literals are images
+            continue
+
+        value = str(node)  ## empty value bug workaround
+        #if validate(value) is None:  # if invalid syntax
+        #    continue
+
+        try:
+            blob = b64_to_img(value)
+        except:
+            continue
+        blob = downsample(blob)
+
+        # add to matrix structures
+        a = np.array(blob, dtype=np.float32)
+        if _IMG_MODE == "RGB":
+            # from WxHxC to CxWxH
+            a = a.transpose((0, 2, 1)).transpose((1, 0, 2))
+
+        for pred in node_predicate_map[node]:
+            if pred not in relationwise_encodings.keys():
+                relationwise_encodings[pred] = np.zeros(shape=(n, c, W, H),
+                                                        dtype=np.float32)
+                node_idx[pred] = np.zeros(shape=(n), dtype=np.int32)
+                m[pred] = 0
+                values_min[pred] = [None for _ in range(c)]
+                values_max[pred] = [None for _ in range(c)]
+
+            for ch in range(c):
+                if values_max[pred][ch] is None or a[ch].max() > values_max[pred][ch]:
+                    values_max[pred][ch] = a[ch].max()
+                if values_min[pred][ch] is None or a[ch].min() < values_min[pred][ch]:
+                    values_min[pred][ch] = a[ch].min()
+
+            # add to matrix structures
+            relationwise_encodings[pred][m[pred]] = a
+            node_idx[m[pred]] = i
+            m[pred] += 1
+
+    logger.debug("Generated {} unique B64-encoded image encodings".format(sum(m.values())))
+
+    if len(m) <= 0:
+        return None
+
+    # normalization over channels
+    for pred in relationwise_encodings.keys():
+        for i in range(relationwise_encodings[pred][:m[pred]].shape[0]):
+            img = relationwise_encodings[pred][:m[pred]][i]
+            for ch in range(c):
+                img[ch] = (2*(img[ch]-values_min[pred][ch]) /
+                           (values_max[pred][ch] - values_min[pred][ch])) - 1.0
+                relationwise_encodings[pred][:m[pred]][i] = img
+
+    npreds = len(relationwise_encodings.keys())
+
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], C, None, npreds]
+            for pred, encodings in relationwise_encodings.items()]
 
 def b64_to_img(b64string):
     im = Image.open(BytesIO(base64.urlsafe_b64decode(b64string.encode())))

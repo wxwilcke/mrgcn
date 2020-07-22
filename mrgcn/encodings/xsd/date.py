@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 def generate_features(nodes_map, node_predicate_map, config):
     """ Generate encodings for XSD date literals
 
+    Definition
+    - date := yearFrag '-' monthFrag '-' dayFrag timezoneFrag?   
 
     Encoding
     - a vector v of length C = 4
@@ -40,6 +42,17 @@ def generate_features(nodes_map, node_predicate_map, config):
     -- v[6:8]: \d,\d : point on circle representing month
     -- v[8:10]: \d,\d : point on circle representing day
 
+    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
+    :param node_predicate_map: dictionary of node labels (URIs): {predicates}
+    :param config: configuration dictionary
+    :returns: list of length P with lists Q of length 4;
+                P :- number of predicates that link to nodes with this feature
+                Q :- [enc, node_idx, C, None];
+                    enc :- numpy array M x C;
+                        M :- number of nodes with this feature, such that M <= N
+                    node_idx :- numpy vector of length M, mapping seq index to node id
+                    C :- desired output dimension of encoder
+                    None :- not used here
 
     """
     logger.debug("Generating date encodings")
@@ -121,7 +134,6 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     m = dict()
     relationwise_encodings = dict()
     node_idx = dict()
-    values_idx = dict()
     values_min = dict()
     values_max = dict()
 
@@ -135,16 +147,6 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         value = validate(node.value)
         if value is None:  # invalid syntax
             continue
-
-        predicate = node_predicate_map[node]
-        if predicate not in relationwise_encodings.keys():
-            relationwise_encodings[predicate] = np.zeros(shape=(n, C),
-                                                         dtype=np.float32)
-            node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
-            m[predicate] = 0
-            values_min[predicate] = None
-            values_max[predicate] = None
-            values_idx[predicate] = list()
 
         sign = 1. if value.group('sign') == '' else -1.
         year = value.group('year')
@@ -166,17 +168,26 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         day = value.group('day')
         d1, d2 = point(int(day), _DAY_RAD)
 
-        c = int(separated.group('century'))
-        if values_max[predicate] is None or c > values_max[predicate]:
-            values_max[predicate] = c
-        if values_min[predicate] is None or c < values_min[predicate]:
-            values_min[predicate] = c
+        for predicate in node_predicate_map[node]:
+            if predicate not in relationwise_encodings.keys():
+                relationwise_encodings[predicate] = np.zeros(shape=(n, C),
+                                                             dtype=np.float32)
+                node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
+                m[predicate] = 0
+                values_min[predicate] = None
+                values_max[predicate] = None
 
-        # add to matrix structures
-        relationwise_encodings[predicate][m[predicate]] = [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
-        node_idx[m[predicate]] = i
-        values_idx[predicate].append(m[predicate])
-        m[predicate] += 1
+            c = int(separated.group('century'))
+            if values_max[predicate] is None or c > values_max[predicate]:
+                values_max[predicate] = c
+            if values_min[predicate] is None or c < values_min[predicate]:
+                values_min[predicate] = c
+
+            # add to matrix structures
+            relationwise_encodings[predicate][m[predicate]] =\
+                    [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
+            node_idx[m[predicate]] = i
+            m[predicate] += 1
 
     logger.debug("Generated {} unique date encodings".format(
         sum(m.values())))
@@ -185,13 +196,15 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         return None
 
     # normalization over centuries
-    for predicate in relationwise_encodings.keys():
-        if values_max[predicate] == values_min[predicate]:
-            relationwise_encodings[predicate][values_idx[predicate],1] = 0.0
+    for pred in relationwise_encodings.keys():
+        idx = np.arange(m[pred])
+        if values_max[pred] == values_min[pred]:
+            relationwise_encodings[pred][idx,1] = 0.0
             continue
 
-        relationwise_encodings[predicate][values_idx[predicate],1] = (2*(relationwise_encodings[predicate][values_idx[predicate],1] - values_min[predicate]) /
-                                             (values_max[predicate] - values_min[predicate])) -1.0
+        relationwise_encodings[pred][idx,1] =\
+                (2*(relationwise_encodings[pred][idx,1] - values_min[pred]) /
+                         (values_max[pred] - values_min[pred])) -1.0
 
     npreds = len(relationwise_encodings.keys())
 

@@ -33,15 +33,18 @@ def generate_features(nodes_map, node_predicate_map, config):
     Note that UNICODE is ignored as it skews the value distribution
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
+    :param node_predicate_map: dictionary of node labels (URIs): {predicates}
     :param config: configuration dictionary
-    :returns: numpy array M x A x C;
-                    M :- number of nodes with this feature, such that M <= N
-                    A :- number of allowed characters
-                    C :- maximum length of sequences
-              numpy array 1 x M;
-                    M :- number of nodes with this feature, such that M <= N
-              int C;
-              list 1 x M;
+    :returns: list of length P with lists Q of length 4;
+                P :- number of predicates that link to nodes with this feature
+                Q :- [seq, node_idx, C, seq_lengths];
+                    seq :- list with M numpy arrays A x L;
+                        M :- number of nodes with this feature, such that M <= N
+                        A :- number of allowed characters
+                        L :- sequence length
+                    node_idx :- numpy vector of length M, mapping seq index to node id
+                    C :- desired output dimension of encoder
+                    seq_lengths :- list of length M, mapping seq index to seq length
               """
     logger.debug("Generating string features")
 
@@ -98,7 +101,7 @@ def generate_nodewise_features(nodes_map, C, config):
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    n = len(node_predicate_map)
+    n = len(nodes_map)
     m = dict()
     node_idx = dict()
     sequences = dict()
@@ -120,23 +123,23 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         if seq_length <= 0:
             continue
 
-        predicate = node_predicate_map[node]
-        if predicate not in sequences.keys():
-            sequences[predicate] = list()
-            m[predicate] = 0
-            seq_length_map[predicate] = list()
-            node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
-
         a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
                            (sequence, np.array(range(seq_length)))),
                           shape=(_VOCAB_MAX_IDX, seq_length),
                           dtype=np.float32)
 
-        sequences[predicate].append(a)
+        for predicate in node_predicate_map[node]:
+            if predicate not in sequences.keys():
+                sequences[predicate] = list()
+                m[predicate] = 0
+                seq_length_map[predicate] = list()
+                node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
 
-        seq_length_map[predicate].append(seq_length)
-        node_idx[predicate][m[predicate]] = i
-        m[predicate] += 1
+            sequences[predicate].append(a)
+
+            seq_length_map[predicate].append(seq_length)
+            node_idx[predicate][m[predicate]] = i
+            m[predicate] += 1
 
     logger.debug("Generated {} unique string features".format(sum(m.values())))
 
@@ -144,8 +147,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         return None
 
     npreds = len(sequences.keys())
-    return [[sequences[predicate], node_idx[predicate][:m[predicate]], C, seq_length_map[predicate], npreds]
-            for predicate in sequences.keys()]
+    return [[sequences[pred], node_idx[pred][:m[pred]], C, seq_length_map[pred], npreds]
+            for pred in sequences.keys()]
 
 def encode(seq):
     encoding = list()

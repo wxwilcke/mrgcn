@@ -27,8 +27,12 @@ def construct_features(nodes_map, knowledge_graph, feature_configs,
 
     """
     hierarchy = XSDHierarchy()
-    node_predicate_map = { o:p for _,p,o in
-                          knowledge_graph.triples(separate_literals=separate_literals) }
+    node_predicate_map = dict()
+    for _,p,o in knowledge_graph.triples(separate_literals=separate_literals):
+        if o not in node_predicate_map.keys():
+            node_predicate_map[o] = set()
+        node_predicate_map[o].add(p)
+
     features = dict()
     for feature_config in feature_configs:
         if not feature_config['include']:
