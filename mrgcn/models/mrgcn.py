@@ -80,12 +80,11 @@ class MRGCN(nn.Module):
                           link_prediction)
         self.module_dict["RGCN"] = self.rgcn
 
-    def forward(self, X, A, batch_grad_idx=-1, device=None):
+    def forward(self, X, A, device=None):
         X, F = X[0], X[1:]
 
         # compute and concat modality-specific embeddings
         XF = self._compute_modality_embeddings(F,
-                                               batch_grad_idx,
                                                device)
         if XF is not None:
             #logger.debug(" Merging structure and node features")
@@ -103,13 +102,14 @@ class MRGCN(nn.Module):
 
         return X
 
-    def _compute_modality_embeddings(self, F, batch_grad_idx, device):
+    def _compute_modality_embeddings(self, F, device):
         X = list()
         for modality, F_set in F:
             if modality not in self.modality_modules.keys() or len(F_set[0]) <= 0:
                 continue
 
-            for i, ((encodings, node_idx, C, _, nsets), batches) in enumerate(F_set):
+            nsets = len(F_set)
+            for i, ((encodings, node_idx, _), batches) in enumerate(F_set):
                 module, _ = self.modality_modules[modality][i]
                 module.to(device)
 
@@ -142,25 +142,11 @@ class MRGCN(nn.Module):
                     #print(" {} - {} GB".format(batch.size(),
                     #                          PROCESS.memory_info().rss/1e9))
                     batch_dev = batch.to(device)
-                    if batch_grad_idx < 0:
-                        # compute gradients on whole dataset
-                        logger.debug(" {} (set {} / {}) - batch {} / {} +grad".format(modality,
-                                                                           i+1, nsets,
-                                                                           j+1, nbatches))
-                        out_dev = module(batch_dev)
-                    else:
-                        # compute gradients on one batch per epoch
-                        if batch_grad_idx % nbatches == j:
-                            logger.debug(" {} (set {} / {}) - batch {} / {} +grad".format(modality,
-                                                                               i+1, nsets,
-                                                                               j+1, nbatches))
-                            out_dev = module(batch_dev)
-                        else:
-                            with torch.no_grad():
-                                logger.debug(" {} (set {} / {}) - batch {} / {} -grad".format(modality,
-                                                                                   i+1, nsets,
-                                                                                   j+1, nbatches))
-                                out_dev = module(batch_dev)
+                    # compute gradients on batch 
+                    logger.debug(" {} (set {} / {}) - batch {} / {}".format(modality,
+                                                                       i+1, nsets,
+                                                                       j+1, nbatches))
+                    out_dev = module(batch_dev)
 
                     out_cpu = out_dev.to('cpu')
                     out.append(out_cpu)
@@ -169,7 +155,7 @@ class MRGCN(nn.Module):
                 out = torch.cat(out, dim=0)
 
                 # map output to correct nodes
-                XF = torch.zeros((self.num_nodes, C), dtype=torch.float32)
+                XF = torch.zeros((self.num_nodes, out.shape[1]), dtype=torch.float32)
                 XF[out_node_idx] = out
 
                 X.append(XF)

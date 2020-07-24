@@ -32,43 +32,43 @@ def dataset_to_device(dataset, device):
         split['idx'] = split['idx'].to(device)
         # X stays where it is
 
-def mkbatches(mat, node_idx, C, _, nsets, nepoch, passes_per_batch=1):
+def mkbatches(mat, node_idx, _, num_batches=1):
     """ split N x * array in batches
     """
     n = mat.shape[0]  # number of samples
-    idc = np.array(range(n), dtype=np.int32)
+    num_batches = min(n, num_batches)
+    idc = np.arange(n, dtype=np.int32)
 
-    nbins = nepoch
-    if passes_per_batch > 1:
-        nbins = nepoch//passes_per_batch
+    if num_batches == 0:
+        logger.debug("Full batch mode")
 
-    idc_assignments = np.array_split(idc, nbins)
+    idc_assignments = np.array_split(idc, num_batches)
     node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
                         for slce in idc_assignments]
 
     return list(zip(idc_assignments, node_assignments))
 
-def mkbatches_varlength(sequences, node_idx, C, seq_length_map, _,
-                            nepoch, passes_per_batch=1):
+def mkbatches_varlength(sequences, node_idx, seq_length_map,
+                        num_batches=1):
     n = len(sequences)
+    num_batches = min(n, num_batches)
+    if num_batches == 0:
+        logger.debug("Full batch mode")
+
     # sort on length
-    idc = np.array(range(n), dtype=np.int32)
+    idc = np.arange(n, dtype=np.int32)
     seq_length_map_sorted, node_idx_sorted, sequences_sorted_idc = zip(
         *sorted(zip(seq_length_map,
                     node_idx,
                     idc)))
 
-    nbins = nepoch
-    if passes_per_batch > 1:
-        nbins = nepoch//passes_per_batch
-
-    seq_assignments = np.array_split(sequences_sorted_idc, nbins)
+    seq_assignments = np.array_split(sequences_sorted_idc, num_batches)
     node_assignments = [np.array(node_idx, dtype=np.int32)[slce]
                         for slce in seq_assignments]
 
     return list(zip(seq_assignments, node_assignments))
 
-def trim_outliers(sequences, node_idx, C, seq_length_map, nsets, feature_dim=0):
+def trim_outliers(sequences, node_idx, seq_length_map, feature_dim=0):
     # split outliers
     q25 = np.quantile(seq_length_map, 0.25)
     q75 = np.quantile(seq_length_map, 0.75)
@@ -76,7 +76,7 @@ def trim_outliers(sequences, node_idx, C, seq_length_map, nsets, feature_dim=0):
     cut_off = IQR * 1.5
 
     if IQR <= 0.0:  # no length difference
-        return [sequences, node_idx, C, seq_length_map, nsets]
+        return [sequences, node_idx, seq_length_map]
 
     sequences_trimmed = list()
     seq_length_map_trimmed = list()
@@ -95,9 +95,9 @@ def trim_outliers(sequences, node_idx, C, seq_length_map, nsets, feature_dim=0):
     if d > 0:
         logger.debug("Trimmed {} outliers)".format(d))
 
-    return [sequences_trimmed, node_idx, C, seq_length_map_trimmed, nsets]
+    return [sequences_trimmed, node_idx, seq_length_map_trimmed]
 
-def remove_outliers(sequences, node_idx, C, seq_length_map, nsets):
+def remove_outliers(sequences, node_idx, seq_length_map):
     # split outliers
     q25 = np.quantile(seq_length_map, 0.25)
     q75 = np.quantile(seq_length_map, 0.75)
@@ -105,7 +105,7 @@ def remove_outliers(sequences, node_idx, C, seq_length_map, nsets):
     cut_off = IQR * 1.5
 
     if IQR <= 0.0:  # no length difference
-        return [sequences, node_idx, C, seq_length_map, nsets]
+        return [sequences, node_idx, seq_length_map]
 
     sequences_filtered = list()
     node_idx_filtered = list()
@@ -124,7 +124,7 @@ def remove_outliers(sequences, node_idx, C, seq_length_map, nsets):
     if d > 0:
         logger.debug("Filtered {} outliers ({} remain)".format(d, n))
 
-    return [sequences_filtered, node_idx_filtered, C, seq_length_map_filtered, nsets]
+    return [sequences_filtered, node_idx_filtered, seq_length_map_filtered]
 
 def triples_to_indices(kg, node_map, edge_map, separate_literals=False):
     data = np.zeros((len(kg), 3), dtype=np.int32)

@@ -23,16 +23,14 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     """
     logger.debug("Generating B64-encoded image encodings")
-    C = 128
-
 
     if True:  #config['share_weights']:
-        return generate_relationwise_features(nodes_map, node_predicate_map, C,
+        return generate_relationwise_features(nodes_map, node_predicate_map,
                                               config)
     else:
-        return generate_nodewise_features(nodes_map, C, config)
+        return generate_nodewise_features(nodes_map, config)
 
-def generate_nodewise_features(nodes_map, C, config):
+def generate_nodewise_features(nodes_map, config):
     """ Stack all vectors without regard of their relation
     """
     W, H = _IMG_SIZE
@@ -91,12 +89,12 @@ def generate_nodewise_features(nodes_map, C, config):
                        (values_max[ch] - values_min[ch])) - 1.0
             encodings[:m][i] = img
 
-    return [[encodings[:m], node_idx[:m], C, None, 1]]
+    return [[encodings[:m], node_idx[:m], None]]
 
-def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
+def generate_relationwise_features(nodes_map, node_predicate_map, config):
     W, H = _IMG_SIZE
     c = len([c for c in _IMG_MODE if c.isupper() or c == '1'])
- 
+
     n = len(nodes_map)
     m = dict()
     relationwise_encodings = dict()
@@ -144,7 +142,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
 
             # add to matrix structures
             relationwise_encodings[pred][m[pred]] = a
-            node_idx[m[pred]] = i
+            node_idx[pred][m[pred]] = i
             m[pred] += 1
 
     logger.debug("Generated {} unique B64-encoded image encodings".format(sum(m.values())))
@@ -161,9 +159,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
                            (values_max[pred][ch] - values_min[pred][ch])) - 1.0
                 relationwise_encodings[pred][:m[pred]][i] = img
 
-    npreds = len(relationwise_encodings.keys())
-
-    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], C, None, npreds]
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], None]
             for pred, encodings in relationwise_encodings.items()]
 
 def b64_to_img(b64string):

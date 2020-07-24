@@ -29,15 +29,14 @@ def generate_features(nodes_map, node_predicate_map, config, time_dim=1):
 
     """
     logger.debug("Generating wktLiteral features")
-    C = 16  # number of items per feature
 
     if True:
-        return generate_relationwise_features(nodes_map, node_predicate_map, C,
+        return generate_relationwise_features(nodes_map, node_predicate_map,
                                               config, time_dim)
     else:
-        return generate_nodewise_features(nodes_map, C, config, time_dim)
+        return generate_nodewise_features(nodes_map, config, time_dim)
 
-def generate_nodewise_features(nodes_map, C, config, time_dim):
+def generate_nodewise_features(nodes_map, config, time_dim):
     """ Stack all vectors without regard of their relation
     """
     n = len(nodes_map)
@@ -92,9 +91,9 @@ def generate_nodewise_features(nodes_map, C, config, time_dim):
     means = sc.fit(data)
     data = sc.transform(data, means)
 
-    return [[data, node_idx[:m], C, vec_length_map, 1]]
+    return [[data, node_idx[:m], vec_length_map]]
 
-def generate_relationwise_features(nodes_map, node_predicate_map, C, config,
+def generate_relationwise_features(nodes_map, node_predicate_map, config,
                                    time_dim):
     """ Stack vectors row-wise per relation and column stack relations
     """
@@ -159,8 +158,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config,
         means = sc.fit(pdata)
         data[pred] = sc.transform(pdata, means)
 
-    npreds = len(data.keys())
-    return [[data[pred], node_idx[pred][:m[pred]], C, vec_length_map[pred], npreds]
+    return [[data[pred], node_idx[pred][:m[pred]], vec_length_map[pred]]
             for pred in data.keys()]
 
 

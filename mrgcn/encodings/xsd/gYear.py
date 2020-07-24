@@ -45,16 +45,16 @@ def generate_features(nodes_map, node_predicate_map, config):
     -- v[2:4] : \d,\d   : decades; points on circle
     -- v[4:6] : \d,\d   : individual years; points on circle
 
-    :param nodes_map: dictionary of node labels (uris) : node idx {0, n}
-    :param node_predicate_map: dictionary of node labels (uris): {predicates}
+    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
+    :param node_predicate_map: dictionary of node labels (URIs): {predicates}
     :param config: configuration dictionary
-    :returns: list of length p with lists q of length 4;
-                p :- number of predicates that link to nodes with this feature
-                q :- [enc, node_idx, c, none];
-                    enc :- numpy array m x c;
-                        m :- number of nodes with this feature, such that m <= n
+    :returns: list of length P with lists Q of length 3;
+                P :- number of predicates that link to nodes with this feature
+                Q :- [enc, node_idx, none];
+                    enc :- numpy array M x C;
+                        M :- number of nodes with this feature, such that m <= n
+                        C :- desired output dimension of encoder
                     node_idx :- numpy vector of length m, mapping seq index to node id
-                    c :- desired output dimension of encoder
                     none :- not used here
 
     """
@@ -122,7 +122,7 @@ def generate_nodewise_features(nodes_map, C, config):
     encodings[:m,1] = (2*(encodings[:m,1] - value_min) /
                         (value_max - value_min)) - 1.0
 
-    return [[encodings[:m], node_idx[:m], C, None, 1]]
+    return [[encodings[:m], node_idx[:m], None]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
@@ -194,9 +194,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
                 (2*(relationwise_encodings[pred][idx,1] - values_min[pred]) /
                              (values_max[pred] - values_min[pred])) -1.0
 
-    npreds = len(relationwise_encodings.keys())
-
-    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], C, None, npreds]
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], None]
             for pred, encodings in relationwise_encodings.items()]
 
 def point(m, rad):
