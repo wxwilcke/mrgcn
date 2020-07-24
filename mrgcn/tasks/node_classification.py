@@ -28,8 +28,6 @@ def run(A, X, Y, C, tsv_writer, device, config,
                            weight_decay=config['model']['l2norm'])
     criterion = nn.CrossEntropyLoss()
 
-    # mini batching
-    mini_batch = config['model']['mini_batch']
 
     # early stopping
     patience = config['model']['patience']
@@ -43,7 +41,7 @@ def run(A, X, Y, C, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, model, optimizer, criterion, X, Y,
-                             nepoch, mini_batch, device):
+                             nepoch, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -80,18 +78,12 @@ def run(A, X, Y, C, tsv_writer, device, config,
 
     return (loss, acc, labels, targets)
 
-def train_model(A, model, optimizer, criterion, X, Y, nepoch, mini_batch, device):
+def train_model(A, model, optimizer, criterion, X, Y, nepoch, device):
     logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(1, nepoch+1):
-        batch_grad_idx = epoch - 1
-        if not mini_batch:
-            batch_grad_idx = -1
-
         # Single training iteration
         model.train()
-        Y_hat = model(X, A,
-                      batch_grad_idx=batch_grad_idx,
-                      device=device)
+        Y_hat = model(X, A, device=device)
 
         # Training scores
         train_loss = categorical_crossentropy(Y_hat, Y['train'], criterion)
@@ -133,9 +125,7 @@ def test_model(A, model, criterion, X, Y, test_split, device):
     # Predict on full dataset
     model.train(False)
     with torch.no_grad():
-        Y_hat = model(X, A,
-                      batch_grad_idx=-1,
-                      device=device)
+        Y_hat = model(X, A, device=device)
 
     # scores on set
     loss = categorical_crossentropy(Y_hat, Y[test_split], criterion)

@@ -27,7 +27,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     """ Generate encodings for XSD date literals
 
     Definition
-    - date := yearFrag '-' monthFrag '-' dayFrag timezoneFrag?   
+    - date := yearFrag '-' monthFrag '-' dayFrag timezoneFrag?
 
     Encoding
     - a vector v of length C = 4
@@ -45,13 +45,12 @@ def generate_features(nodes_map, node_predicate_map, config):
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param node_predicate_map: dictionary of node labels (URIs): {predicates}
     :param config: configuration dictionary
-    :returns: list of length P with lists Q of length 4;
+    :returns: list of length P with lists Q of length 3;
                 P :- number of predicates that link to nodes with this feature
-                Q :- [enc, node_idx, C, None];
+                Q :- [enc, node_idx, None];
                     enc :- numpy array M x C;
                         M :- number of nodes with this feature, such that M <= N
                     node_idx :- numpy vector of length M, mapping seq index to node id
-                    C :- desired output dimension of encoder
                     None :- not used here
 
     """
@@ -125,7 +124,7 @@ def generate_nodewise_features(nodes_map, C, config):
     encodings[:m,1] = (2*(encodings[:m,1] - value_min) /
                         (value_max - value_min)) - 1.0
 
-    return [[encodings[:m], node_idx[:m], C, None, 1]]
+    return [[encodings[:m], node_idx[:m], None]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
@@ -186,7 +185,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             # add to matrix structures
             relationwise_encodings[predicate][m[predicate]] =\
                     [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
-            node_idx[m[predicate]] = i
+            node_idx[predicate][m[predicate]] = i
             m[predicate] += 1
 
     logger.debug("Generated {} unique date encodings".format(
@@ -206,9 +205,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
                 (2*(relationwise_encodings[pred][idx,1] - values_min[pred]) /
                          (values_max[pred] - values_min[pred])) -1.0
 
-    npreds = len(relationwise_encodings.keys())
-
-    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], C, None, npreds]
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], None]
             for pred, encodings in relationwise_encodings.items()]
 
 def point(m, rad):

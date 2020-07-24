@@ -36,25 +36,28 @@ share_weights = true
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-passes_per_batch = 1
+num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = false
+embedding_dim = 16
 
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-passes_per_batch = 1
+num_batches = 16
 share_weights = true
 remove_outliers = false
+embedding_dim = 128
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
-passes_per_batch = 1
+num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = false
+embedding_dim = 16
 
 [task]
 type = 'link prediction'
@@ -65,7 +68,6 @@ gpu = false
 epoch = 200
 learning_rate = 0.01
 patience = -1  # < 0 to disable
-mini_batch = false
 distmult_batch_size = 1e5
 mrr_batch_size = 5e3
 num_bases = 2

@@ -35,27 +35,24 @@ def generate_features(nodes_map, node_predicate_map, config):
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param node_predicate_map: dictionary of node labels (URIs): {predicates}
     :param config: configuration dictionary
-    :returns: list of length P with lists Q of length 4;
+    :returns: list of length P with lists Q of length 3;
                 P :- number of predicates that link to nodes with this feature
-                Q :- [seq, node_idx, C, seq_lengths];
+                Q :- [seq, node_idx, seq_lengths];
                     seq :- list with M numpy arrays A x L;
                         M :- number of nodes with this feature, such that M <= N
                         A :- number of allowed characters
                         L :- sequence length
                     node_idx :- numpy vector of length M, mapping seq index to node id
-                    C :- desired output dimension of encoder
                     seq_lengths :- list of length M, mapping seq index to seq length
               """
     logger.debug("Generating string features")
 
-    C = 16
-
     if True:
-        return generate_relationwise_features(nodes_map, node_predicate_map, C, config)
+        return generate_relationwise_features(nodes_map, node_predicate_map, config)
     else:
-        return generate_nodewise_features(nodes_map, C, config)
+        return generate_nodewise_features(nodes_map, config)
 
-def generate_nodewise_features(nodes_map, C, config):
+def generate_nodewise_features(nodes_map, config):
     """ Stack all vectors without regard of their relation
     """
     m = 0
@@ -96,9 +93,9 @@ def generate_nodewise_features(nodes_map, C, config):
     if m <= 0:
         return None
 
-    return [[data, node_idx[:m], C, seq_length_map, 1]]
+    return [[data, node_idx[:m], seq_length_map]]
 
-def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
+def generate_relationwise_features(nodes_map, node_predicate_map, config):
     """ Stack vectors row-wise per relation and column stack relations
     """
     n = len(nodes_map)
@@ -146,8 +143,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     if len(m) <= 0:
         return None
 
-    npreds = len(sequences.keys())
-    return [[sequences[pred], node_idx[pred][:m[pred]], C, seq_length_map[pred], npreds]
+    return [[sequences[pred], node_idx[pred][:m[pred]], seq_length_map[pred]]
             for pred in sequences.keys()]
 
 def encode(seq):

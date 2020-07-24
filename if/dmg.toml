@@ -37,25 +37,28 @@ share_weights = false
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-passes_per_batch = 1
+num_batches = 16
 share_weights = false
 trim_outliers = false
 remove_outliers = false
+embedding_dim = 16
 
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-passes_per_batch = 1
+num_batches = 16
 share_weights = false
 remove_outliers = false
+embedding_dim = 128
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
-passes_per_batch = 1
+num_batches = 16
 share_weights = false
 trim_outliers = false
 remove_outliers = false
+embedding_dim = 16
 
 [task]
 type = 'node classification'
@@ -68,7 +71,6 @@ gpu = false
 epoch = 50
 learning_rate = 0.01
 patience = 7  # < 0 to disable
-mini_batch = false
 num_bases = 40
 p_dropout = 0.0
 l2norm = 5e-4
