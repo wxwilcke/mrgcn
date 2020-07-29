@@ -61,15 +61,16 @@ embedding_dim = 16
 
 [task]
 type = 'link prediction'
+filter_ranks = false
 seed = -1  # use < 0 for random
 gpu = false
 
 [model]
-epoch = 200
+epoch = 20
 learning_rate = 0.01
 patience = -1  # < 0 to disable
-distmult_batch_size = 1e5
-mrr_batch_size = 5e3
+distmult_batch_size = 5e5
+mrr_batch_size = 5e1
 num_bases = 2
 p_dropout = 0.0
 l2norm = 0.01
