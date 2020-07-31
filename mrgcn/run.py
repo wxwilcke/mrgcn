@@ -82,8 +82,9 @@ def main(args, acc_writer, out_writer, config):
 
         print("loss {:.4f} / accuracy {:.4f}".format(loss, acc))
     elif task == "link prediction":
+        rank_type = "filtered" if config['task']['filter_ranks'] else "raw"
         mrr, hits = out
-        print("MRR (raw) {:.4f}".format(mrr)
+        print("MRR ({}) {:.4f}".format(rank_type, mrr)
               + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
                                           k,v in hits.items()]))
 
