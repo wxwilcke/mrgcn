@@ -91,9 +91,9 @@ def run(A, X, C, data, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
 
-    mrr, hits_at_k = test_model(A, X, data, num_nodes, model, criterion,
-                                filtered_ranks, mrr_batch_size, test_split,
-                                multiprocessing, device)
+    mrr, hits_at_k, ranks = test_model(A, X, data, num_nodes, model, criterion,
+                                       filtered_ranks, mrr_batch_size, test_split,
+                                       multiprocessing, device)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
 
@@ -102,7 +102,7 @@ def run(A, X, C, data, tsv_writer, device, config,
                          str(mrr), str(hits_at_k[1]),
                          str(hits_at_k[3]), str(hits_at_k[10])])
 
-    return (mrr, hits_at_k)
+    return (mrr, hits_at_k, ranks)
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                 nepoch, filtered_ranks, mrr_batch_size,
@@ -183,6 +183,7 @@ def test_model(A, X, data, num_nodes, model, criterion, filtered_ranks,
     model.eval()
     mrr = 0.0
     hits_at_k = {1: 0.0, 3: 0.0, 10: 0.0}
+    ranks = None
     with torch.no_grad():
         node_embeddings = model(X, A, device=device)
         edge_embeddings = model.rgcn.relations
@@ -206,7 +207,7 @@ def test_model(A, X, data, num_nodes, model, criterion, filtered_ranks,
                  + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
                                               k,v in hits_at_k.items()]))
 
-    return (mrr, hits_at_k)
+    return (mrr, hits_at_k, ranks.numpy())
 
 def build_dataset(kg, nodes_map, config, featureless):
     logger.debug("Starting dataset build")
