@@ -216,11 +216,10 @@ def build_model(C, Y, A, modules_config, config, featureless):
         i += 1
 
     # output layer
-    # applies softmax over possible classes
     modules.append((layers[i-1]['hidden_nodes'],
                     Y_dim,
                     layers[i-1]['type'],
-                    nn.Softmax(dim=1)))
+                    None))
 
     model = MRGCN(modules, modules_config, num_relations, num_nodes,
                   num_bases=config['model']['num_bases'],

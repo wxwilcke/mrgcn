@@ -5,6 +5,7 @@ import argparse
 from os import getpid
 from time import time
 
+import numpy as np
 import toml
 import torch
 
@@ -36,7 +37,7 @@ def run(A, X, Y, C, data, acc_writer, device, config,
                                                featureless, test_split)
         return (mrr, hits_at_k)
 
-def main(args, acc_writer, out_writer, config):
+def main(args, acc_writer, out_writer, baseFilename, config):
     set_seed(config['task']['seed'])
 
     test_split = 'test' if args.test else 'valid' # use test split?
@@ -83,10 +84,13 @@ def main(args, acc_writer, out_writer, config):
         print("loss {:.4f} / accuracy {:.4f}".format(loss, acc))
     elif task == "link prediction":
         rank_type = "filtered" if config['task']['filter_ranks'] else "raw"
-        mrr, hits = out
+        mrr, hits, ranks = out
         print("MRR ({}) {:.4f}".format(rank_type, mrr)
               + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
                                           k,v in hits.items()]))
+
+        if args.save_ranks:
+            np.save(baseFilename+"_ranks.npy", ranks)
 
 def init_logger(filename, dry_run, verbose=0):
     if dry_run:
@@ -125,6 +129,8 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", help="Increase output verbosity", action='count', default=0)
     parser.add_argument("--dry_run", help="Suppress writing output files to disk",
                         action='store_true')
+    parser.add_argument("--save_ranks", help="Write final ranks to disk (npy). Link prediction only.",
+                        action='store_true')
     parser.add_argument("--test", help="Report accuracy on test set rather than on validation set",
                         action='store_true')
     args = parser.parse_args()
@@ -153,6 +159,6 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     # run training
-    main(args, acc_writer, out_writer, config)
+    main(args, acc_writer, out_writer, baseFilename, config)
 
     logging.shutdown()

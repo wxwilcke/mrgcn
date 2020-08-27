@@ -72,8 +72,8 @@ class RGCN(nn.Module):
                                p=self.p_dropout)
                 X = torch.mul(X.T, ones).T
 
-
-            X = f_activation(X)
+            if f_activation is not None:
+                X = f_activation(X)
 
         return X
 
