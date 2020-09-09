@@ -11,7 +11,7 @@ import scipy.sparse as sp
 
 
 _REGEX_CHAR = "[\u0001-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
-_REGEX_STRING = "{}+".format(_REGEX_CHAR)  # skip empty string
+_REGEX_ANYURI = "{}+".format(_REGEX_CHAR)  # skip empty string
 _MAX_CHARS = 512  # one-hot encoded
 _VOCAB = [chr(32)] + [chr(i) for i in range(97, 123)] + [chr(i) for i in range(48, 58)]
 _VOCAB_MAP = {v:k for k,v in enumerate(_VOCAB)}
@@ -20,10 +20,10 @@ _VOCAB_MAX_IDX = len(_VOCAB)
 logger = logging.getLogger(__name__)
 
 def generate_features(nodes_map, node_predicate_map, config):
-    """ Generate features for XSD string literals
+    """ Generate features for XSD anyURI literals
 
     Definition
-    - string := Char*
+    - anyURI := Char*
     -- Char  := [\t\r\n] + {unicode} + {ISO/IEC 10646}
 
     This is a character level encoding, in which each character is represented
@@ -66,7 +66,7 @@ def generate_nodewise_features(nodes_map, config):
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
-        if node.datatype is None or node.datatype.neq(XSD.string):
+        if node.datatype is None or node.datatype.neq(XSD.anyURI):
             continue
 
         node._value = str(node)  ## empty value bug workaround
@@ -89,7 +89,7 @@ def generate_nodewise_features(nodes_map, config):
         node_idx[m] = i
         m += 1
 
-    logger.debug("Generated {} unique string features".format(m))
+    logger.debug("Generated {} unique anyURI features".format(m))
 
     if m <= 0:
         return None
@@ -107,7 +107,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
-        if node.datatype is None or node.datatype.neq(XSD.string):
+        if node.datatype is None or node.datatype.neq(XSD.anyURI):
             continue
 
         node._value = str(node)  ## empty value bug workaround
@@ -139,7 +139,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
             node_idx[predicate][m[predicate]] = i
             m[predicate] += 1
 
-    logger.debug("Generated {} unique string features".format(sum(m.values())))
+    logger.debug("Generated {} unique anyURI features".format(sum(m.values())))
 
     if len(m) <= 0:
         return None
@@ -162,4 +162,4 @@ def preprocess(seq):
     return " ".join(seq)
 
 def validate(value):
-    return fullmatch(_REGEX_STRING, value)
+    return fullmatch(_REGEX_ANYURI, value)

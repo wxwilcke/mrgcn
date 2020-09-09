@@ -1,24 +1,28 @@
 # Dataset configuration context
 
 # name of the dataset
-name = "MUTAG"
+name = "FB15K-237"
 
 [graph]
-context = "../../datasets/mutag/mutag_stripped.nt.gz"
-train = "../../datasets/mutag/mutag_train_set.nt.gz"
-valid = "../../datasets/mutag/mutag_valid_set.nt.gz"
-test = "../../datasets/mutag/mutag_test_set.nt.gz"
+train = "../../datasets/fb15k-237/rdf/freebase_mtr100_mte100_237-train.nt.gz"
+valid = "../../datasets/fb15k-237/rdf/freebase_mtr100_mte100_237-valid.nt.gz"
+test = "../../datasets/fb15k-237/rdf/freebase_mtr100_mte100_237-test.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
 separate_literals = false
 
-[[graph.features]]
-datatype = 'xsd.numeric'
-include = true
-share_weights = true
-
+#[[graph.features]]
+#datatype = 'xsd.numeric'
+#include = true
+#share_weights = true
+#
+#[[graph.features]]
+#datatype = 'xsd.boolean'
+#include = true
+#share_weights = true
+#
 #[[graph.features]]
 #datatype = 'xsd.gYear'
 #include = true
@@ -27,13 +31,8 @@ share_weights = true
 #[[graph.features]]
 #datatype = 'xsd.date'
 #include = true
-#share_weights = true 
-
-[[graph.features]]
-datatype = 'xsd.boolean'
-include = true
-share_weights = true
-
+#share_weights = true
+#
 #[[graph.features]]
 #datatype = 'xsd.string'
 #include = true
@@ -61,24 +60,23 @@ share_weights = true
 #embedding_dim = 16
 
 [task]
-type = "node classification"
-target_property = 'http://dl-learner.org/carcinogenesis#isMutagenic'
-target_property_inv = ''
+type = 'link prediction'
+filter_ranks = false
+multiprocessing = false
 seed = -1  # use < 0 for random
 gpu = false
 
 [model]
-epoch = 50
+epoch = 20
 learning_rate = 0.01
-patience = 7  # < 0 to disable
-num_bases = 30
+patience = -1  # < 0 to disable
+distmult_batch_size = 5e5
+mrr_batch_size = 5e1
+num_bases = 2
 p_dropout = 0.0
-l2norm = 5e-4
+l2norm = 0.01
 bias = false
 
 [[model.layers]]
 type = 'mrgcn'
-hidden_nodes = 16
-
-[[model.layers]]
-type = 'mrgcn'
+hidden_nodes = 200

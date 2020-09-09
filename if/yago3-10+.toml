@@ -1,37 +1,38 @@
 # Dataset configuration context
 
 # name of the dataset
-name = "FB15K"
+name = "YAGO3-10+"
 
 [graph]
-train = "../../datasets/fb15k/rdf/freebase_mtr100_mte100-train.nt.gz"
-valid = "../../datasets/fb15k/rdf/freebase_mtr100_mte100-valid.nt.gz"
-test = "../../datasets/fb15k/rdf/freebase_mtr100_mte100-test.nt.gz"
+train = "../../datasets/yago3-10\+/rdf/"
+valid = "../../datasets/yago3-10\+/rdf/"
+test = "../../datasets/yago3-10\+/rdf/"
 
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
 separate_literals = false
 
-[[graph.features]]
-datatype = 'xsd.numeric'
-include = true
-share_weights = true
-
-[[graph.features]]
-datatype = 'xsd.boolean'
-include = true
-share_weights = true
+#[[graph.features]]
+#datatype = 'xsd.numeric'
+#include = true
+#share_weights = true
+#
+#[[graph.features]]
+#datatype = 'xsd.boolean'
+#include = true
+#share_weights = true
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = true
 share_weights = true
 
-[[graph.features]]
-datatype = 'xsd.date'
-include = true
-share_weights = true
+#[[graph.features]]
+#datatype = 'xsd.date'
+#include = true
+#share_weights = true
+
 
 [[graph.features]]
 datatype = 'xsd.string'
@@ -50,14 +51,14 @@ share_weights = true
 remove_outliers = false
 embedding_dim = 128
 
-[[graph.features]]
-datatype = 'ogc.wktLiteral'
-include = true
-num_batches = 16
-share_weights = true
-trim_outliers = false
-remove_outliers = false
-embedding_dim = 16
+#[[graph.features]]
+#datatype = 'ogc.wktLiteral'
+#include = true
+#num_batches = 16
+#share_weights = true
+#trim_outliers = false
+#remove_outliers = false
+#embedding_dim = 16
 
 [task]
 type = 'link prediction'

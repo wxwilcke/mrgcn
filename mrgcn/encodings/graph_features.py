@@ -15,8 +15,8 @@ from mrgcn.tasks.utils import (mkbatches,
 logger = logging.getLogger(__name__)
 
 ENCODINGS_PKG = "mrgcn.encodings"
-EMBEDDING_FEATURES = {"xsd.boolean", "xsd.date", "xsd.gYear", "xsd.numeric"}
-PREEMBEDDING_FEATURES = {"xsd.string", "blob.image", "ogc.wktLiteral"}
+EMBEDDING_FEATURES = {"xsd.boolean", "xsd.date", "xsd.dateTime", "xsd.gYear", "xsd.numeric"}
+PREEMBEDDING_FEATURES = {"xsd.string", "xsd.anyURI", "blob.image", "ogc.wktLiteral"}
 AVAILABLE_FEATURES = set.union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
 
 def construct_features(nodes_map, knowledge_graph, feature_configs,
@@ -90,7 +90,7 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
         encoding_sets = features.pop(datatype, list())
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
-            if datatype in ["xsd.string", "ogc.wktLiteral"]:
+            if datatype in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
             elif datatype in ["blob.image"]:
                 encoding_sets = merge_img_encoding_sets(encoding_sets)
@@ -99,7 +99,7 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
 
         nsets = len(encoding_sets)
         for encodings, node_idx, seq_lengths in encoding_sets:
-            if datatype in ["xsd.string"]:
+            if datatype in ["xsd.string", "xsd.anyURI"]:
                 # stored as list of arrays
                 feature_dim = 0
                 feature_size = encodings[0].shape[feature_dim]
@@ -134,7 +134,7 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
             X_width += embedding_dim
 
         # deal with outliers?
-        if datatype in ["ogc.wktLiteral", "xsd.string"]:
+        if datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
             if feature_config['remove_outliers']:
                 encoding_sets = [remove_outliers(*f) for f in encoding_sets]
             if feature_config['trim_outliers']:
@@ -147,10 +147,7 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
             if datatype == "blob.image":
                 encoding_sets_batched.append((f, mkbatches(*f,
                                                   num_batches=feature_config['num_batches'])))
-            elif datatype == "ogc.wktLiteral":
-                encoding_sets_batched.append((f, mkbatches_varlength(*f,
-                                                            num_batches=feature_config['num_batches'])))
-            elif datatype == "xsd.string":
+            elif datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
                 encoding_sets_batched.append((f, mkbatches_varlength(*f,
                                                             num_batches=feature_config['num_batches'])))
 

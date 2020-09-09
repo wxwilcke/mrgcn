@@ -1,13 +1,12 @@
 # Dataset configuration context
 
 # name of the dataset
-name = "AM"
+name = "ML100k+"
 
 [graph]
-context = "../../datasets/am/am_stripped_revised_updated.nt.gz"
-train = "../../datasets/am/am_train_set.nt.gz"
-valid = "../../datasets/am/am_valid_set.nt.gz"
-test = "../../datasets/am/am_test_set.nt.gz"
+train = "../../datasets/movielens-100k\+/rdf/"
+valid = "../../datasets/movielens-100k\+/rdf/"
+test = "../../datasets/movielens-100k\+/rdf/"
 
 [graph.structural]
 include_inverse_properties = true
@@ -17,22 +16,29 @@ separate_literals = false
 [[graph.features]]
 datatype = 'xsd.numeric'
 include = true
-share_weights = false
+share_weights = true
+
+#[[graph.features]]
+#datatype = 'xsd.boolean'
+#include = true
+#share_weights = true
+#
+#[[graph.features]]
+#datatype = 'xsd.gYear'
+#include = true
+#share_weights = true
+#
+#[[graph.features]]
+#datatype = 'xsd.date'
+#include = true
+#share_weights = true
 
 [[graph.features]]
-datatype = 'xsd.gYear'
+datatype = 'xsd.dateTime'
 include = true
-share_weights = false
+share_weights = true
 
-[[graph.features]]
-datatype = 'xsd.date'
-include = true
-share_weights = false
-
-[[graph.features]]
-datatype = 'xsd.boolean'
-include = true
-share_weights = false
+# TODO add anyURI
 
 [[graph.features]]
 datatype = 'xsd.string'
@@ -47,7 +53,7 @@ embedding_dim = 16
 datatype = 'blob.image'
 include = true
 num_batches = 16
-share_weights = false
+share_weights = true
 remove_outliers = false
 embedding_dim = 128
 
@@ -55,30 +61,29 @@ embedding_dim = 128
 #datatype = 'ogc.wktLiteral'
 #include = true
 #num_batches = 16
-#share_weights = false
+#share_weights = true
 #trim_outliers = false
 #remove_outliers = false
 #embedding_dim = 16
 
 [task]
-type = 'node classification'
-target_property = 'http://purl.org/collections/nl/am/objectCategory'
-target_property_inv = 'http://purl.org/collections/nl/am/material'
+type = 'link prediction'
+filter_ranks = false
+multiprocessing = false
 seed = -1  # use < 0 for random
 gpu = false
 
 [model]
-epoch = 50
+epoch = 20
 learning_rate = 0.01
-patience = 7  # < 0 to disable
-num_bases = 40
+patience = -1  # < 0 to disable
+distmult_batch_size = 5e5
+mrr_batch_size = 5e1
+num_bases = 2
 p_dropout = 0.0
-l2norm = 5e-4
+l2norm = 0.01
 bias = false
 
 [[model.layers]]
 type = 'mrgcn'
-hidden_nodes = 10
-
-[[model.layers]]
-type = 'mrgcn'
+hidden_nodes = 200

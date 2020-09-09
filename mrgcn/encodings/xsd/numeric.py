@@ -61,8 +61,38 @@ def generate_features(node_map, node_predicate_map, config):
 
     if config['datatype'] == "xsd.numeric":
         datatype = _XSD_NUMERICAL
-    else:
-        datatype = [config['datatype']]
+    elif config['datatype'] == "xsd.double":
+        datatype = [XSD.double]
+    elif config['datatype'] == "xsd.decimal":
+        datatype = [XSD.decimal]
+    elif config['datatype'] == "xsd.float":
+        datatype = [XSD.float]
+    elif config['datatype'] == "xsd.integer":
+        datatype = [XSD.integer]
+    elif config['datatype'] == "xsd.long":
+        datatype = [XSD.long]
+    elif config['datatype'] == "xsd.int":
+        datatype = [XSD.int]
+    elif config['datatype'] == "xsd.short":
+        datatype = [XSD.short]
+    elif config['datatype'] == "xsd.byte":
+        datatype = [XSD.byte]
+    elif config['datatype'] == "xsd.nonNegativeInteger":
+        datatype = [XSD.nonNegativeInteger]
+    elif config['datatype'] == "xsd.nonPositiveInteger":
+        datatype = [XSD.nonPositiveInteger]
+    elif config['datatype'] == "xsd.unsignedLong":
+        datatype = [XSD.unsignedLong]
+    elif config['datatype'] == "xsd.unsignedInt":
+        datatype = [XSD.unsignedInt]
+    elif config['datatype'] == "xsd.unsignedShort":
+        datatype = [XSD.unsignedShort]
+    elif config['datatype'] == "xsd.unsignedByte":
+        datatype = [XSD.unsignedByte]
+    elif config['datatype'] == "xsd.negativeInteger":
+        datatype = [XSD.negativeInteger]
+    elif config['datatype'] == "xsd.positiveInteger":
+        datatype = [XSD.positiveInteger]
 
     if True:  #config['share_weights']:
         return generate_relationwise_features(node_map, node_predicate_map, C,
