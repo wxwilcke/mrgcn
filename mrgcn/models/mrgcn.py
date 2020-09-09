@@ -39,7 +39,7 @@ class MRGCN(nn.Module):
         self.modality_modules = dict()
         i, j, k = 0, 0, 0
         for modality, args in embedding_modules:
-            if modality == "xsd.string":
+            if modality in ["xsd.string", "xsd.anyURI"]:
                 batch_size, nrows, dim_out, model_size = args
                 module = CharCNN(features_in=nrows,
                                  features_out=dim_out,
@@ -121,7 +121,7 @@ class MRGCN(nn.Module):
                         # dirty bug fix
                         continue
 
-                    if modality in ["xsd.string", "ogc.wktLiteral"]:
+                    if modality in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
                         # encodings := list of sparse coo matrices
                         batch = itemgetter(*batch_encoding_idx)(encodings)
                         if type(batch) is not tuple:  # single sample

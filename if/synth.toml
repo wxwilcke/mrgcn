@@ -25,22 +25,22 @@ datatype = 'xsd.gYear'
 include = true
 share_weights = true 
 
-[[graph.features]]
-datatype = 'xsd.date'
-include = true
-share_weights = true 
+#[[graph.features]]
+#datatype = 'xsd.date'
+#include = true
+#share_weights = true 
 
-[[graph.features]]
-datatype = 'xsd.boolean'
-include = true
-share_weights = true 
+#[[graph.features]]
+#datatype = 'xsd.boolean'
+#include = true
+#share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
 num_batches = 16
 share_weights = true
-trim_outliers = false
+trim_outliers = true
 remove_outliers = false
 embedding_dim = 16
 

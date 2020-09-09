@@ -16,49 +16,49 @@ separate_literals = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = true
+include = false
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = true
+include = false
 share_weights = true
 
-[[graph.features]]
-datatype = 'xsd.date'
-include = true
-share_weights = true 
-
-[[graph.features]]
-datatype = 'xsd.boolean'
-include = false
-share_weights = true 
+#[[graph.features]]
+#datatype = 'xsd.date'
+#include = false
+#share_weights = true 
+#
+#[[graph.features]]
+#datatype = 'xsd.boolean'
+#include = false
+#share_weights = true 
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = true
+include = false
 num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = true
 embedding_dim = 32
 
-[[graph.features]]
-datatype = 'blob.image'
-include = false
-num_batches = 16
-share_weights = true
-trim_outliers = false
-remove_outliers = false
-embedding_dim = 128
-
-[[graph.features]]
-datatype = 'ogc.wktLiteral'
-include = false
-num_batches = 16
-share_weights = true
-remove_outliers = false
-embedding_dim = 16
+#[[graph.features]]
+#datatype = 'blob.image'
+#include = false
+#num_batches = 16
+#share_weights = true
+#trim_outliers = false
+#remove_outliers = false
+#embedding_dim = 128
+#
+#[[graph.features]]
+#datatype = 'ogc.wktLiteral'
+#include = false
+#num_batches = 16
+#share_weights = true
+#remove_outliers = false
+#embedding_dim = 16
 
 [task]
 type = "node classification"

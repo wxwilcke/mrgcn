@@ -12,11 +12,19 @@ from rdflib.namespace import XSD
 _REGEX_YEAR_FRAG = "(?P<sign>-?)(?P<year>\d{4})"  # only consider years from -9999 to 9999
 _REGEX_MONTH_FRAG = "(?P<month>\d{2})"
 _REGEX_DAY_FRAG = "(?P<day>\d{2})"
+_REGEX_HOUR_FRAG = "(?P<hour>\d{2})"
+_REGEX_MINUTE_FRAG = "(?P<minute>\d{2})"
+_REGEX_SECOND_FRAG = "(?P<second>\d{2})(?:\.(?P<subsecond>\d+))?"
 _REGEX_TIMEZONE_FRAG = "(?P<timezone>Z|(?:\+|-)(?:(?:0\d|1[0-3]):[0-5]\d|14:00))?"
-_REGEX_DATE = "{}-{}-{}(?:{})?".format(_REGEX_YEAR_FRAG,
-                                     _REGEX_MONTH_FRAG,
-                                     _REGEX_DAY_FRAG,
-                                     _REGEX_TIMEZONE_FRAG)
+_REGEX_DATETIME = "{}-{}-{}T{}:{}:{}(?:{})?".format(_REGEX_YEAR_FRAG,
+                                                    _REGEX_MONTH_FRAG,
+                                                    _REGEX_DAY_FRAG,
+                                                    _REGEX_HOUR_FRAG,
+                                                    _REGEX_MINUTE_FRAG,
+                                                    _REGEX_SECOND_FRAG,
+                                                    _REGEX_TIMEZONE_FRAG)
+_MINUTE_RAD = 2*pi/60
+_HOUR_RAD = 2*pi/24
 _DAY_RAD = 2*pi/31
 _MONTH_RAD = 2*pi/12
 _YEAR_DECADE_RAD = 2*pi/10
@@ -24,13 +32,16 @@ _YEAR_DECADE_RAD = 2*pi/10
 logger = logging.getLogger(__name__)
 
 def generate_features(nodes_map, node_predicate_map, config):
-    """ Generate encodings for XSD date literals
+    """ Generate encodings for XSD dateTime literals
 
     Definition
-    - date := yearFrag '-' monthFrag '-' dayFrag timezoneFrag?
+    - date := yearFrag '-' monthFrag '-' dayFrag T hourFrag : minuteFrag : secondsFrag timezoneFrag?
+
+    Note
+    - seconds and timezones are omitted because of their limited information value
 
     Encoding
-    - a vector v of length C = 10
+    - a vector v of length C = 14
     -- v[0] : '-'? : BCE or AD; -1.0 if '-', else 1.0
                      Note: a. needed to represent difference 0YY AD and 0YY BCE
                            b. mapping assumes majority is AD
@@ -41,6 +52,8 @@ def generate_features(nodes_map, node_predicate_map, config):
     -- v[4:6] : \d,\d   : individual years on circle
     -- v[6:8]: \d,\d : point on circle representing month
     -- v[8:10]: \d,\d : point on circle representing day
+    -- v[10:12]: \d,\d : point on circle representing hour
+    -- v[12:14]: \d,\d : point on circle representing minutes
 
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param node_predicate_map: dictionary of node labels (URIs): {predicates}
@@ -54,8 +67,8 @@ def generate_features(nodes_map, node_predicate_map, config):
                     None :- not used here
 
     """
-    logger.debug("Generating date encodings")
-    C = 10  # number of items per feature
+    logger.debug("Generating dateTime encodings")
+    C = 14  # number of items per feature
 
     if True:
         return generate_relationwise_features(nodes_map, node_predicate_map, C,
@@ -76,7 +89,7 @@ def generate_nodewise_features(nodes_map, C, config):
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
-        if node.datatype is None or node.datatype.neq(XSD.date):
+        if node.datatype is None or node.datatype.neq(XSD.dateTime):
             continue
 
         node._value = str(node)  ## empty value bug workaround
@@ -104,6 +117,12 @@ def generate_nodewise_features(nodes_map, C, config):
         day = value.group('day')
         d1, d2 = point(int(day), _DAY_RAD)
 
+        hour = value.group('hour')
+        h1, h2 = point(int(hour), _HOUR_RAD)
+
+        minutes = value.group('minutes')
+        min1, min2 = point(int(minutes), _MINUTE_RAD)
+
         c = int(separated.group('century'))
         if value_max is None or c > value_max:
             value_max = c
@@ -111,11 +130,11 @@ def generate_nodewise_features(nodes_map, C, config):
             value_min = c
 
         # add to matrix structures
-        encodings[m] = [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
+        encodings[m] = [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2, h1, h2, min1, min2]
         node_idx[m] = i
         m += 1
 
-    logger.debug("Generated {} unique date encodings".format(m))
+    logger.debug("Generated {} unique dateTime encodings".format(m))
 
     if m <= 0:
         return None
@@ -139,7 +158,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
-        if node.datatype is None or node.datatype.neq(XSD.date):
+        if node.datatype is None or node.datatype.neq(XSD.dateTime):
             continue
 
         node._value = str(node)  ## empty value bug workaround
@@ -167,6 +186,12 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         day = value.group('day')
         d1, d2 = point(int(day), _DAY_RAD)
 
+        hour = value.group('hour')
+        h1, h2 = point(int(hour), _HOUR_RAD)
+
+        minutes = value.group('minutes')
+        min1, min2 = point(int(minutes), _MINUTE_RAD)
+
         for predicate in node_predicate_map[node]:
             if predicate not in relationwise_encodings.keys():
                 relationwise_encodings[predicate] = np.zeros(shape=(n, C),
@@ -184,11 +209,11 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
 
             # add to matrix structures
             relationwise_encodings[predicate][m[predicate]] =\
-                    [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
+                    [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2, h1, h2, min1, min2]
             node_idx[predicate][m[predicate]] = i
             m[predicate] += 1
 
-    logger.debug("Generated {} unique date encodings".format(
+    logger.debug("Generated {} unique dateTime encodings".format(
         sum(m.values())))
 
     if len(m) <= 0:
@@ -217,4 +242,4 @@ def separate(year):
     return match(regex, year)
 
 def validate(value):
-    return match(_REGEX_DATE, value)
+    return match(_REGEX_DATETIME, value)
