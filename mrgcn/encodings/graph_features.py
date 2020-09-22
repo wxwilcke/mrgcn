@@ -90,12 +90,7 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
         encoding_sets = features.pop(datatype, list())
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
-            if datatype in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
-                encoding_sets = merge_sparse_encodings_sets(encoding_sets)
-            elif datatype in ["blob.image"]:
-                encoding_sets = merge_img_encoding_sets(encoding_sets)
-            else:
-                pass
+            encoding_sets = merge_sparse_encodings_sets(encoding_sets)
 
         nsets = len(encoding_sets)
         for encodings, node_idx, seq_lengths in encoding_sets:

@@ -38,7 +38,14 @@ datatype = 'xsd.dateTime'
 include = true
 share_weights = true
 
-# TODO add anyURI
+[[graph.features]]
+datatype = 'xsd.anyURI'
+include = true
+num_batches = 16
+share_weights = true
+trim_outliers = false
+remove_outliers = false
+embedding_dim = 16
 
 [[graph.features]]
 datatype = 'xsd.string'
