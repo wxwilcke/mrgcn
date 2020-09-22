@@ -120,7 +120,7 @@ def generate_nodewise_features(nodes_map, C, config):
         hour = value.group('hour')
         h1, h2 = point(int(hour), _HOUR_RAD)
 
-        minutes = value.group('minutes')
+        minutes = value.group('minute')
         min1, min2 = point(int(minutes), _MINUTE_RAD)
 
         c = int(separated.group('century'))
@@ -189,7 +189,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         hour = value.group('hour')
         h1, h2 = point(int(hour), _HOUR_RAD)
 
-        minutes = value.group('minutes')
+        minutes = value.group('minute')
         min1, min2 = point(int(minutes), _MINUTE_RAD)
 
         for predicate in node_predicate_map[node]:

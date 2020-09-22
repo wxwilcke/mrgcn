@@ -25,8 +25,19 @@ logger = logging.getLogger(__name__)
 def generate_features(nodes_map, node_predicate_map, config, time_dim=1):
     """ Generate features for OGC WKT literals
 
-    time_dim == 0 for RNN, 1 for CNN
-
+    :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
+    :param node_predicate_map: dictionary of node labels (URIs): {predicates}
+    :param config: configuration dictionary
+    :param time_dim: dimension of time (0 for RNN, 1 for CNN)
+    :returns: list of length P with lists Q of length 3;
+                P :- number of predicates that link to nodes with this feature
+                Q :- [seq, node_idx, seq_lengths];
+                    seq :- list with M CSR sparse arrays E x L if time_dim == 0 else L x E;
+                        M :- number of nodes with this feature, such that M <= N
+                        E :- Geometry embedding size (fixed)
+                        L :- sequence length
+                    node_idx :- numpy vector of length M, mapping seq index to node id
+                    seq_lengths :- list of length M, mapping seq index to seq length
     """
     logger.debug("Generating wktLiteral features")
 
