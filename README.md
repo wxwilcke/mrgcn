@@ -76,12 +76,14 @@ Strings:
 - xsd:ID
 - xsd:IDREF
 - xsd:NMTOKEN
+- xsd:anyURI
 ```
 
 Time/date:
 
 ```
 - xsd:date
+- xsd:dateTime
 - xsd:gYear
 ```
 
