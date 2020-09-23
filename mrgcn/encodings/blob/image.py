@@ -89,7 +89,7 @@ def generate_nodewise_features(nodes_map, config):
                        (values_max[ch] - values_min[ch])) - 1.0
             encodings[:m][i] = img
 
-    return [[encodings[:m], node_idx[:m], None]]
+    return [[encodings[:m], node_idx[:m], -1]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, config):
     W, H = _IMG_SIZE
@@ -159,7 +159,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
                            (values_max[pred][ch] - values_min[pred][ch])) - 1.0
                 relationwise_encodings[pred][:m[pred]][i] = img
 
-    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], None]
+    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], -1]
             for pred, encodings in relationwise_encodings.items()]
 
 def b64_to_img(b64string):
