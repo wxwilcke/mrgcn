@@ -12,6 +12,7 @@ test = "../../datasets/wn18rr/rdf/wn18rr-test.nt.gz"
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
 separate_literals = false
+multiprocessing = false
 
 #[[graph.features]]
 #datatype = 'xsd.numeric'

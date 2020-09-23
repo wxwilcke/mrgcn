@@ -14,6 +14,7 @@ test = "<context>.nt.gz"
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
 separate_literals = false
+multiprocessing = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
@@ -36,7 +37,21 @@ include = true
 share_weights = false
 
 [[graph.features]]
+datatype = 'xsd.dateTime'
+include = true
+share_weights = false
+
+[[graph.features]]
 datatype = 'xsd.string'
+include = true
+num_batches = 16
+share_weights = false
+trim_outliers = false
+remove_outliers = false
+embedding_dim = 16
+
+[[graph.features]]
+datatype = 'xsd.anyURI'
 include = true
 num_batches = 16
 share_weights = false

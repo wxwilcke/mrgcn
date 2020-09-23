@@ -167,9 +167,9 @@ class KnowledgeGraph:
     class UniqueLiteral(Literal):
         # literal with unique hash, irrespective of content
         def __new__(cls, s, p, o):
-            self = super().__new__(cls, str(o), o.language, o.datatype, normalize=None)
-            self.s = str(s)
-            self.p = str(p)
+            self = super().__new__(cls, o.toPython(), o.language, o.datatype, normalize=None)
+            self.s = s.toPython()
+            self.p = p.toPython()
 
             return self
 
@@ -180,6 +180,29 @@ class KnowledgeGraph:
                     base += str(attr)
 
             return hash(base)
+
+        def __eq__(self, other):
+            return hash(self) == hash(other)
+
+        def __gt__(self, other):
+            if self.toPython() > other.toPython():
+                return True
+            if self.p > other.p:
+                return True
+            if self.s > other.s:
+                return True
+
+            return False
+
+        def __lt__(self, other):
+            if self.toPython() < other.toPython():
+                return True
+            if self.p < other.p:
+                return True
+            if self.s < other.s:
+                return True
+
+            return False
 
 if __name__ == "__main__":
     print("Knowledge Graph")
