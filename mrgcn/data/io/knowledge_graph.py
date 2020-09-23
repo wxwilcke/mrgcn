@@ -184,25 +184,5 @@ class KnowledgeGraph:
         def __eq__(self, other):
             return hash(self) == hash(other)
 
-        def __gt__(self, other):
-            if self.toPython() > other.toPython():
-                return True
-            if self.p > other.p:
-                return True
-            if self.s > other.s:
-                return True
-
-            return False
-
-        def __lt__(self, other):
-            if self.toPython() < other.toPython():
-                return True
-            if self.p < other.p:
-                return True
-            if self.s < other.s:
-                return True
-
-            return False
-
 if __name__ == "__main__":
     print("Knowledge Graph")
