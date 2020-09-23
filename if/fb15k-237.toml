@@ -12,6 +12,7 @@ test = "../../datasets/fb15k-237/rdf/freebase_mtr100_mte100_237-test.nt.gz"
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
 separate_literals = false
+multiprocessing = false
 
 #[[graph.features]]
 #datatype = 'xsd.numeric'

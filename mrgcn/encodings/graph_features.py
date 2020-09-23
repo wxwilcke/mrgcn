@@ -225,12 +225,13 @@ def merge_sparse_encodings_sets(encoding_sets):
             merged_idx = merged_idx_map[idx]
 
             enc = encodings[i]
-            enc_length = seq_length[i]
+            enc_length = None if seq_length is None else seq_length[i]
             if idx in node_idc_mult:
                 if merged_idx_mult[merged_idx] > 0:
-                    # average vectors for nodes that occur more than once
-                    enc_length = max(enc_length,
-                                     seq_length_merged[merged_idx])
+                    if enc_length is not None:
+                        # average vectors for nodes that occur more than once
+                        enc_length = max(enc_length,
+                                         seq_length_merged[merged_idx])
 
                     enc_visited = encodings_merged[merged_idx]
                     shape = (max(enc.shape[0], enc_visited.shape[0]),

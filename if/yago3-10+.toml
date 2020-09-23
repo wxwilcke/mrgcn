@@ -12,6 +12,7 @@ test = "../../datasets/yago3-10\+/rdf/"
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
 separate_literals = false
+multiprocessing = false
 
 #[[graph.features]]
 #datatype = 'xsd.numeric'
