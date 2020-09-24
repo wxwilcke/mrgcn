@@ -80,11 +80,11 @@ class MRGCN(nn.Module):
                           link_prediction)
         self.module_dict["RGCN"] = self.rgcn
 
-    def forward(self, X, A, device=None):
+    def forward(self, X, A, epoch, device=None):
         X, F = X[0], X[1:]
 
         # compute and concat modality-specific embeddings
-        XF = self._compute_modality_embeddings(F,
+        XF = self._compute_modality_embeddings(F, epoch,
                                                device)
         if XF is not None:
             #logger.debug(" Merging structure and node features")
@@ -102,7 +102,7 @@ class MRGCN(nn.Module):
 
         return X
 
-    def _compute_modality_embeddings(self, F, device):
+    def _compute_modality_embeddings(self, F, epoch, device):
         X = list()
         for modality, F_set in F:
             if modality not in self.modality_modules.keys() or len(F_set[0]) <= 0:
@@ -143,10 +143,17 @@ class MRGCN(nn.Module):
                     #                          PROCESS.memory_info().rss/1e9))
                     batch_dev = batch.to(device)
                     # compute gradients on batch 
-                    logger.debug(" {} (set {} / {}) - batch {} / {}".format(modality,
-                                                                       i+1, nsets,
-                                                                       j+1, nbatches))
-                    out_dev = module(batch_dev)
+                    if epoch > -1 and (epoch-1) % nbatches == j:
+                        logger.debug(" {} (set {} / {}) - batch {} / {} +grad".format(modality,
+                                                                           i+1, nsets,
+                                                                           j+1, nbatches))
+                        out_dev = module(batch_dev)
+                    else:
+                        logger.debug(" {} (set {} / {}) - batch {} / {} -grad".format(modality,
+                                                                           i+1, nsets,
+                                                                           j+1, nbatches))
+                        with torch.no_grad():
+                            out_dev = module(batch_dev)
 
                     out_cpu = out_dev.to('cpu')
                     out.append(out_cpu)
