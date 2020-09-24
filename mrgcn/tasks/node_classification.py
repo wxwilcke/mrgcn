@@ -83,7 +83,7 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, device):
     for epoch in range(1, nepoch+1):
         # Single training iteration
         model.train()
-        Y_hat = model(X, A, device=device)
+        Y_hat = model(X, A, epoch, device=device)
 
         # Training scores
         train_loss = categorical_crossentropy(Y_hat, Y['train'], criterion)
@@ -125,7 +125,7 @@ def test_model(A, model, criterion, X, Y, test_split, device):
     # Predict on full dataset
     model.train(False)
     with torch.no_grad():
-        Y_hat = model(X, A, device=device)
+        Y_hat = model(X, A, epoch=-1, device=device)
 
     # scores on set
     loss = categorical_crossentropy(Y_hat, Y[test_split], criterion)

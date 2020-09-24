@@ -113,7 +113,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
     for epoch in range(1, nepoch+1):
         model.train()
         # Single iteration
-        node_embeddings = model(X, A, device=device)
+        node_embeddings = model(X, A, epoch=epoch, device=device)
         edge_embeddings = model.rgcn.relations
         train_data = deepcopy(data["train"])
 
@@ -155,7 +155,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
         # validate
         model.eval()
         with torch.no_grad():
-            node_embeddings = model(X, A, device=device)
+            node_embeddings = model(X, A, epoch=-1, device=device)
             edge_embeddings = model.rgcn.relations
 
             ranks = compute_ranks(data,
@@ -185,7 +185,7 @@ def test_model(A, X, data, num_nodes, model, criterion, filtered_ranks,
     hits_at_k = {1: 0.0, 3: 0.0, 10: 0.0}
     ranks = None
     with torch.no_grad():
-        node_embeddings = model(X, A, device=device)
+        node_embeddings = model(X, A, epoch=-1, device=device)
         edge_embeddings = model.rgcn.relations
 
         ranks = compute_ranks(data,
