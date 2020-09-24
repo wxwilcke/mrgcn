@@ -90,7 +90,10 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
         encoding_sets = features.pop(datatype, list())
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
-            encoding_sets = merge_sparse_encodings_sets(encoding_sets)
+            if datatype in ["blob.image"]:
+                encoding_sets = merge_encoding_sets(encoding_sets)
+            else:
+                encoding_sets = merge_sparse_encodings_sets(encoding_sets)
 
         nsets = len(encoding_sets)
         for encodings, node_idx, seq_lengths in encoding_sets:
@@ -206,6 +209,9 @@ def features_included(config):
     return features
 
 def merge_sparse_encodings_sets(encoding_sets):
+    if len(encoding_sets) <= 1:
+        return encoding_sets
+
     node_idc = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
     node_idc_unique, node_idc_counts = np.unique(node_idc, return_counts=True)
     node_idc_mult = node_idc_unique[node_idc_counts > 1]
