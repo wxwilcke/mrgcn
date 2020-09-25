@@ -39,7 +39,7 @@ def mkbatches(mat, node_idx, _, num_batches=1):
     num_batches = min(n, num_batches)
     idc = np.arange(n, dtype=np.int32)
 
-    if num_batches == 0:
+    if num_batches <= 1:
         logger.debug("Full batch mode")
 
     idc_assignments = np.array_split(idc, num_batches)
@@ -52,7 +52,7 @@ def mkbatches_varlength(sequences, node_idx, seq_length_map,
                         num_batches=1):
     n = len(sequences)
     num_batches = min(n, num_batches)
-    if num_batches == 0:
+    if num_batches <= 1:
         logger.debug("Full batch mode")
 
     # sort on length
