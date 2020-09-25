@@ -50,6 +50,7 @@ def main(args, acc_writer, out_writer, baseFilename, config):
     device = torch.device("cpu")
     if config['task']['gpu'] and torch.cuda.is_available():
         device = torch.device("cuda")
+        raise Warning("GPU support is not well maintained at the moment")
         logging.debug("Running on GPU")
 
     assert is_readable(args.input)

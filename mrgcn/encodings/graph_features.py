@@ -266,6 +266,7 @@ def merge_encoding_sets(encoding_sets):
     encodings depend on more than their content (eg content+predicates),
     which they do not atm.
     """
+    # TODO: fix this for images sets with more than one set
     if len(encoding_sets) <= 1:
         return encoding_sets
 

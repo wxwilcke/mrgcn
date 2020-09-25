@@ -82,12 +82,12 @@ def generate_nodewise_features(nodes_map, config):
         return None
 
     # normalization over channels
-    for i in range(encodings[:m].shape[0]):
-        img = encodings[:m][i]
+    for i in range(encodings.shape[0]):
+        img = encodings[i]
         for ch in range(c):
             img[ch] = (2*(img[ch]-values_min[ch]) /
                        (values_max[ch] - values_min[ch])) - 1.0
-            encodings[:m][i] = img
+            encodings[i] = img
 
     return [[encodings[:m], node_idx[:m], [-1 for _ in range(m)]]]
 
@@ -152,12 +152,12 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
 
     # normalization over channels
     for pred in relationwise_encodings.keys():
-        for i in range(relationwise_encodings[pred][:m[pred]].shape[0]):
-            img = relationwise_encodings[pred][:m[pred]][i]
+        for i in range(relationwise_encodings[pred].shape[0]):
+            img = relationwise_encodings[pred][i]
             for ch in range(c):
                 img[ch] = (2*(img[ch]-values_min[pred][ch]) /
                            (values_max[pred][ch] - values_min[pred][ch])) - 1.0
-                relationwise_encodings[pred][:m[pred]][i] = img
+                relationwise_encodings[pred][i] = img
 
     return [[encodings[:m[pred]], node_idx[pred][:m[pred]], [-1 for _ in range(m[pred])]]
             for pred, encodings in relationwise_encodings.items()]
