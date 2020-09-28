@@ -56,8 +56,7 @@ def run(A, X, C, data, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, X, data, num_nodes, model, optimizer,
-                             criterion, nepoch, filtered_ranks,
-                             mrr_batch_size, device):
+                             criterion, nepoch, mrr_batch_size, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -105,8 +104,7 @@ def run(A, X, C, data, tsv_writer, device, config,
     return (mrr, hits_at_k, ranks)
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, filtered_ranks, mrr_batch_size,
-                device):
+                nepoch, mrr_batch_size, device):
     logging.info("Training for {} epoch".format(nepoch))
 
     nsamples = data['train'].shape[0]
@@ -148,6 +146,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
         # Zero gradients, perform a backward pass, and update the weights.
         optimizer.zero_grad()
         loss.backward()  # training loss
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
         loss = float(loss)  # remove pointer to gradients to free memory
