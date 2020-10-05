@@ -19,7 +19,7 @@ from mrgcn.data.utils import (is_readable,
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
-def run(A, X, Y, C, data, acc_writer, device, config,
+def run(A, X, Y, C, data, splits, acc_writer, device, config,
         modules_config, featureless, test_split):
     task = config['task']['type']
     logging.info("Starting {} task".format(task))
@@ -31,7 +31,7 @@ def run(A, X, Y, C, data, acc_writer, device, config,
         return (loss, acc, labels, targets)
 
     elif task == "link prediction":
-        mrr, hits_at_k = link_prediction.run(A, X, C, data,
+        mrr, hits_at_k = link_prediction.run(A, X, C, data, splits,
                                                acc_writer, device, config,
                                                modules_config,
                                                featureless, test_split)
@@ -69,9 +69,20 @@ def main(args, acc_writer, out_writer, baseFilename, config):
     X, C, modules_config = setup_features(F, num_nodes, featureless, config)
     if len(X) <= 1 and X[0].size(1) <= 0:
         featureless = True
+    if data is not None:
+        # ugly temporary fix; should be done at dataset generation
+        trl = data['train'].shape[0]
+        ttl = data['test'].shape[0]
+        tvl = data['valid'].shape[0]
+        splits = {'train': [0, trl],
+                  'test': [trl, trl+ttl],
+                  'valid': [trl+ttl, trl+ttl+tvl]}
+        data = torch.from_numpy(np.concatenate([data['train'],
+                                                data['test'],
+                                                data['valid']], axis=0))
 
     task = config['task']['type']
-    out = run(A, X, Y, C, data, acc_writer, device,
+    out = run(A, X, Y, C, data, splits, acc_writer, device,
               config, modules_config, featureless, test_split)
 
     if task == "node classification":
