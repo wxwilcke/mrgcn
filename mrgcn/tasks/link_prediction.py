@@ -287,21 +287,23 @@ def compute_ranks(data, splits, node_embeddings, edge_embeddings, eval_split,
 
 def compute_ranks_filtered(data, splits, node_embeddings, edge_embeddings, eval_split,
                            batch_size=100):
-    ranks = list()
     idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
+    nsamples = idx_end - idx_begin
+    ranks = torch.embeddings((nsamples), dtype=torch.int64)
+    i = 0
     for h,r,t in data[idx_begin:idx_end]:
-        ranks.append(compute_ranks_filtered_one_side(data,
-                                                     node_embeddings,
-                                                     edge_embeddings,
-                                                     r, h, t, batch_size,
-                                                     perturb='head'))
-        ranks.append(compute_ranks_filtered_one_side(data,
+        ranks[i] = compute_ranks_filtered_one_side(data,
+                                                   node_embeddings,
+                                                   edge_embeddings,
+                                                   r, h, t, batch_size,
+                                                   perturb='head')
+        ranks[i+1] = compute_ranks_filtered_one_side(data,
                                                      node_embeddings,
                                                      edge_embeddings,
                                                      r, t, h, batch_size,
-                                                     perturb='tail'))
+                                                     perturb='tail')
 
-    return torch.LongTensor(ranks) + 1 # set index start at 1
+    return ranks + 1 # set index start at 1
 
 def compute_ranks_filtered_one_side(data, node_embeddings, edge_embeddings,
                                     r, e, u, batch_size, perturb):
@@ -358,26 +360,27 @@ def compute_ranks_raw(data, splits, node_embeddings, edge_embeddings, eval_split
     idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
     eval_set = data[idx_begin:idx_end]
 
-    nsamples = eval_set.shape[0]
-    batches = np.array_split(np.arange(nsamples),
-                             max(1, nsamples//batch_size))
-    nbatches = len(batches)
-    ranks = list()
-    for batch_id, batch in enumerate(batches, 1):
+    num_samples = eval_set.shape[0]
+    num_batches = (num_samples + batch_size-1)//batch_size
+    ranks = torch.empty((num_samples), dtype=torch.int64)
+    i = 0
+    for batch_id in range(num_batches):
+        batch_begin = batch_id * batch_size
+        batch_end = min(num_samples, (batch_id+1) * batch_size)
         logger.debug(" DistMult {} batch {} / {}".format(eval_split,
                                                          batch_id,
-                                                         nbatches))
-        batch_data = eval_set[batch]
+                                                         num_batches))
+        batch_data = eval_set[batch_begin:batch_end]
 
         h = batch_data[:, 0]
         r = batch_data[:, 1]
         t = batch_data[:, 2]
 
-        ranks_hr = compute_ranks_raw_one_side(h, r, t, node_embeddings, edge_embeddings)
-        ranks_rt = compute_ranks_raw_one_side(t, r, h, node_embeddings, edge_embeddings)
-        ranks.append(torch.cat([ranks_hr, ranks_rt]))
+        ranks[i] = compute_ranks_raw_one_side(h, r, t, node_embeddings, edge_embeddings)
+        ranks[i+1] = compute_ranks_raw_one_side(t, r, h, node_embeddings, edge_embeddings)
+        i += 2
 
-    return torch.cat(ranks) + 1 # set index start at 1
+    return ranks + 1 # set index start at 1
 
 def compute_ranks_raw_one_side(e, r, targets, node_embeddings, edge_embeddings):
     partial_score = node_embeddings[e] * edge_embeddings[r]
