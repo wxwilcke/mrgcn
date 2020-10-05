@@ -63,7 +63,6 @@ multiprocessing = false
 [task]
 type = 'link prediction'
 filter_ranks = false
-multiprocessing = false
 seed = -1  # use < 0 for random
 gpu = false
 
@@ -71,8 +70,8 @@ gpu = false
 epoch = 20
 learning_rate = 0.01
 patience = -1  # < 0 to disable
-distmult_batch_size = 5e5
-mrr_batch_size = 5e1
+mrr_batch_size_raw = 5e1
+mrr_batch_size_filtered = 5e1
 num_bases = 2
 p_dropout = 0.0
 l2norm = 0.01
