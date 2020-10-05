@@ -34,8 +34,8 @@ def run(A, X, C, data, splits, tsv_writer, device, config,
     criterion = nn.BCEWithLogitsLoss()
 
     # mini batching
-    mrr_batch_size_raw = config['model']['mrr_batch_size_raw']
-    mrr_batch_size_filtered = config['model']['mrr_batch_size_filtered']
+    mrr_batch_size_raw = int(config['model']['mrr_batch_size_raw'])
+    mrr_batch_size_filtered = int(config['model']['mrr_batch_size_filtered'])
 
     # early stopping
     patience = config['model']['patience']
@@ -112,12 +112,12 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
         edge_embeddings = model.rgcn.relations
 
         # sample negative triples by copying and corrupting positive triples
-        ncorrupt = nsamples//5
+        ncorrupt = int(nsamples//5)
         neg_samples_idx = np.random.choice(np.arange(nsamples),
                                            ncorrupt,
                                            replace=False)
 
-        ncorrupt_head = ncorrupt//2
+        ncorrupt_head = int(ncorrupt//2)
         ncorrupt_tail = ncorrupt - ncorrupt_head
         corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
 
@@ -289,9 +289,10 @@ def compute_ranks_filtered(data, splits, node_embeddings, edge_embeddings, eval_
                            batch_size=100):
     idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
     nsamples = idx_end - idx_begin
-    ranks = torch.embeddings((nsamples), dtype=torch.int64)
+    ranks = torch.empty((nsamples*2), dtype=torch.int64)
     i = 0
     for h,r,t in data[idx_begin:idx_end]:
+        print(i)
         ranks[i] = compute_ranks_filtered_one_side(data,
                                                    node_embeddings,
                                                    edge_embeddings,
@@ -302,6 +303,8 @@ def compute_ranks_filtered(data, splits, node_embeddings, edge_embeddings, eval_
                                                      edge_embeddings,
                                                      r, t, h, batch_size,
                                                      perturb='tail')
+
+        i += 2
 
     return ranks + 1 # set index start at 1
 
@@ -316,7 +319,7 @@ def compute_ranks_filtered_one_side(data, node_embeddings, edge_embeddings,
 
     # compute scores for non-existing triples
     num_nodes = node_embeddings.shape[0]
-    num_batches = (num_nodes + batch_size-1)//batch_size
+    num_batches = int((num_nodes + batch_size-1)//batch_size)
     for batch_id in range(num_batches):
         batch_begin = batch_id * batch_size
         batch_end = min(num_nodes, (batch_id+1) * batch_size)
@@ -361,14 +364,13 @@ def compute_ranks_raw(data, splits, node_embeddings, edge_embeddings, eval_split
     eval_set = data[idx_begin:idx_end]
 
     num_samples = eval_set.shape[0]
-    num_batches = (num_samples + batch_size-1)//batch_size
-    ranks = torch.empty((num_samples), dtype=torch.int64)
-    i = 0
+    num_batches = int((num_samples + batch_size-1)//batch_size)
+    ranks = torch.empty((num_samples*2), dtype=torch.int64)
     for batch_id in range(num_batches):
         batch_begin = batch_id * batch_size
         batch_end = min(num_samples, (batch_id+1) * batch_size)
         logger.debug(" DistMult {} batch {} / {}".format(eval_split,
-                                                         batch_id,
+                                                         batch_id+1,
                                                          num_batches))
         batch_data = eval_set[batch_begin:batch_end]
 
@@ -376,9 +378,12 @@ def compute_ranks_raw(data, splits, node_embeddings, edge_embeddings, eval_split
         r = batch_data[:, 1]
         t = batch_data[:, 2]
 
-        ranks[i] = compute_ranks_raw_one_side(h, r, t, node_embeddings, edge_embeddings)
-        ranks[i+1] = compute_ranks_raw_one_side(t, r, h, node_embeddings, edge_embeddings)
-        i += 2
+        ranks[batch_begin:batch_end] = compute_ranks_raw_one_side(h, r, t,
+                                                                  node_embeddings,
+                                                                  edge_embeddings)
+        ranks[num_samples+batch_begin:num_samples+batch_end] = compute_ranks_raw_one_side(t, r, h,
+                                                                                          node_embeddings,
+                                                                                          edge_embeddings)
 
     return ranks + 1 # set index start at 1
 

@@ -31,11 +31,11 @@ def run(A, X, Y, C, data, splits, acc_writer, device, config,
         return (loss, acc, labels, targets)
 
     elif task == "link prediction":
-        mrr, hits_at_k = link_prediction.run(A, X, C, data, splits,
-                                               acc_writer, device, config,
-                                               modules_config,
-                                               featureless, test_split)
-        return (mrr, hits_at_k)
+        mrr, hits_at_k, ranks, = link_prediction.run(A, X, C, data, splits,
+                                                     acc_writer, device, config,
+                                                     modules_config,
+                                                     featureless, test_split)
+        return (mrr, hits_at_k, ranks)
 
 def main(args, acc_writer, out_writer, baseFilename, config):
     set_seed(config['task']['seed'])
@@ -79,7 +79,7 @@ def main(args, acc_writer, out_writer, baseFilename, config):
                   'valid': [trl+ttl, trl+ttl+tvl]}
         data = torch.from_numpy(np.concatenate([data['train'],
                                                 data['test'],
-                                                data['valid']], axis=0))
+                                                data['valid']], axis=0)).long()
 
     task = config['task']['type']
     out = run(A, X, Y, C, data, splits, acc_writer, device,
