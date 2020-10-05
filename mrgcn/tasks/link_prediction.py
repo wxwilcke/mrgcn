@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-from copy import deepcopy
 import logging
 from time import time
 
@@ -104,38 +103,42 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
     logging.info("Training for {} epoch".format(nepoch))
 
     idx_begin, idx_end = splits['train'][0], splits['train'][1]
-    nsamples = data[idx_begin:idx_end].shape[0]
+    train_data = data[idx_begin:idx_end]
+    nsamples = train_data.shape[0]
     for epoch in range(1, nepoch+1):
         model.train()
         # Single iteration
         node_embeddings = model(X, A, epoch=epoch, device=device)
         edge_embeddings = model.rgcn.relations
-        train_data = deepcopy(data[idx_begin:idx_end])  # replace with adding new triples instead?
 
-        # sample negative triples
+        # sample negative triples by copying and corrupting positive triples
         ncorrupt = nsamples//5
         neg_samples_idx = np.random.choice(np.arange(nsamples),
                                            ncorrupt,
                                            replace=False)
 
-        mask = np.random.choice(np.array([0, 1], dtype=np.bool),
-                                ncorrupt)
-        corrupt_head_idx = neg_samples_idx[mask]
-        corrupt_tail_idx = neg_samples_idx[~mask]
+        ncorrupt_head = ncorrupt//2
+        ncorrupt_tail = ncorrupt - ncorrupt_head
+        corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
 
-        train_data[corrupt_head_idx, 0] = np.random.choice(np.arange(num_nodes),
-                                                           len(corrupt_head_idx))
-        train_data[corrupt_tail_idx, 2] = np.random.choice(np.arange(num_nodes),
-                                                           len(corrupt_tail_idx))
+        corrupted_data = train_data[neg_samples_idx]
+        corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
+                                                                              ncorrupt_head))
+        corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
+                                                                               ncorrupt_tail))
 
         # create labels; positive samples are 1, negative 0
-        Y = torch.ones(nsamples, dtype=torch.float32)
-        Y[neg_samples_idx] = 0
+        Y = torch.ones(nsamples+ncorrupt, dtype=torch.float32)
+        Y[-ncorrupt:] = 0
 
         # compute score
-        Y_hat = score_distmult(node_embeddings[train_data[:, 0]],
-                               edge_embeddings[train_data[:, 1]],
-                               node_embeddings[train_data[:, 2]])
+        Y_hat = torch.empty((nsamples+ncorrupt), dtype=torch.float32)
+        Y_hat[:nsamples] = score_distmult(node_embeddings[train_data[:, 0]],
+                                          edge_embeddings[train_data[:, 1]],
+                                          node_embeddings[train_data[:, 2]])
+        Y_hat[-ncorrupt:] = score_distmult(node_embeddings[corrupted_data[:, 0]],
+                                           edge_embeddings[corrupted_data[:, 1]],
+                                           node_embeddings[corrupted_data[:, 2]])
 
         # compute loss
         loss = binary_crossentropy(Y_hat, Y, criterion)
