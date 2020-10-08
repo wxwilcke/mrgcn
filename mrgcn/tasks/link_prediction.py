@@ -443,11 +443,15 @@ def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_spli
     num_nodes = node_embeddings.shape[0]
     num_batches = int((num_facts + batch_size-1)//batch_size)
     ranks = torch.empty((num_facts*2), dtype=torch.int64)
-    for head in [True, False]:  # head or tail prediction
+    for head in [False, True]:  # head or tail prediction
         offset = int(head) * num_facts
         for batch_id in range(num_batches):
             batch_begin = batch_id * batch_size
             batch_end = min(num_facts, (batch_id+1) * batch_size)
+
+            logger.debug(" DistMult {} batch {} / {}".format(eval_split,
+                                                             (int(head)*num_batches)+batch_id+1,
+                                                             num_batches*2))
 
             batch_data = eval_set[batch_begin:batch_end]
             batch_num_facts = batch_data.shape[0]
