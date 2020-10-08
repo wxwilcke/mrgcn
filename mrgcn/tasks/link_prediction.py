@@ -34,8 +34,7 @@ def run(A, X, C, data, splits, tsv_writer, device, config,
     criterion = nn.BCEWithLogitsLoss()
 
     # mini batching
-    mrr_batch_size_raw = int(config['model']['mrr_batch_size_raw'])
-    mrr_batch_size_filtered = int(config['model']['mrr_batch_size_filtered'])
+    mrr_batch_size = int(config['model']['mrr_batch_size'])
 
     # early stopping
     patience = config['model']['patience']
@@ -49,8 +48,7 @@ def run(A, X, C, data, splits, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, X, data, splits, num_nodes, model, optimizer,
-                             criterion, nepoch, mrr_batch_size_raw,
-                             mrr_batch_size_filtered, device):
+                             criterion, nepoch, mrr_batch_size, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -85,8 +83,7 @@ def run(A, X, C, data, splits, tsv_writer, device, config,
     t0 = time()
 
     mrr, hits_at_k, ranks = test_model(A, X, data, splits, num_nodes, model, criterion,
-                                       filtered_ranks, mrr_batch_size_raw,
-                                       mrr_batch_size_filtered, test_split,
+                                       filtered_ranks, mrr_batch_size, test_split,
                                        device)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
@@ -99,7 +96,7 @@ def run(A, X, C, data, splits, tsv_writer, device, config,
     return (mrr, hits_at_k, ranks)
 
 def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
-                nepoch, mrr_batch_size_raw, mrr_batch_size_filtered, device):
+                nepoch, mrr_batch_size, device):
     logging.info("Training for {} epoch".format(nepoch))
 
     idx_begin, idx_end = splits['train'][0], splits['train'][1]
@@ -157,14 +154,13 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
             node_embeddings = model(X, A, epoch=-1, device=device)
             edge_embeddings = model.rgcn.relations
 
-            ranks = compute_ranks(data,
-                                  splits,
-                                  node_embeddings,
-                                  edge_embeddings,
-                                  "valid",
-                                  mrr_batch_size_raw,
-                                  mrr_batch_size_filtered,
-                                  filtered=False)
+            ranks = compute_ranks_fast(data,
+                                      splits,
+                                      node_embeddings,
+                                      edge_embeddings,
+                                      "valid",
+                                      mrr_batch_size,
+                                      filtered=False)
             mrr_raw = torch.mean(1.0 / ranks.float()).item()
 
             hits_at_k = dict()
@@ -180,7 +176,7 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
         yield (epoch, loss, mrr_raw, hits_at_k[1], hits_at_k[3], hits_at_k[10])
 
 def test_model(A, X, data, splits, num_nodes, model, criterion, filtered_ranks,
-               mrr_batch_size_raw, mrr_batch_size_filtered, test_split, device):
+               mrr_batch_size, test_split, device):
     model.eval()
     mrr = 0.0
     hits_at_k = {1: 0.0, 3: 0.0, 10: 0.0}
@@ -189,14 +185,13 @@ def test_model(A, X, data, splits, num_nodes, model, criterion, filtered_ranks,
         node_embeddings = model(X, A, epoch=-1, device=device)
         edge_embeddings = model.rgcn.relations
 
-        ranks = compute_ranks(data,
-                              splits,
-                              node_embeddings,
-                              edge_embeddings,
-                              test_split,
-                              mrr_batch_size_raw,
-                              mrr_batch_size_filtered,
-                              filtered_ranks)
+        ranks = compute_ranks_fast(data,
+                                  splits,
+                                  node_embeddings,
+                                  edge_embeddings,
+                                  test_split,
+                                  mrr_batch_size,
+                                  filtered_ranks)
 
         mrr = torch.mean(1.0 / ranks.float()).item()
         for k in [1, 3, 10]:
@@ -276,130 +271,234 @@ def score_distmult(s, p, o):
     # o := vectpr embeddings of objects
     return torch.sum(s * p * o, dim=1)
 
-def compute_ranks(data, splits, node_embeddings, edge_embeddings, eval_split,
-                  batch_size_raw, batch_size_filtered, filtered=False):
-    if filtered:
-        return compute_ranks_filtered(data, splits, node_embeddings, edge_embeddings,
-                               eval_split, batch_size_filtered)
-    else:
-        return compute_ranks_raw(data, splits, node_embeddings, edge_embeddings, eval_split,
-                          batch_size_raw)
+#def compute_ranks(data, splits, node_embeddings, edge_embeddings, eval_split,
+#                  batch_size_raw, batch_size_filtered, filtered=False):
+#    if filtered:
+#        return compute_ranks_filtered(data, splits, node_embeddings, edge_embeddings,
+#                               eval_split, batch_size_filtered)
+#    else:
+#        return compute_ranks_raw(data, splits, node_embeddings, edge_embeddings, eval_split,
+#                          batch_size_raw)
 
-def compute_ranks_filtered(data, splits, node_embeddings, edge_embeddings, eval_split,
-                           batch_size=100):
-    idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
-    nsamples = idx_end - idx_begin
-    ranks = torch.empty((nsamples*2), dtype=torch.int64)
-    i = 0
-    for h,r,t in data[idx_begin:idx_end]:
-        print(i)
-        ranks[i] = compute_ranks_filtered_one_side(data,
-                                                   node_embeddings,
-                                                   edge_embeddings,
-                                                   r, h, t, batch_size,
-                                                   perturb='head')
-        ranks[i+1] = compute_ranks_filtered_one_side(data,
-                                                     node_embeddings,
-                                                     edge_embeddings,
-                                                     r, t, h, batch_size,
-                                                     perturb='tail')
+#def compute_ranks_filtered(data, splits, node_embeddings, edge_embeddings, eval_split,
+#                           batch_size=100):
+#    idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
+#    nsamples = idx_end - idx_begin
+#    ranks = torch.empty((nsamples*2), dtype=torch.int64)
+#    i = 0
+#    for h,r,t in data[idx_begin:idx_end]:
+#        ranks[i] = compute_ranks_filtered_one_side(data,
+#                                                   node_embeddings,
+#                                                   edge_embeddings,
+#                                                   r, h, t, batch_size,
+#                                                   perturb='head')
+#        ranks[i+1] = compute_ranks_filtered_one_side(data,
+#                                                     node_embeddings,
+#                                                     edge_embeddings,
+#                                                     r, t, h, batch_size,
+#                                                     perturb='tail')
+#
+#        i += 2
+#
+#    return ranks + 1 # set index start at 1
+#
+#def compute_ranks_filtered_one_side(data, node_embeddings, edge_embeddings,
+#                                    r, e, u, batch_size, perturb):
+#    # target triple
+#    target_idx = 0
+#    target_fact = torch.cat([node_embeddings[e] *
+#                             edge_embeddings[r] *
+#                             node_embeddings[u]])
+#    score = [torch.sum(target_fact.unsqueeze(1).T, dim=1)]  # distmult
+#
+#    # compute scores for non-existing triples
+#    num_nodes = node_embeddings.shape[0]
+#    num_batches = int((num_nodes + batch_size-1)//batch_size)
+#    for batch_id in range(num_batches):
+#        batch_begin = batch_id * batch_size
+#        batch_end = min(num_nodes, (batch_id+1) * batch_size)
+#        batch_entities = torch.arange(batch_begin, batch_end).unsqueeze(1)
+#
+#        included = batch_begin + construct_filtered_set(batch_entities,
+#                                                        data,
+#                                                        r, u, perturb)
+#
+#        score.append(score_distmult(node_embeddings[included],
+#                                    edge_embeddings[r],
+#                                    node_embeddings[u]))
+#
+#    score = torch.sigmoid(torch.cat(score))
+#
+#    # compute ranks
+#    _, node_idx = torch.sort(score, descending=True)
+#    rank = (node_idx == target_idx).nonzero(as_tuple=True)[0].item()
+#
+#    return rank
+#
+#def construct_filtered_set(entities, data, r, u, perturb):
+#    num_nodes = entities.shape[0]
+#
+#    if perturb == 'head':
+#        # (num_nodes, 3) tensor of triples we want to filter
+#        excluded = torch.tensor([r,u]).repeat_interleave(num_nodes)
+#        excluded = excluded.reshape((2, num_nodes)).T
+#        excluded = torch.cat([entities, excluded.long()], dim=1)
+#    else:  # 'tail'
+#        # (num_nodes, 3) tensor of triples we want to filter
+#        excluded = torch.tensor([u,r]).repeat_interleave(num_nodes)
+#        excluded = excluded.reshape((2, num_nodes)).T
+#        excluded = torch.cat([excluded.long(), entities], dim=1)
+#
+#    # indices of triples that are not in excluded
+#    return (~(excluded[:, None] == data).all(-1).any(-1)).nonzero(as_tuple=True)[0]
+#
+#def compute_ranks_raw(data, splits, node_embeddings, edge_embeddings, eval_split,
+#                      batch_size):
+#    idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
+#    eval_set = data[idx_begin:idx_end]
+#
+#    num_samples = eval_set.shape[0]
+#    num_batches = int((num_samples + batch_size-1)//batch_size)
+#    ranks = torch.empty((num_samples*2), dtype=torch.int64)
+#    for batch_id in range(num_batches):
+#        batch_begin = batch_id * batch_size
+#        batch_end = min(num_samples, (batch_id+1) * batch_size)
+#        logger.debug(" DistMult {} batch {} / {}".format(eval_split,
+#                                                         batch_id+1,
+#                                                         num_batches))
+#        batch_data = eval_set[batch_begin:batch_end]
+#
+#        h = batch_data[:, 0]
+#        r = batch_data[:, 1]
+#        t = batch_data[:, 2]
+#
+#        ranks[batch_begin:batch_end] = compute_ranks_raw_one_side(h, r, t,
+#                                                                  node_embeddings,
+#                                                                  edge_embeddings)
+#        ranks[num_samples+batch_begin:num_samples+batch_end] = compute_ranks_raw_one_side(t, r, h,
+#                                                                                          node_embeddings,
+#                                                                                          edge_embeddings)
+#
+#    return ranks + 1 # set index start at 1
+#
+#def compute_ranks_raw_one_side(e, r, targets, node_embeddings, edge_embeddings):
+#    partial_score = node_embeddings[e] * edge_embeddings[r]
+#
+#    # compute score for each node as target
+#    partial_score = torch.transpose(partial_score, 0, 1).unsqueeze(2)
+#    node_repr = torch.transpose(node_embeddings, 0, 1).unsqueeze(1)
+#
+#    score = torch.sum(torch.bmm(partial_score, node_repr), dim=0)
+#    score = torch.sigmoid(score)
+#
+#    # compute ranks
+#    node_idx = torch.sort(score, dim=1, descending=True)[1]
+#    ranks = torch.nonzero(node_idx == torch.as_tensor(targets).view(-1, 1),
+#                          as_tuple=True)[1]
+#
+#    return ranks
 
-        i += 2
+#################
 
-    return ranks + 1 # set index start at 1
+def filter_scores_(scores, batch_data, heads, tails, head=True):
+     # set scores of existing facts to -inf
+    indices = list()
+    for i, (s, p, o) in enumerate(batch_data):
+        s, p, o = (s.item(), p.item(), o.item())
+        if head:
+            indices.extend([(i, si) for si in heads[p, o] if si != s])
+        else:
+            indices.extend([(i, oi) for oi in tails[s, p] if oi != o])
+        # we add the indices of all know triples except the one corresponding
+        # to the target triples.
 
-def compute_ranks_filtered_one_side(data, node_embeddings, edge_embeddings,
-                                    r, e, u, batch_size, perturb):
-    # target triple
-    target_idx = 0
-    target_fact = torch.cat([node_embeddings[e] *
-                             edge_embeddings[r] *
-                             node_embeddings[u]])
-    score = [torch.sum(target_fact.unsqueeze(1).T, dim=1)]  # distmult
+    indices = torch.tensor(indices)
+    scores[indices[:, 0], indices[:, 1]] = float('-inf')
 
-    # compute scores for non-existing triples
-    num_nodes = node_embeddings.shape[0]
-    num_batches = int((num_nodes + batch_size-1)//batch_size)
-    for batch_id in range(num_batches):
-        batch_begin = batch_id * batch_size
-        batch_end = min(num_nodes, (batch_id+1) * batch_size)
-        batch_entities = torch.arange(batch_begin, batch_end).unsqueeze(1)
+def truedicts(facts):
+    heads = dict()
+    tails = dict()
+    for i in range(facts.shape[0]):
+        fact = facts[i]
+        s, p, o = fact[0].item(), fact[1].item(), fact[2].item()
 
-        included = batch_begin + construct_filtered_set(batch_entities,
-                                                        data,
-                                                        r, u, perturb)
+        if (p, o) not in heads.keys():
+            heads[(p, o)] = list()
+        if (s, p) not in tails.keys():
+            tails[(s, p)] = list()
 
-        score.append(score_distmult(node_embeddings[included],
-                                    edge_embeddings[r],
-                                    node_embeddings[u]))
+        heads[(p, o)].append(s)
+        tails[(s, p)].append(o)
 
-    score = torch.sigmoid(torch.cat(score))
+    return heads, tails
 
-    # compute ranks
-    _, node_idx = torch.sort(score, descending=True)
-    rank = (node_idx == target_idx).nonzero(as_tuple=True)[0].item()
-
-    return rank
-
-def construct_filtered_set(entities, data, r, u, perturb):
-    num_nodes = entities.shape[0]
-
-    if perturb == 'head':
-        # (num_nodes, 3) tensor of triples we want to filter
-        excluded = torch.tensor([r,u]).repeat_interleave(num_nodes)
-        excluded = excluded.reshape((2, num_nodes)).T
-        excluded = torch.cat([entities, excluded.long()], dim=1)
-    else:  # 'tail'
-        # (num_nodes, 3) tensor of triples we want to filter
-        excluded = torch.tensor([u,r]).repeat_interleave(num_nodes)
-        excluded = excluded.reshape((2, num_nodes)).T
-        excluded = torch.cat([excluded.long(), entities], dim=1)
-
-    # indices of triples that are not in excluded
-    return (~(excluded[:, None] == data).all(-1).any(-1)).nonzero(as_tuple=True)[0]
-
-def compute_ranks_raw(data, splits, node_embeddings, edge_embeddings, eval_split,
-                      batch_size):
+def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_split,
+                       batch_size=16, filtered=True):
     idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
     eval_set = data[idx_begin:idx_end]
 
-    num_samples = eval_set.shape[0]
-    num_batches = int((num_samples + batch_size-1)//batch_size)
-    ranks = torch.empty((num_samples*2), dtype=torch.int64)
-    for batch_id in range(num_batches):
-        batch_begin = batch_id * batch_size
-        batch_end = min(num_samples, (batch_id+1) * batch_size)
-        logger.debug(" DistMult {} batch {} / {}".format(eval_split,
-                                                         batch_id+1,
-                                                         num_batches))
-        batch_data = eval_set[batch_begin:batch_end]
+    true_heads, true_tails = truedicts(data) if filtered else (None, None)
 
-        h = batch_data[:, 0]
-        r = batch_data[:, 1]
-        t = batch_data[:, 2]
+    num_facts = eval_set.shape[0]
+    num_nodes = node_embeddings.shape[0]
+    num_batches = int((num_facts + batch_size-1)//batch_size)
+    ranks = torch.empty((num_facts*2), dtype=torch.int64)
+    for head in [True, False]:  # head or tail prediction
+        offset = int(head) * num_facts
+        for batch_id in range(num_batches):
+            batch_begin = batch_id * batch_size
+            batch_end = min(num_facts, (batch_id+1) * batch_size)
 
-        ranks[batch_begin:batch_end] = compute_ranks_raw_one_side(h, r, t,
-                                                                  node_embeddings,
-                                                                  edge_embeddings)
-        ranks[num_samples+batch_begin:num_samples+batch_end] = compute_ranks_raw_one_side(t, r, h,
-                                                                                          node_embeddings,
-                                                                                          edge_embeddings)
+            batch_data = eval_set[batch_begin:batch_end]
+            batch_num_facts = batch_data.shape[0]
 
-    return ranks + 1 # set index start at 1
+            # compute the full score matrix (filter later)
+            bases   = batch_data[:, 1:] if head else batch_data[:, :2]
+            targets = batch_data[:, 0]  if head else batch_data[:, 2]
 
-def compute_ranks_raw_one_side(e, r, targets, node_embeddings, edge_embeddings):
-    partial_score = node_embeddings[e] * edge_embeddings[r]
+            # collect the triples for which to compute scores
+            bexp = bases.view(batch_num_facts, 1, 2).expand(batch_num_facts,
+                                                            num_nodes, 2)
+            ar   = torch.arange(num_nodes).view(1, num_nodes, 1).expand(batch_num_facts,
+                                                                        num_nodes, 1)
+            candidates = torch.cat([ar, bexp] if head else [bexp, ar], dim=2)
 
-    # compute score for each node as target
-    partial_score = torch.transpose(partial_score, 0, 1).unsqueeze(2)
-    node_repr = torch.transpose(node_embeddings, 0, 1).unsqueeze(1)
+            scores = score_distmult_bc(candidates[:,:,0], candidates[:,:,1], candidates[:,:,2],
+                                       node_embeddings, edge_embeddings)
 
-    score = torch.sum(torch.bmm(partial_score, node_repr), dim=0)
-    score = torch.sigmoid(score)
+            # filter out the true triples that aren't the target
+            if filtered:
+                filter_scores_(scores, batch_data, true_heads, true_tails, head=head)
 
-    # compute ranks
-    node_idx = torch.sort(score, dim=1, descending=True)[1]
-    ranks = torch.nonzero(node_idx == torch.as_tensor(targets).view(-1, 1),
-                          as_tuple=True)[1]
+            # Select the true scores, and count the number of values larger than than
+            true_scores = scores[torch.arange(batch_num_facts), targets]
+            batch_ranks = torch.sum(scores > true_scores.view(batch_num_facts, 1), dim=1, dtype=torch.int64)
+            # -- This is the "optimistic" rank (assuming it's sorted to the front of the ties)
+            num_ties = torch.sum(scores == true_scores.view(batch_num_facts, 1), dim=1, dtype=torch.int64)
 
-    return ranks
+            # Account for ties (put the true example halfway down the ties)
+            batch_ranks = batch_ranks + (num_ties - 1) // 2
+
+            ranks[offset+batch_begin:offset+batch_end] = batch_ranks
+
+    return ranks + 1
+
+def score_distmult_bc(si, pi, oi, node_embeddings, edge_embeddings):
+    s = node_embeddings[si, :]
+    p = edge_embeddings[pi, :]
+    o = node_embeddings[oi, :]
+
+    if len(s.size()) == len(p.size()) == len(o.size()): # optimizations for common broadcasting
+        if pi.size(-1) == 1 and oi.size(-1) == 1:
+            singles = p * o # ignoring batch dimensions, this is a single vector
+            return torch.matmul(s, singles.transpose(-1, -2)).squeeze(-1)
+
+        if si.size(-1) == 1 and oi.size(-1) == 1:
+            singles = s * o
+            return torch.matmul(p, singles.transpose(-1, -2)).squeeze(-1)
+
+        if si.size(-1) == 1 and pi.size(-1) == 1:
+            singles = s * p
+            return torch.matmul(o, singles.transpose(-1, -2)).squeeze(-1)
+
+    return torch.sum(s * p * o, dim = -1)
