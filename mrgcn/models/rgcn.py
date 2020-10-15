@@ -83,4 +83,4 @@ class RGCN(nn.Module):
             if type(layer) is GraphConvolution:
                 layer.init()
             else:
-                raise NotImplementedError
+                raise NotImplementedError()

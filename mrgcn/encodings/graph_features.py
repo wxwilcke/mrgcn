@@ -22,12 +22,10 @@ AVAILABLE_FEATURES = set.union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
 def construct_features(nodes_map, knowledge_graph, feature_configs,
                       separate_literals):
     """ Construct specified features for given nodes
-
-    Note that normalization occurs per feature, independent of the predicate
-    it is linked with. Future work should separate these.
-
     """
     hierarchy = XSDHierarchy()
+
+    # keep track which predicates are used to link to which objects
     node_predicate_map = dict()
     for _,p,o in knowledge_graph.triples(separate_literals=separate_literals):
         if o not in node_predicate_map.keys():
@@ -50,6 +48,12 @@ def construct_features(nodes_map, knowledge_graph, feature_configs,
         feature_encoding = module.generate_features(nodes_map,
                                                     node_predicate_map,
                                                     feature_config)
+        # feature_encoding is a list for every predicate with this feature as
+        # range, with each member being also a list L of length 3 with L[0] the 
+        # vectorized encodings (array if fixed length, list of arrays
+        # otherwise), L[1] an array with node indices that map the encodings to the
+        # correct graph' nodes, and L[2] an array with the lengths of the
+        # encodings (uniform if fixed length).
 
         if feature_encoding is not None:
             features[feature_name] = feature_encoding
@@ -74,12 +78,12 @@ def feature_module(hierarchy, feature_name):
 
     return None
 
-def construct_preembeddings(features, features_enabled, n, nepoch, feature_configs):
-    X_width = 0
+def construct_preembeddings(F, features_enabled, feature_configs):
+    embeddings_width = 0
     modules_config = list()
     preembeddings = list()
     for datatype in set.intersection(set(features_enabled),
-                                     set(features.keys()),
+                                     set(F.keys()),
                                      PREEMBEDDING_FEATURES):
         feature_config = next((conf for conf in feature_configs
                                if conf['datatype'] == datatype),
@@ -87,23 +91,26 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
         weight_sharing = feature_config['share_weights']
         embedding_dim = feature_config['embedding_dim']
 
-        encoding_sets = features.pop(datatype, list())
+        encoding_sets = F.pop(datatype, list())
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
             if datatype in ["blob.image"]:
-                encoding_sets = merge_encoding_sets(encoding_sets)
-            else:
+                encoding_sets = merge_img_encoding_sets(encoding_sets)
+            elif datatype in ["xsd.string", "xsd.anyURI", "ogc:wktLiteral"]:
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
+            else:
+                raise Exception("Unsupported datatype?")
 
-        nsets = len(encoding_sets)
+        num_encoding_sets = len(encoding_sets)
         for encodings, node_idx, seq_lengths in encoding_sets:
             if datatype in ["xsd.string", "xsd.anyURI"]:
-                # stored as list of arrays
+                # stored as list of arrays (vocab x length)
                 feature_dim = 0
                 feature_size = encodings[0].shape[feature_dim]
 
+                # adjust model size to 'best' fit sequence lengths
                 model_size = "M"  # medium, seq length >= 12
-                if not weight_sharing or nsets <= 1:
+                if not weight_sharing or num_encoding_sets <= 1:
                     seq_length_min = min(seq_lengths)
                     if seq_length_min < 20:
                         model_size = "S"
@@ -112,52 +119,61 @@ def construct_preembeddings(features, features_enabled, n, nepoch, feature_confi
                     else:
                         model_size = "L"
 
-                modules_config.append((datatype, (feature_config['num_batches'],
-                                                  feature_size,
+                modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
                                                   model_size)))
             if datatype in ["ogc.wktLiteral"]:
-                # stored as list of arrays
+                # stored as list of arrays (point_repr x num_points)
                 feature_dim = 0  # set to 1 for RNN
                 feature_size = encodings[0].shape[feature_dim]
-                modules_config.append((datatype, (feature_config['num_batches'],
-                                                  feature_size,
+                modules_config.append((datatype, (feature_size,
                                                   embedding_dim)))
             if datatype in ["blob.image"]:
-                # stored as tensor
-                modules_config.append((datatype, (feature_config['num_batches'],
-                                                  encodings.shape[1:],
+                # stored as tensor (num_images x num_channels x width x height)
+                modules_config.append((datatype, (encodings.shape[1:],
                                                   embedding_dim)))
 
-            X_width += embedding_dim
+            embeddings_width += embedding_dim
 
-        # deal with outliers?
-        if datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
-            if feature_config['remove_outliers']:
+        # deal with outliers?;
+        if 'remove_outliers' in feature_config.keys() and feature_config['remove_outliers']:
+            if datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
                 encoding_sets = [remove_outliers(*f) for f in encoding_sets]
-            if feature_config['trim_outliers']:
+            else:
+                raise Warning("Outlier removal not supported for datatype %s" %
+                              datatype)
+
+        if 'trim_outliers' in feature_config.keys() and feature_config['trim_outliers']:
+            if datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
                 feature_dim = 0  # set to 1 for RNN
                 encoding_sets = [trim_outliers(*f, feature_dim) for f in encoding_sets]
+            else:
+                raise Warning("Outlier trimming not supported for datatype %s" %
+                              datatype)
 
-        nepoch
+
+        num_batches = feature_config['num_batches']
         encoding_sets_batched = list()
-        for f in encoding_sets:
+        for encodings, node_idc, enc_lengths in encoding_sets:
             if datatype == "blob.image":
-                encoding_sets_batched.append((f, mkbatches(*f,
-                                                  num_batches=feature_config['num_batches'])))
+                batches = mkbatches(encodings,
+                                    node_idc,
+                                    num_batches=num_batches)
             elif datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
-                encoding_sets_batched.append((f, mkbatches_varlength(*f,
-                                                            num_batches=feature_config['num_batches'])))
+                batches = mkbatches_varlength(encodings,
+                                              node_idc,
+                                              enc_lengths,
+                                              num_batches=num_batches)
+            encoding_sets_batched.append((encodings, batches))
 
         preembeddings.append((datatype, encoding_sets_batched))
 
-    return (preembeddings, modules_config, X_width)
+    return (preembeddings, modules_config, embeddings_width)
 
-def construct_feature_matrix(features, features_enabled, n, feature_configs):
+def construct_feature_matrix(F, features_enabled, num_nodes, feature_configs):
     feature_matrix = list()
-    features_processed = set()
     for feature in features_enabled:
-        if feature not in features.keys():
+        if feature not in F.keys():
             logging.debug("=> WARNING: feature {} not in dataset".format(feature))
             continue
 
@@ -169,18 +185,18 @@ def construct_feature_matrix(features, features_enabled, n, feature_configs):
         feature_config = next((conf for conf in feature_configs
                                if conf['datatype'] == feature),
                               None)
-        encoding_sets = features[feature]
+        encoding_sets = F[feature]
         if feature_config['share_weights']:
             logger.debug("weight sharing enabled for {}".format(feature))
             encoding_sets = merge_encoding_sets(encoding_sets)
         else:
             encoding_sets = stack_encoding_sets(encoding_sets)
 
-        feature_matrix.extend([_mkdense(*feature_encoding, n) for
+        feature_matrix.extend([_mkdense(*feature_encoding, num_nodes) for
                                feature_encoding in encoding_sets])
-        features_processed.add(feature)
 
-    X = np.empty((n,0), dtype=np.float32) if len(feature_matrix) <= 0 else np.hstack(feature_matrix)
+    X = np.empty((num_nodes, 0), dtype=np.float32) if len(feature_matrix) <= 0\
+        else np.hstack(feature_matrix)
 
     return X
 
@@ -223,7 +239,7 @@ def merge_sparse_encodings_sets(encoding_sets):
     seq_length_merged = np.zeros(shape=N, dtype=np.int32)
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
-    merged_idx_mult = {merged_idx_map[v]:0 for v in node_idc_mult}
+    to_merge = dict()
     for encodings, node_index, seq_length in encoding_sets:
         # assume that non-filled values are zero
         for i in range(node_index.shape[0]):
@@ -233,30 +249,31 @@ def merge_sparse_encodings_sets(encoding_sets):
             enc = encodings[i]
             enc_length = seq_length[i]
             if idx in node_idc_mult:
-                if merged_idx_mult[merged_idx] > 0:
-                    # average vectors for nodes that occur more than once
-                    enc_length = max(enc_length,
-                                     seq_length_merged[merged_idx])
-
-                    enc_visited = encodings_merged[merged_idx]
-                    shape = (max(enc.shape[0], enc_visited.shape[0]),
-                             max(enc.shape[1], enc_visited.shape[1]))
-                    enc = sp.coo_matrix((np.concatenate([enc.data, enc_visited.data]),
-                                        (np.concatenate([enc.row, enc_visited.row]),
-                                         np.concatenate([enc.col, enc_visited.col]))),
-                                        shape=shape)
-
-                merged_idx_mult[merged_idx] += 1
+                if idx not in to_merge:
+                    to_merge[idx] = list()
+                to_merge[idx].append((enc, enc_length))
 
             encodings_merged[merged_idx] = enc
             seq_length_merged[merged_idx] = enc_length
 
-    for idx, n in merged_idx_mult.items():
-        # average vectors for nodes that occur more than once
-        enc = encodings_merged[idx]
-        data = enc.data / n
-        encodings_merged[idx] = sp.coo_matrix((data, (enc.row, enc.col)),
-                                              shape=enc.shape)
+    for idx, encodings_and_lengths in to_merge.items():
+        encodings, encodings_length = zip(*encodings_and_lengths)
+        enc_length = max(encodings_length)
+        enc_shape = max([enc.shape for enc in encodings])
+
+        for i, enc in enumerate(encodings):
+            if not isinstance(enc, sp.coo.coo_matrix):
+                encodings[i] = enc.tocoo()
+
+        n = len(encodings)
+        data = np.concatenate([enc.data for enc in encodings]) / n
+        row = np.concatenate([enc.row for enc in encodings])
+        col = np.concatenate([enc.col for enc in encodings])
+        enc = sp.coo_matrix((data, (row, col)), shape=enc_shape)
+
+        merged_idx = merged_idx_map[idx]
+        encodings_merged[merged_idx] = enc
+        seq_length_merged[merged_idx] = enc_length
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
@@ -266,7 +283,6 @@ def merge_encoding_sets(encoding_sets):
     encodings depend on more than their content (eg content+predicates),
     which they do not atm.
     """
-    # TODO: fix this for images sets with more than one set
     if len(encoding_sets) <= 1:
         return encoding_sets
 
@@ -282,7 +298,7 @@ def merge_encoding_sets(encoding_sets):
     seq_length_merged = np.zeros(shape=N, dtype=np.int32)
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
-    merged_idx_mult = {merged_idx_map[v]:0 for v in node_idc_mult}
+    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idc_mult}
     for encodings, node_index, seq_length in encoding_sets:
         # assume that non-filled values are zero
         for i in range(node_index.shape[0]):
@@ -291,9 +307,10 @@ def merge_encoding_sets(encoding_sets):
 
             enc = encodings[i]
             if idx in node_idc_mult:
-                # average vectors for nodes that occur more than once
-                enc += encodings_merged[merged_idx,:encodings.shape[1]]
-                merged_idx_mult[merged_idx] += 1
+                mult_enc = merged_idx_multvalue_map[merged_idx]
+                if mult_enc is None:
+                    mult_enc = np.zeros(enc.shape, dtype=np.float32)
+                merged_idx_multvalue_map[merged_idx] = mult_enc + enc
 
             encodings_merged[merged_idx,:encodings.shape[1]] = enc
             if seq_length is not None:
@@ -301,9 +318,13 @@ def merge_encoding_sets(encoding_sets):
                 seq_length_merged[merged_idx] = max(seq_length_merged[merged_idx],
                                                     seq_length[i])
 
-    for idx, n in merged_idx_mult.items():
+    for i in range(node_idc_mult.shape[0]):
+        idx = node_idc_mult[i]
+        merged_idx = merged_idx_map[idx]
+        count = node_idc_counts[node_idc_counts > 1][i]
+
         # average vectors for nodes that occur more than once
-        encodings_merged[idx] = encodings_merged[idx] / n
+        encodings_merged[merged_idx] = merged_idx_multvalue_map[merged_idx] / count
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
@@ -327,7 +348,7 @@ def merge_img_encoding_sets(encoding_sets):
     node_idx_merged = node_idc_unique
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
-    merged_idx_mult = {merged_idx_map[v]:0 for v in node_idc_mult}
+    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idc_mult}
     for encodings, node_index, _ in encoding_sets:
         # assume that non-filled values are zero
         for i in range(node_index.shape[0]):
@@ -336,17 +357,22 @@ def merge_img_encoding_sets(encoding_sets):
 
             enc = encodings[i]
             if idx in node_idc_mult:
-                # average vectors for nodes that occur more than once
-                enc += encodings_merged[merged_idx]
-                merged_idx_mult[merged_idx] += 1
+                mult_enc = merged_idx_multvalue_map[merged_idx]
+                if mult_enc is None:
+                    mult_enc = np.zeros(enc.shape, dtype=np.float32)
+                merged_idx_multvalue_map[merged_idx] = mult_enc + enc
 
             encodings_merged[merged_idx] = enc
 
-    for idx, n in merged_idx_mult.items():
-        # average vectors for nodes that occur more than once
-        encodings_merged[idx] = encodings_merged[idx] / n
+    for i in range(node_idc_mult.shape[0]):
+        idx = node_idc_mult[i]
+        merged_idx = merged_idx_map[idx]
+        count = node_idc_counts[node_idc_counts > 1][i]
 
-    return [[encodings_merged, node_idx_merged, None]]
+        # average vectors for nodes that occur more than once
+        encodings_merged[merged_idx] = merged_idx_multvalue_map[merged_idx] / count
+
+    return [[encodings_merged, node_idx_merged, -np.ones(N)]]
 
 def stack_encoding_sets(encoding_sets):
     """ Stack encoding sets horizontally. Entries for the same node are

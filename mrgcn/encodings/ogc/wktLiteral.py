@@ -37,78 +37,77 @@ def generate_features(nodes_map, node_predicate_map, config, time_dim=1):
                         E :- Geometry embedding size (fixed)
                         L :- sequence length
                     node_idx :- numpy vector of length M, mapping seq index to node id
-                    seq_lengths :- list of length M, mapping seq index to seq length
+                    seq_lengths :- numpy array length M, mapping seq index to seq length
     """
     logger.debug("Generating wktLiteral features")
 
-    if True:
-        return generate_relationwise_features(nodes_map, node_predicate_map,
-                                              config, time_dim)
-    else:
-        return generate_nodewise_features(nodes_map, config, time_dim)
-
-def generate_nodewise_features(nodes_map, config, time_dim):
-    """ Stack all vectors without regard of their relation
-    """
-    n = len(nodes_map)
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
-    vec_length_map = list()
-    data = list()
-
-    m = 0
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(_OGC_NAMESPACE.wktLiteral):
-            continue
-
-        value = str(node)  ## empty value bug workaround
-        try:
-            vec = gv.vectorize_wkt(value)[:_MAX_POINTS,:]
-        except:
-            continue
-
-        vec_length = vec.shape[0]
-        if vec_length <= 0:
-            continue
-
-        # add means 
-        mean_x = np.mean(vec[:,0])
-        mean_y = np.mean(vec[:,1])
-        vec = np.hstack([np.vstack([[mean_x, mean_y]]*vec_length), vec])
-
-        sp_rows, sp_cols = np.where(vec > 0.0)
-        if time_dim == 0:
-            a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_rows, sp_cols)),
-                              shape=(vec_length, _GEOVECTORIZER_VEC_LENGTH+2),
-                              dtype=np.float64)
-        else:  # time_dim == 1
-            a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_cols, sp_rows)),
-                              shape=(_GEOVECTORIZER_VEC_LENGTH+2, vec_length),
-                              dtype=np.float64)
-
-        data.append(a)
-        vec_length_map.append(vec_length)
-        node_idx[m] = i
-        m += 1
-
-    logger.debug("Generated {} unique wktLiteral features".format(m))
-
-    if m <= 0:
-        return None
-
-    # normalization
-    sc = GeomScalerSparse(time_dim)
-    means = sc.fit(data)
-    data = sc.transform(data, means)
-
-    return [[data, node_idx[:m], vec_length_map]]
+    return generate_relationwise_features(nodes_map, node_predicate_map,
+                                          config, time_dim)
+#    else:
+#        return generate_nodewise_features(nodes_map, config, time_dim)
+#
+#def generate_nodewise_features(nodes_map, config, time_dim):
+#    """ Stack all vectors without regard of their relation
+#    """
+#    n = len(nodes_map)
+#    node_idx = np.zeros(shape=(n), dtype=np.int32)
+#    vec_length_map = list()
+#    data = list()
+#
+#    m = 0
+#    for node, i in nodes_map.items():
+#        if not isinstance(node, Literal):
+#            continue
+#        if node.datatype is None or node.datatype.neq(_OGC_NAMESPACE.wktLiteral):
+#            continue
+#
+#        value = str(node)  ## empty value bug workaround
+#        try:
+#            vec = gv.vectorize_wkt(value)[:_MAX_POINTS,:]
+#        except:
+#            continue
+#
+#        vec_length = vec.shape[0]
+#        if vec_length <= 0:
+#            continue
+#
+#        # add means 
+#        mean_x = np.mean(vec[:,0])
+#        mean_y = np.mean(vec[:,1])
+#        vec = np.hstack([np.vstack([[mean_x, mean_y]]*vec_length), vec])
+#
+#        sp_rows, sp_cols = np.where(vec > 0.0)
+#        if time_dim == 0:
+#            a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_rows, sp_cols)),
+#                              shape=(vec_length, _GEOVECTORIZER_VEC_LENGTH+2),
+#                              dtype=np.float64)
+#        else:  # time_dim == 1
+#            a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_cols, sp_rows)),
+#                              shape=(_GEOVECTORIZER_VEC_LENGTH+2, vec_length),
+#                              dtype=np.float64)
+#
+#        data.append(a)
+#        vec_length_map.append(vec_length)
+#        node_idx[m] = i
+#        m += 1
+#
+#    logger.debug("Generated {} unique wktLiteral features".format(m))
+#
+#    if m <= 0:
+#        return None
+#
+#    # normalization
+#    sc = GeomScalerSparse(time_dim)
+#    means = sc.fit(data)
+#    data = sc.transform(data, means)
+#
+#    return [[data, node_idx[:m], vec_length_map]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, config,
                                    time_dim):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    n = len(node_predicate_map)
+    n = len(nodes_map)
     m = dict()
     node_idx = dict()
     data = dict()
@@ -119,8 +118,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config,
         if node.datatype is None or node.datatype.neq(_OGC_NAMESPACE.wktLiteral):
             continue
 
-        value = str(node)  ## empty value bug workaround
         try:
+            value = str(node)
             vec = gv.vectorize_wkt(value)[:_MAX_POINTS,:]
         except:
             continue
@@ -129,7 +128,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config,
         if vec_length <= 0:
             continue
 
-        # add means 
+        # add means of X,Y to vector 
         mean_x = np.mean(vec[:,0])
         mean_y = np.mean(vec[:,1])
         vec = np.hstack([np.vstack([[mean_x, mean_y]]*vec_length), vec])
@@ -144,33 +143,35 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config,
                               shape=(_GEOVECTORIZER_VEC_LENGTH+2, vec_length),
                               dtype=np.float64)
 
-        for predicate in node_predicate_map[node]:
-            if predicate not in data.keys():
-                data[predicate] = list()
-                m[predicate] = 0
-                vec_length_map[predicate] = list()
-                node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
+        for p in node_predicate_map[node]:
+            if p not in data.keys():
+                data[p] = list()
+                node_idx[p] = np.empty(shape=(n), dtype=np.int32)
+                vec_length_map[p] = np.empty(shape=(n), dtype=np.int32)
+                m[p] = 0
 
-            data[predicate].append(a)
+            data[p].append(a)
 
-            vec_length_map[predicate].append(vec_length)
-            node_idx[predicate][m[predicate]] = i
-            m[predicate] += 1
+            idx = m[p]
+            vec_length_map[p][idx] = vec_length
+            node_idx[p][idx] = i
+            m[p] = idx + 1
 
 
-    logger.debug("Generated {} unique wktLiteral features".format(sum(m.values())))
+    msum = sum(m.values())
+    logger.debug("Generated {} unique wktLiteral features".format(msum))
 
-    if len(m) <= 0:
+    if msum <= 0:
         return None
 
     # normalization
-    for pred, pdata in data.items():
+    for p, pdata in data.items():
         sc = GeomScalerSparse(time_dim)
         means = sc.fit(pdata)
-        data[pred] = sc.transform(pdata, means)
+        data[p] = sc.transform(pdata, means)
 
-    return [[data[pred], node_idx[pred][:m[pred]], vec_length_map[pred]]
-            for pred in data.keys()]
+    return [[data[p], node_idx[p][:m[p]], vec_length_map[p][:m[p]]]
+            for p in data.keys()]
 
 
 def validate(value):

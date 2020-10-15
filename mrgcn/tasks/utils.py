@@ -32,7 +32,7 @@ def dataset_to_device(dataset, device):
         split['idx'] = split['idx'].to(device)
         # X stays where it is
 
-def mkbatches(mat, node_idx, _, num_batches=1):
+def mkbatches(mat, node_idx, num_batches=1):
     """ split N x * array in batches
     """
     n = mat.shape[0]  # number of samples
@@ -57,10 +57,7 @@ def mkbatches_varlength(sequences, node_idx, seq_length_map,
 
     # sort on length
     idc = np.arange(n, dtype=np.int32)
-    seq_length_map_sorted, node_idx_sorted, sequences_sorted_idc = zip(
-        *sorted(zip(seq_length_map,
-                    node_idx,
-                    idc)))
+    _, sequences_sorted_idc = zip(*sorted(zip(seq_length_map, idc)))
 
     seq_assignments = np.array_split(sequences_sorted_idc, num_batches)
     node_assignments = [np.array(node_idx, dtype=np.int32)[slce]

@@ -43,58 +43,57 @@ def generate_features(nodes_map, node_predicate_map, config):
                         A :- number of allowed characters
                         L :- sequence length
                     node_idx :- numpy vector of length M, mapping seq index to node id
-                    seq_lengths :- list of length M, mapping seq index to seq length
+                    seq_lengths :- numpy array of length M, mapping seq index to seq length
               """
     logger.debug("Generating string features")
 
-    if True:
-        return generate_relationwise_features(nodes_map, node_predicate_map,
-                                              config)
-    else:
-        return generate_nodewise_features(nodes_map, config)
-
-def generate_nodewise_features(nodes_map, config):
-    """ Stack all vectors without regard of their relation
-    """
-    m = 0
-    n = len(nodes_map)
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
-    seq_length_map = list()
-
-    data = list()
-
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(XSD.string):
-            continue
-
-        node._value = str(node)  ## empty value bug workaround
-        #if validate(node.value) is None:  # if invalid syntax
-        #    continue
-
-        sequence = preprocess(node.value)
-        sequence = encode(sequence)[:_MAX_CHARS]
-        seq_length = len(sequence)
-        if seq_length <= 0:
-            continue
-
-        a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
-                           (sequence, np.array(range(seq_length)))),
-                          shape=(_VOCAB_MAX_IDX, seq_length),
-                          dtype=np.float32)
-
-        data.append(a)
-        seq_length_map.append(seq_length)
-        node_idx[m] = i
-        m += 1
-
-    logger.debug("Generated {} unique string features".format(m))
-
-    if m <= 0:
-        return None
-
-    return [[data, node_idx[:m], seq_length_map]]
+    return generate_relationwise_features(nodes_map, node_predicate_map,
+                                          config)
+#    else:
+#        return generate_nodewise_features(nodes_map, config)
+#
+#def generate_nodewise_features(nodes_map, config):
+#    """ Stack all vectors without regard of their relation
+#    """
+#    m = 0
+#    n = len(nodes_map)
+#    node_idx = np.zeros(shape=(n), dtype=np.int32)
+#    seq_length_map = list()
+#
+#    data = list()
+#
+#    for node, i in nodes_map.items():
+#        if not isinstance(node, Literal):
+#            continue
+#        if node.datatype is None or node.datatype.neq(XSD.string):
+#            continue
+#
+#        node._value = str(node)  ## empty value bug workaround
+#        #if validate(node.value) is None:  # if invalid syntax
+#        #    continue
+#
+#        sequence = preprocess(node.value)
+#        sequence = encode(sequence)[:_MAX_CHARS]
+#        seq_length = len(sequence)
+#        if seq_length <= 0:
+#            continue
+#
+#        a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
+#                           (sequence, np.array(range(seq_length)))),
+#                          shape=(_VOCAB_MAX_IDX, seq_length),
+#                          dtype=np.float32)
+#
+#        data.append(a)
+#        seq_length_map.append(seq_length)
+#        node_idx[m] = i
+#        m += 1
+#
+#    logger.debug("Generated {} unique string features".format(m))
+#
+#    if m <= 0:
+#        return None
+#
+#    return [[data, node_idx[:m], seq_length_map]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, config):
     """ Stack vectors row-wise per relation and column stack relations
@@ -110,50 +109,47 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
         if node.datatype is None or node.datatype.neq(XSD.string):
             continue
 
-        node._value = str(node)  ## empty value bug workaround
-        #if validate(node.value) is None:  # if invalid syntax
-        #    continue
+        try:
+            value = str(node)
 
-        sequence = preprocess(node.value)
-        sequence = encode(sequence)[:_MAX_CHARS]
-        seq_length = len(sequence)
+            sequence = preprocess(value)
+            sequence = encode(sequence)[:_MAX_CHARS]
+            seq_length = len(sequence)
+        except:
+            continue
 
         if seq_length <= 0:
             continue
 
-        a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
-                           (sequence, np.array(range(seq_length)))),
+        a = sp.coo_matrix((np.ones(seq_length), (sequence, np.arange(seq_length))),
                           shape=(_VOCAB_MAX_IDX, seq_length),
                           dtype=np.float32)
 
-        for predicate in node_predicate_map[node]:
-            if predicate not in sequences.keys():
-                sequences[predicate] = list()
-                m[predicate] = 0
-                seq_length_map[predicate] = list()
-                node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
+        for p in node_predicate_map[node]:
+            if p not in sequences.keys():
+                sequences[p] = list()
+                node_idx[p] = np.empty(shape=(n), dtype=np.int32)
+                seq_length_map[p] = np.empty(shape=(n), dtype=np.int32)
+                m[p] = 0
 
-            sequences[predicate].append(a)
+            sequences[p].append(a)
 
-            seq_length_map[predicate].append(seq_length)
-            node_idx[predicate][m[predicate]] = i
-            m[predicate] += 1
+            idx = m[p]
+            seq_length_map[p][idx] = seq_length
+            node_idx[p][idx] = i
+            m[p] = idx + 1
 
-    logger.debug("Generated {} unique string features".format(sum(m.values())))
+    msum = sum(m.values())
+    logger.debug("Generated {} unique string features".format(msum))
 
-    if len(m) <= 0:
+    if msum <= 0:
         return None
 
-    return [[sequences[pred], node_idx[pred][:m[pred]], seq_length_map[pred]]
-            for pred in sequences.keys()]
+    return [[sequences[p], node_idx[p][:m[p]], seq_length_map[p][:m[p]]]
+            for p in sequences.keys()]
 
 def encode(seq):
-    encoding = list()
-    for char in seq:
-        if char in _VOCAB:
-            encoding.append(_VOCAB_MAP[char])
-
-    return encoding
+    return [_VOCAB_MAP[char] for char in seq if char in _VOCAB]
 
 def preprocess(seq):
     seq = seq.lower()
