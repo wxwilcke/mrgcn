@@ -14,7 +14,7 @@ from mrgcn.models.mrgcn import MRGCN
 
 logger = logging.getLogger(__name__)
 
-def run(A, X, C, data, splits, tsv_writer, device, config,
+def run(A, X, X_width, data, splits, tsv_writer, device, config,
         modules_config, featureless, test_split):
     # evaluation
     filtered_ranks = config['task']['filter_ranks']
@@ -27,7 +27,7 @@ def run(A, X, C, data, splits, tsv_writer, device, config,
 
     # compile model
     num_nodes = A.shape[0]
-    model = build_model(C, A, modules_config, config, featureless)
+    model = build_model(X_width, A, modules_config, config, featureless)
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['l2norm'])
@@ -109,12 +109,12 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
         edge_embeddings = model.rgcn.relations
 
         # sample negative triples by copying and corrupting positive triples
-        ncorrupt = int(nsamples//5)
+        ncorrupt = nsamples//5
         neg_samples_idx = np.random.choice(np.arange(nsamples),
                                            ncorrupt,
                                            replace=False)
 
-        ncorrupt_head = int(ncorrupt//2)
+        ncorrupt_head = ncorrupt//2
         ncorrupt_tail = ncorrupt - ncorrupt_head
         corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
 

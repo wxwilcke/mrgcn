@@ -19,19 +19,19 @@ from mrgcn.data.utils import (is_readable,
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
-def run(A, X, Y, C, data, splits, acc_writer, device, config,
+def run(A, X, Y, X_width, data, splits, acc_writer, device, config,
         modules_config, featureless, test_split):
     task = config['task']['type']
     logging.info("Starting {} task".format(task))
     if task == "node classification":
-        loss, acc, labels, targets = node_classification.run(A, X, Y, C, acc_writer,
+        loss, acc, labels, targets = node_classification.run(A, X, Y, X_width, acc_writer,
                                                           device, config,
                                                           modules_config,
                                                           featureless, test_split)
         return (loss, acc, labels, targets)
 
     elif task == "link prediction":
-        mrr, hits_at_k, ranks, = link_prediction.run(A, X, C, data, splits,
+        mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data, splits,
                                                      acc_writer, device, config,
                                                      modules_config,
                                                      featureless, test_split)
@@ -63,12 +63,15 @@ def main(args, acc_writer, out_writer, baseFilename, config):
         sample_map = tb.get('sample_map')  # empty if doing link prediction
         class_map = tb.get('class_map')  # empty if doing link prediction
 
-    # prep data
+    ### prep data ###
     num_nodes = A.shape[0]
     A = scipy_sparse_to_pytorch_sparse(A)
-    X, C, modules_config = setup_features(F, num_nodes, featureless, config)
-    if len(X) <= 1 and X[0].size(1) <= 0:
+    X, X_width, modules_config = setup_features(F, num_nodes, featureless, config)
+    #if len(X) <= 1 and X[0].size(1) <= 0:  # X here is a list
+    if X_width <= 0:
         featureless = True
+
+    splits = None
     if data is not None:
         # ugly temporary fix; should be done at dataset generation
         trl = data['train'].shape[0]
@@ -82,7 +85,7 @@ def main(args, acc_writer, out_writer, baseFilename, config):
                                                 data['valid']], axis=0)).long()
 
     task = config['task']['type']
-    out = run(A, X, Y, C, data, splits, acc_writer, device,
+    out = run(A, X, Y, X_width, data, splits, acc_writer, device,
               config, modules_config, featureless, test_split)
 
     if task == "node classification":

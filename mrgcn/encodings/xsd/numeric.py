@@ -94,61 +94,60 @@ def generate_features(node_map, node_predicate_map, config):
     elif config['datatype'] == "xsd.positiveInteger":
         datatype = [XSD.positiveInteger]
 
-    if True:  #config['share_weights']:
-        return generate_relationwise_features(node_map, node_predicate_map, C,
-                                              config, datatype)
-    else:
-        return generate_nodewise_features(node_map, C, config, datatype)
+    return generate_relationwise_features(node_map, node_predicate_map, C,
+                                          config, datatype)
+    #else:
+    #    return generate_nodewise_features(node_map, C, config, datatype)
 
-def generate_nodewise_features(node_map, C, config, datatype):
-    """ Stack all vectors without regard of their relation
-    """
-    m = 0
-    n = len(node_map)
-    encodings = np.zeros(shape=(n, C), dtype=np.float32)
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
-    value_max = None
-    value_min = None
-    for node, i in node_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype not in datatype:
-            continue
-
-        value = str(node)  ## empty value bug workaround
-        if validate(value) is None:
-            continue
-        value = float(value)
-
-        if value_max is None or value > value_max:
-            value_max = value
-        if value_min is None or value < value_min:
-            value_min = value
-
-        # add to matrix structures
-        encodings[m] = [value]
-        node_idx[m] = i
-        m += 1
-
-    logger.debug("Generated {} unique {} encodings".format(m,
-                                                           config['datatype']))
-
-    if m <= 0:
-        return None
-
-    # normalization over encodings
-    encodings[:m] = (2*(encodings[:m] - value_min) /
-                     (value_max - value_min)) -1.0
-
-    return [[encodings[:m], node_idx[:m], None]]
+#def generate_nodewise_features(node_map, C, config, datatype):
+#    """ Stack all vectors without regard of their relation
+#    """
+#    m = 0
+#    n = len(node_map)
+#    encodings = np.zeros(shape=(n, C), dtype=np.float32)
+#    node_idx = np.zeros(shape=(n), dtype=np.int32)
+#    value_max = None
+#    value_min = None
+#    for node, i in node_map.items():
+#        if not isinstance(node, Literal):
+#            continue
+#        if node.datatype is None or node.datatype not in datatype:
+#            continue
+#
+#        value = str(node)  ## empty value bug workaround
+#        if validate(value) is None:
+#            continue
+#        value = float(value)
+#
+#        if value_max is None or value > value_max:
+#            value_max = value
+#        if value_min is None or value < value_min:
+#            value_min = value
+#
+#        # add to matrix structures
+#        encodings[m] = [value]
+#        node_idx[m] = i
+#        m += 1
+#
+#    logger.debug("Generated {} unique {} encodings".format(m,
+#                                                           config['datatype']))
+#
+#    if m <= 0:
+#        return None
+#
+#    # normalization over encodings
+#    encodings[:m] = (2*(encodings[:m] - value_min) /
+#                     (value_max - value_min)) -1.0
+#
+#    return [[encodings[:m], node_idx[:m], None]]
 
 def generate_relationwise_features(node_map, node_predicate_map, C, config,
                                    datatype):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    n = len(node_predicate_map)
+    n = len(node_map)
     m = dict()
-    relationwise_encodings = dict()
+    encodings = dict()
     node_idx = dict()
     values_min = dict()
     values_max = dict()
@@ -158,49 +157,50 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
         if node.datatype is None or node.datatype not in datatype:
             continue
 
-        value = str(node)  ## empty value bug workaround
-        if validate(value) is None:
+        try:
+            value = float(str(node))
+        except:
             continue
-        value = float(value)
 
-        for predicate in node_predicate_map[node]:
-            if predicate not in relationwise_encodings.keys():
-                relationwise_encodings[predicate] = np.zeros(shape=(n, C), dtype=np.float32)
-                node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
-                m[predicate] = 0
-                values_min[predicate] = None
-                values_max[predicate] = None
+        for p in node_predicate_map[node]:
+            if p not in encodings.keys():
+                encodings[p] = np.empty(shape=(n, C), dtype=np.float32)
+                node_idx[p] = np.empty(shape=(n), dtype=np.int32)
+                m[p] = 0
+                values_min[p] = None
+                values_max[p] = None
 
-            if values_max[predicate] is None or value > values_max[predicate]:
-                values_max[predicate] = value
-            if values_min[predicate] is None or value < values_min[predicate]:
-                values_min[predicate] = value
+            if values_max[p] is None or value > values_max[p]:
+                values_max[p] = value
+            if values_min[p] is None or value < values_min[p]:
+                values_min[p] = value
 
+            idx = m[p]
             # add to matrix structures
-            relationwise_encodings[predicate][m[predicate]] = [value]
-            node_idx[predicate][m[predicate]] = i
-            m[predicate] += 1
+            encodings[p][idx] = [value]
+            node_idx[p][idx] = i
+            m[p] = idx + 1
 
+    msum = sum(m.values())
     logger.debug("Generated {} unique {} encodings".format(
-        sum(m.values()),
+        msum,
         config['datatype']))
 
-    if len(m) <= 0:
+    if msum <= 0:
         return None
 
     # normalization over encodings
-    for pred in relationwise_encodings.keys():
-        idx = np.arange(m[pred])
-        if values_max[pred] == values_min[pred]:
-            relationwise_encodings[pred][idx] = 0.0
+    for p in encodings.keys():
+        idc = np.arange(m[p])
+        if values_max[p] == values_min[p]:
+            encodings[p][idc] = 0.0
             continue
 
-        relationwise_encodings[pred][idx] =\
-                (2*(relationwise_encodings[pred][idx] - values_min[pred]) /
-                             (values_max[pred] - values_min[pred])) -1.0
+        encodings[p][idc] = (2*(encodings[p][idc] - values_min[p]) /
+                            (values_max[p] - values_min[p])) -1.0
 
-    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], None]
-            for pred, encodings in relationwise_encodings.items()]
+    return [[encodings[p][:m[p]], node_idx[p][:m[p]], np.ones(m[p])]
+            for p in encodings.keys()]
 
 def validate(value):
     return match(_REGEX_NUMERIC, value)

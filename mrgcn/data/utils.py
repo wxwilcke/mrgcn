@@ -187,7 +187,8 @@ def collate_repetition_padding(batch, time_dim, max_batch_length=999,
 
 def setup_features(F, num_nodes, featureless, config):
     X_width = 0  # number of columns in X
-    X = [torch.empty((num_nodes, X_width), dtype=torch.float32)]
+    X = [torch.empty((num_nodes, X_width), dtype=torch.float32)]  # dummy
+
     modules_config = list()
     if not featureless:
         features_enabled = features_included(config)
@@ -197,9 +198,6 @@ def setup_features(F, num_nodes, featureless, config):
                 logger.debug("Found {} encoding set(s) for datatype {}".format(
                     len(F[datatype]),
                     datatype))
-            else:
-                logger.debug("Missing encoding set(s) for datatype {}".format(
-                    datatype))
 
         # create N x M feature matrix for direct encodings
         X = construct_feature_matrix(F, features_enabled, num_nodes,
@@ -208,8 +206,7 @@ def setup_features(F, num_nodes, featureless, config):
         X = [torch.as_tensor(X)]
 
         # create batched pre-embedding representations for neural encodings
-        preembeddings, modules_config, emb_width = construct_preembeddings(F, features_enabled, num_nodes,
-                                                                           config['model']['epoch'],
+        preembeddings, modules_config, emb_width = construct_preembeddings(F, features_enabled,
                                                                            config['graph']['features'])
         X_width += emb_width
         X.extend(preembeddings)

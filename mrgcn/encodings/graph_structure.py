@@ -79,7 +79,7 @@ def generate_adjacency_matrices_sp(knowledge_graph,
             continue
 
         # create array to hold all edges per property
-        edges = np.empty((knowledge_graph.property_frequency(prop), 2),
+        edges = np.zeros((knowledge_graph.property_frequency(prop), 2),
                          dtype=np.int32)
 
         # populate edge array with corresponding node URIs
@@ -136,7 +136,7 @@ def generate_adjacency_matrix_mp(inputs):
     freq, triples, nodes_dict, adj_shape, include_inverse = inputs
 
     # create array to hold all edges per property
-    edges = np.empty((freq, 2), dtype=np.int32)
+    edges = np.zeros((freq, 2), dtype=np.int32)
 
     # populate edge array with corresponding node URIs
     for idx, (s, p, o) in enumerate(triples):

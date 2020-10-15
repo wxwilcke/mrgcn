@@ -57,81 +57,80 @@ def generate_features(nodes_map, node_predicate_map, config):
     logger.debug("Generating date encodings")
     C = 10  # number of items per feature
 
-    if True:
-        return generate_relationwise_features(nodes_map, node_predicate_map, C,
-                                              config)
-    else:
-        return generate_nodewise_features(nodes_map, C, config)
-
-
-def generate_nodewise_features(nodes_map, C, config):
-    """ Stack all vectors without regard of their relation
-    """
-    m = 0
-    n = len(nodes_map)
-    encodings = np.zeros(shape=(n, C), dtype=np.float32)
-    node_idx = np.zeros(shape=(n), dtype=np.int32)
-    value_max = None
-    value_min = None
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(XSD.date):
-            continue
-
-        node._value = str(node)  ## empty value bug workaround
-        value = validate(node.value)
-        if value is None:  # invalid syntax
-            continue
-
-        sign = 1. if value.group('sign') == '' else -1.
-        year = value.group('year')
-
-        # separate centuries, decades, and individual years
-        separated = separate(year)
-        if separated is None:
-            continue
-
-        decade = int(separated.group('decade'))
-        dec1, dec2 = point(decade, _YEAR_DECADE_RAD)
-
-        year = int(separated.group('year'))
-        y1, y2 = point(year, _YEAR_DECADE_RAD)
-
-        month = value.group('month')
-        m1, m2 = point(int(month), _MONTH_RAD)
-
-        day = value.group('day')
-        d1, d2 = point(int(day), _DAY_RAD)
-
-        c = int(separated.group('century'))
-        if value_max is None or c > value_max:
-            value_max = c
-        if value_min is None or c < value_min:
-            value_min = c
-
-        # add to matrix structures
-        encodings[m] = [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
-        node_idx[m] = i
-        m += 1
-
-    logger.debug("Generated {} unique date encodings".format(m))
-
-    if m <= 0:
-        return None
-
-    # normalization over centuries
-    encodings[:m,1] = (2*(encodings[:m,1] - value_min) /
-                        (value_max - value_min)) - 1.0
-
-    return [[encodings[:m], node_idx[:m], None]]
+    return generate_relationwise_features(nodes_map, node_predicate_map, C,
+                                          config)
+#    else:
+#        return generate_nodewise_features(nodes_map, C, config)
+#
+#
+#def generate_nodewise_features(nodes_map, C, config):
+#    """ Stack all vectors without regard of their relation
+#    """
+#    m = 0
+#    n = len(nodes_map)
+#    encodings = np.zeros(shape=(n, C), dtype=np.float32)
+#    node_idx = np.zeros(shape=(n), dtype=np.int32)
+#    value_max = None
+#    value_min = None
+#    for node, i in nodes_map.items():
+#        if not isinstance(node, Literal):
+#            continue
+#        if node.datatype is None or node.datatype.neq(XSD.date):
+#            continue
+#
+#        node._value = str(node)  ## empty value bug workaround
+#        value = validate(node.value)
+#        if value is None:  # invalid syntax
+#            continue
+#
+#        sign = 1. if value.group('sign') == '' else -1.
+#        year = value.group('year')
+#
+#        # separate centuries, decades, and individual years
+#        separated = separate(year)
+#        if separated is None:
+#            continue
+#
+#        decade = int(separated.group('decade'))
+#        dec1, dec2 = point(decade, _YEAR_DECADE_RAD)
+#
+#        year = int(separated.group('year'))
+#        y1, y2 = point(year, _YEAR_DECADE_RAD)
+#
+#        month = value.group('month')
+#        m1, m2 = point(int(month), _MONTH_RAD)
+#
+#        day = value.group('day')
+#        d1, d2 = point(int(day), _DAY_RAD)
+#
+#        c = int(separated.group('century'))
+#        if value_max is None or c > value_max:
+#            value_max = c
+#        if value_min is None or c < value_min:
+#            value_min = c
+#
+#        # add to matrix structures
+#        encodings[m] = [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
+#        node_idx[m] = i
+#        m += 1
+#
+#    logger.debug("Generated {} unique date encodings".format(m))
+#
+#    if m <= 0:
+#        return None
+#
+#    # normalization over centuries
+#    encodings[:m,1] = (2*(encodings[:m,1] - value_min) /
+#                        (value_max - value_min)) - 1.0
+#
+#    return [[encodings[:m], node_idx[:m], None]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
     """
     n = len(nodes_map)
     m = dict()
-    relationwise_encodings = dict()
+    encodings = dict()
     node_idx = dict()
     values_min = dict()
     values_max = dict()
@@ -142,71 +141,68 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
         if node.datatype is None or node.datatype.neq(XSD.date):
             continue
 
-        node._value = str(node)  ## empty value bug workaround
-        value = validate(node.value)
-        if value is None:  # invalid syntax
-            continue
+        try:
+            value = str(node)
 
-        sign = 1. if value.group('sign') == '' else -1.
-        year = value.group('year')
+            sign = 1. if value.group('sign') == '' else -1.
+            year = value.group('year')
 
-        # separate centuries, decades, and individual years
-        separated = separate(year)
-        if separated is None:
-            continue
-
-        decade = int(separated.group('decade'))
-        dec1, dec2 = point(decade, _YEAR_DECADE_RAD)
-
-        year = int(separated.group('year'))
-        y1, y2 = point(year, _YEAR_DECADE_RAD)
-
-        month = value.group('month')
-        m1, m2 = point(int(month), _MONTH_RAD)
-
-        day = value.group('day')
-        d1, d2 = point(int(day), _DAY_RAD)
-
-        for predicate in node_predicate_map[node]:
-            if predicate not in relationwise_encodings.keys():
-                relationwise_encodings[predicate] = np.zeros(shape=(n, C),
-                                                             dtype=np.float32)
-                node_idx[predicate] = np.zeros(shape=(n), dtype=np.int32)
-                m[predicate] = 0
-                values_min[predicate] = None
-                values_max[predicate] = None
+            # separate centuries, decades, and individual years
+            separated = separate(year)
 
             c = int(separated.group('century'))
-            if values_max[predicate] is None or c > values_max[predicate]:
-                values_max[predicate] = c
-            if values_min[predicate] is None or c < values_min[predicate]:
-                values_min[predicate] = c
 
+            decade = int(separated.group('decade'))
+            dec1, dec2 = point(decade, _YEAR_DECADE_RAD)
+
+            year = int(separated.group('year'))
+            y1, y2 = point(year, _YEAR_DECADE_RAD)
+
+            month = value.group('month')
+            m1, m2 = point(int(month), _MONTH_RAD)
+
+            day = value.group('day')
+            d1, d2 = point(int(day), _DAY_RAD)
+        except:
+            continue
+
+        for p in node_predicate_map[node]:
+            if p not in encodings.keys():
+                encodings[p] = np.empty(shape=(n, C), dtype=np.float32)
+                node_idx[p] = np.empty(shape=(n), dtype=np.int32)
+                m[p] = 0
+                values_min[p] = None
+                values_max[p] = None
+
+            if values_max[p] is None or c > values_max[p]:
+                values_max[p] = c
+            if values_min[p] is None or c < values_min[p]:
+                values_min[p] = c
+
+            idx = m[p]
             # add to matrix structures
-            relationwise_encodings[predicate][m[predicate]] =\
-                    [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
-            node_idx[predicate][m[predicate]] = i
-            m[predicate] += 1
+            encodings[p][idx] = [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
+            node_idx[p][idx] = i
+            m[p] + idx + 1
 
-    logger.debug("Generated {} unique date encodings".format(
-        sum(m.values())))
+    msum = sum(m.values())
+    logger.debug("Generated {} unique date encodings".format(msum))
 
-    if len(m) <= 0:
+    if msum <= 0:
         return None
 
     # normalization over centuries
-    for pred in relationwise_encodings.keys():
-        idx = np.arange(m[pred])
-        if values_max[pred] == values_min[pred]:
-            relationwise_encodings[pred][idx,1] = 0.0
+    for p in encodings.keys():
+        idx = np.arange(m[p])
+        if values_max[p] == values_min[p]:
+            encodings[p][idx,1] = 0.0
             continue
 
-        relationwise_encodings[pred][idx,1] =\
-                (2*(relationwise_encodings[pred][idx,1] - values_min[pred]) /
-                         (values_max[pred] - values_min[pred])) -1.0
+        encodings[p][idx,1] = (2*(encodings[p][idx,1] - values_min[p]) /
+                              (values_max[p] - values_min[p])) -1.0
 
-    return [[encodings[:m[pred]], node_idx[pred][:m[pred]], None]
-            for pred, encodings in relationwise_encodings.items()]
+    return [[encodings[p][:m[p]], node_idx[p][:m[p]], C*np.ones(m[p])]
+            for p in encodings.keys()]
 
 def point(m, rad):
     # place on circle

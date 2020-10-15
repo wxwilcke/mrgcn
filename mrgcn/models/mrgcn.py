@@ -37,18 +37,20 @@ class MRGCN(nn.Module):
 
         # add embedding layers
         self.modality_modules = dict()
+        self.modality_out_dim = 0
+        self.compute_modality_embeddings = False
         i, j, k = 0, 0, 0
-        for modality, args in embedding_modules:
-            if modality in ["xsd.string", "xsd.anyURI"]:
-                batch_size, nrows, dim_out, model_size = args
+        for datatype, args in embedding_modules:
+            if datatype in ["xsd.string", "xsd.anyURI"]:
+                nrows, dim_out, model_size = args
                 module = CharCNN(features_in=nrows,
                                  features_out=dim_out,
                                  p_dropout=p_dropout,
                                  size=model_size)
                 self.module_dict["CharCNN_"+str(i)] = module
                 i += 1
-            if modality == "blob.image":
-                batch_size, (nchannels, nrows, ncols), dim_out = args
+            if datatype == "blob.image":
+                (nchannels, nrows, ncols), dim_out = args
                 module = ImageCNN(channels_in=nchannels,
                              height=nrows,
                              width=ncols,
@@ -56,13 +58,13 @@ class MRGCN(nn.Module):
                              p_dropout=p_dropout)
                 self.module_dict["ImageCNN_"+str(j)] = module
                 j += 1
-            if modality == "ogc.wktLiteral":
-                batch_size, nrows, dim_out = args
+            if datatype == "ogc.wktLiteral":
+                nrows, dim_out = args
                 module = GeomCNN(features_in=nrows,
                                  features_out=dim_out,
                                  p_dropout=p_dropout)
                 self.module_dict["GeomCNN_"+str(k)] = module
-                #batch_size, ncols, dim_out = args
+                #ncols, dim_out = args
                 #module = RNN(input_dim=ncols,
                 #             output_dim=dim_out,
                 #             hidden_dim=ncols*2,
@@ -70,9 +72,11 @@ class MRGCN(nn.Module):
                 #self.module_dict["RNN_"+str(k)] = module
                 k += 1
 
-            if modality not in self.modality_modules.keys():
-                self.modality_modules[modality] = list()
-            self.modality_modules[modality].append((module, batch_size))
+            if datatype not in self.modality_modules.keys():
+                self.modality_modules[datatype] = list()
+            self.modality_modules[datatype].append((module, dim_out))
+            self.modality_out_dim += dim_out
+            self.compute_modality_embeddings = True
 
         # add graph convolution layers
         self.rgcn = RGCN(modules, num_relations, num_nodes,
@@ -84,9 +88,10 @@ class MRGCN(nn.Module):
         X, F = X[0], X[1:]
 
         # compute and concat modality-specific embeddings
-        XF = self._compute_modality_embeddings(F, epoch,
-                                               device)
-        if XF is not None:
+        if self.compute_modality_embeddings:
+            XF = self._compute_modality_embeddings(F, epoch,
+                                                   device)
+
             #logger.debug(" Merging structure and node features")
             X = torch.cat([X,XF], dim=1)
 
@@ -103,23 +108,23 @@ class MRGCN(nn.Module):
         return X
 
     def _compute_modality_embeddings(self, F, epoch, device):
-        X = list()
+        X = torch.zeros((self.num_nodes, self.modality_out_dim),
+                        dtype=torch.float32)
+        offset = 0
         for modality, F_set in F:
-            if modality not in self.modality_modules.keys() or len(F_set[0]) <= 0:
+            if modality not in self.modality_modules.keys():  # or len(F_set[0]) <= 0:
                 continue
 
-            nsets = len(F_set)
-            for i, ((encodings, node_idx, _), batches) in enumerate(F_set):
-                module, _ = self.modality_modules[modality][i]
+            num_sets = len(F_set)  # number of encoding sets for this datatype
+            for i, (encodings, batches) in enumerate(F_set):
+                module, out_dim = self.modality_modules[modality][i]
                 module.to(device)
 
-                out = list()
-                out_node_idx = list()
-                nbatches = len(batches)
+                num_batches = len(batches)
                 for j, (batch_encoding_idx, batch_node_idx) in enumerate(batches):
-                    if len(batch_encoding_idx) <= 0:
-                        # dirty bug fix
-                        continue
+                    #if len(batch_encoding_idx) <= 0:
+                    #    # dirty bug fix
+                    #    continue
 
                     if modality in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
                         # encodings := list of sparse coo matrices
@@ -143,31 +148,23 @@ class MRGCN(nn.Module):
                     #                          PROCESS.memory_info().rss/1e9))
                     batch_dev = batch.to(device)
                     # compute gradients on batch 
-                    if epoch > -1 and (epoch-1) % nbatches == j:
+                    if epoch > -1 and (epoch-1) % num_batches == j:
                         logger.debug(" {} (set {} / {}) - batch {} / {} +grad".format(modality,
-                                                                           i+1, nsets,
-                                                                           j+1, nbatches))
+                                                                           i+1, num_sets,
+                                                                           j+1, num_batches))
                         out_dev = module(batch_dev)
                     else:
                         logger.debug(" {} (set {} / {}) - batch {} / {} -grad".format(modality,
-                                                                           i+1, nsets,
-                                                                           j+1, nbatches))
+                                                                           i+1, num_sets,
+                                                                           j+1, num_batches))
                         with torch.no_grad():
                             out_dev = module(batch_dev)
 
-                    out_cpu = out_dev.to('cpu')
-                    out.append(out_cpu)
-                    out_node_idx.extend(batch_node_idx)
+                    X[batch_node_idx, offset:out_dim] = out_dev.to('cpu')
 
-                out = torch.cat(out, dim=0)
+                offset += out_dim
 
-                # map output to correct nodes
-                XF = torch.zeros((self.num_nodes, out.shape[1]), dtype=torch.float32)
-                XF[out_node_idx] = out
-
-                X.append(XF)
-
-        return None if len(X) <= 0 else torch.cat(X, dim=1)
+        return X
 
     def init(self):
         # reinitialze all weights

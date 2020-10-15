@@ -15,14 +15,14 @@ from mrgcn.models.mrgcn import MRGCN
 
 logger = logging.getLogger()
 
-def run(A, X, Y, C, tsv_writer, device, config,
+def run(A, X, Y, X_width, tsv_writer, device, config,
         modules_config, featureless, test_split):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
 
     # compile model
-    model = build_model(C, Y, A, modules_config, config, featureless)
+    model = build_model(X_width, Y, A, modules_config, config, featureless)
     optimizer = optim.Adam(model.parameters(),
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['l2norm'])
@@ -92,6 +92,7 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, device):
         # Zero gradients, perform a backward pass, and update the weights.
         optimizer.zero_grad()
         train_loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
         # validation scores
@@ -181,26 +182,25 @@ def mk_target_matrices(target_triples, nodes_map):
             sample_map[k].append(x)
 
         rows, cols = map(np.array, zip(*target_pair_indices))
-        data = np.ones(len(rows), dtype=np.int8)
+        data = np.ones(len(rows), dtype=np.int8)  # assume <= 128 classes
         Y[k] = sp.csr_matrix((data, (rows, cols)),
                              shape=(num_nodes, num_classes),
                              dtype=np.int8)
 
     return (Y, sample_map, class_map)
 
-def build_model(C, Y, A, modules_config, config, featureless):
+def build_model(X_width, Y, A, modules_config, config, featureless):
     layers = config['model']['layers']
     assert len(layers) >= 2
     logger.debug("Starting model build")
 
     # get sizes from dataset
-    X_dim = C  # == 0 if featureless
     num_nodes, Y_dim = Y['train'].shape
-    num_relations = int(A.size()[1]/num_nodes)
+    num_relations = int(A.shape[1]/num_nodes)
 
     modules = list()
     # input layer
-    modules.append((X_dim,
+    modules.append((X_width,
                     layers[0]['hidden_nodes'],
                     layers[0]['type'],
                     nn.ReLU()))
