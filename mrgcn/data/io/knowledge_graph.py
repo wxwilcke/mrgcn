@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 from collections import Counter
+from functools import total_ordering
 import logging
 import gzip
 
@@ -164,12 +165,35 @@ class KnowledgeGraph:
         self.logger.debug("Sampling graph")
         return strategy.sample(self, **kwargs)
 
+    def quickSort(self, lst):
+        """Needed to sort deterministically when using UniqueLiterals"""
+        less = list()
+        pivotList = list()
+        more = list()
+
+        if len(lst) <= 1:
+            return lst
+
+        pivot = lst[0]
+        for member in lst:
+            if str(member) < str(pivot):
+                less.append(member)
+            elif str(member) > str(pivot):
+                more.append(member)
+            else:
+                pivotList.append(member)
+
+        less = self.quickSort(less)
+        more = self.quickSort(more)
+
+        return less + pivotList + more
+
     class UniqueLiteral(Literal):
         # literal with unique hash, irrespective of content
         def __new__(cls, s, p, o):
-            self = super().__new__(cls, o.toPython(), o.language, o.datatype, normalize=None)
-            self.s = s.toPython()
-            self.p = p.toPython()
+            self = super().__new__(cls, str(o), o.language, o.datatype, normalize=None)
+            self.s = str(s)
+            self.p = str(p)
 
             return self
 
@@ -182,7 +206,23 @@ class KnowledgeGraph:
             return hash(base)
 
         def __eq__(self, other):
-            return hash(self) == hash(other)
+            if type(other) is not type(self):
+                return False
+            return hash(repr(self)) == hash(repr(other))
+
+        @total_ordering
+        def __lt__(self, other):
+            if type(other) is not type(self):
+                return False
+
+            if str(self) < str(other):
+                return True
+            if self.s < other.s:
+                return True
+            if self.p < other.p:
+                return True
+
+            return False
 
 if __name__ == "__main__":
     print("Knowledge Graph")

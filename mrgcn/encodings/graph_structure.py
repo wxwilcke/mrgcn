@@ -14,9 +14,10 @@ def generate(knowledge_graph, config):
     separate_literals = config['graph']['structural']['separate_literals']
     # create mapping to integers [0, ...]
     properties_dict = {prop: i for i, prop in
-                       enumerate(sorted(set(knowledge_graph.properties())))}
-    nodes_dict = {node: i for i, node in
-                  enumerate(sorted(knowledge_graph.atoms(separate_literals)))}
+                       enumerate(sorted(list(set(knowledge_graph.properties()))))}
+    atoms = list(knowledge_graph.atoms(separate_literals))
+    atoms = knowledge_graph.quickSort(atoms)
+    nodes_dict = {node: i for i, node in enumerate(atoms)}
     num_nodes = len(nodes_dict)
 
     # generate adjacency matrix for each property
@@ -74,12 +75,12 @@ def generate_adjacency_matrices_sp(knowledge_graph,
                                    include_inverse,
                                    exclude_properties):
     adjacencies = []
-    for prop, _ in properties_dict.items():
+    for prop in sorted(list(properties_dict.keys())):
         if prop in exclude_properties:
             continue
 
         # create array to hold all edges per property
-        edges = np.zeros((knowledge_graph.property_frequency(prop), 2),
+        edges = np.empty((knowledge_graph.property_frequency(prop), 2),
                          dtype=np.int32)
 
         # populate edge array with corresponding node URIs
