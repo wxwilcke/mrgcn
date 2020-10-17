@@ -23,7 +23,10 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
     # compile model
     model = build_model(X_width, Y, A, modules_config, config, featureless)
-    optimizer = optim.Adam(model.parameters(),
+    opt_params = [{'params': module.parameters()} for module in
+                   model.module_dict.values()]
+    #optimizer = optim.Adam(model.parameters(),
+    optimizer = optim.Adam(opt_params,
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['l2norm'])
     criterion = nn.CrossEntropyLoss()
@@ -165,7 +168,7 @@ def mk_target_matrices(target_triples, nodes_map):
 
     # node/class label to integers; sorted to make consistent over runs
     class_map = sorted(list(classes))
-    class_map_inv = {label:i for i,label in enumerate(classes)}
+    class_map_inv = {label:i for i,label in enumerate(class_map)}
 
     # note: by converting targets to strings we lose datatype info, but the use
     # cases where this would matter would be very limited 
@@ -173,7 +176,9 @@ def mk_target_matrices(target_triples, nodes_map):
     num_classes = len(class_map)
     sample_map = dict()
     Y = dict()
-    for k, split in sorted(target_triples.items()):
+    for k in target_triples.keys():
+        split = sorted(target_triples[k])
+
         logger.debug("Found {} instances ({})".format(len(split), k))
         target_pair_indices = list()
         sample_map[k] = list()

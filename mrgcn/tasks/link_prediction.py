@@ -28,7 +28,10 @@ def run(A, X, X_width, data, splits, tsv_writer, device, config,
     # compile model
     num_nodes = A.shape[0]
     model = build_model(X_width, A, modules_config, config, featureless)
-    optimizer = optim.Adam(model.parameters(),
+    opt_params = [{'params': module.parameters()} for module in
+                   model.module_dict.values()]
+    #optimizer = optim.Adam(model.parameters(),
+    optimizer = optim.Adam(opt_params,
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['l2norm'])
     criterion = nn.BCEWithLogitsLoss()
