@@ -122,10 +122,6 @@ class MRGCN(nn.Module):
 
                 num_batches = len(batches)
                 for j, (batch_encoding_idx, batch_node_idx) in enumerate(batches):
-                    #if len(batch_encoding_idx) <= 0:
-                    #    # dirty bug fix
-                    #    continue
-
                     if modality in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
                         # encodings := list of sparse coo matrices
                         batch = itemgetter(*batch_encoding_idx)(encodings)
@@ -144,8 +140,6 @@ class MRGCN(nn.Module):
                         batch = torch.as_tensor(batch)
 
                     # forward pass
-                    #print(" {} - {} GB".format(batch.size(),
-                    #                          PROCESS.memory_info().rss/1e9))
                     batch_dev = batch.to(device)
                     # compute gradients on batch 
                     if epoch > -1 and (epoch-1) % num_batches == j:

@@ -128,7 +128,6 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
                           shape=(_VOCAB_MAX_IDX, seq_length),
                           dtype=np.float32)
 
-
         for p in node_predicate_map[node]:
             if p not in sequences.keys():
                 sequences[p] = list()

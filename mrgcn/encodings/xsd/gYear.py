@@ -139,7 +139,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             continue
 
         try:
-            value = str(node)
+            value = validate(str(node))
 
             sign = 1. if value.group('sign') == '' else -1.
             year = value.group('year')
