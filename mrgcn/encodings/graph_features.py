@@ -103,7 +103,7 @@ def construct_preembeddings(F, features_enabled, feature_configs):
             elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 encoding_sets = merge_encoding_sets(encoding_sets)
             else:
-                raise Exception("Unsupported datatype?")
+                logger.warning("Unsupported datatype %s" % datatype)
 
         num_encoding_sets = len(encoding_sets)
         for encodings, node_idx, seq_lengths in encoding_sets:
