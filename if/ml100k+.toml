@@ -38,6 +38,7 @@ share_weights = true
 datatype = 'xsd.dateTime'
 include = true
 share_weights = true
+embedding_dim = 3
 
 [[graph.features]]
 datatype = 'xsd.anyURI'

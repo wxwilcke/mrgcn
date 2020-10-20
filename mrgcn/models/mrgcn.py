@@ -10,6 +10,7 @@ import torch.nn as nn
 from mrgcn.data.utils import (collate_zero_padding,
                               scipy_sparse_list_to_pytorch_sparse)
 from mrgcn.models.charcnn import CharCNN
+from mrgcn.models.fully_connected import FC
 from mrgcn.models.geomcnn import GeomCNN
 from mrgcn.models.imagecnn import ImageCNN
 #from mrgcn.models.rnn import RNN
@@ -39,8 +40,15 @@ class MRGCN(nn.Module):
         self.modality_modules = dict()
         self.modality_out_dim = 0
         self.compute_modality_embeddings = False
-        i, j, k = 0, 0, 0
+        h, i, j, k = 0, 0, 0, 0
         for datatype, args in embedding_modules:
+            if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
+                ncols, dim_out = args
+                module = FC(input_dim=ncols,
+                            output_dim=dim_out,
+                            p_dropout=p_dropout)
+                self.module_dict["FC_"+str(i)] = module
+                h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:
                 nrows, dim_out, model_size = args
                 module = CharCNN(features_in=nrows,

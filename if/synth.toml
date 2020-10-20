@@ -25,6 +25,7 @@ share_weights = true
 datatype = 'xsd.gYear'
 include = true
 share_weights = true 
+embedding_dim = 1
 
 #[[graph.features]]
 #datatype = 'xsd.date'
