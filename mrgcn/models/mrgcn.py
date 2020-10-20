@@ -120,7 +120,7 @@ class MRGCN(nn.Module):
                         dtype=torch.float32)
         offset = 0
         for modality, F_set in F:
-            if modality not in self.modality_modules.keys():  # or len(F_set[0]) <= 0:
+            if modality not in self.modality_modules.keys():
                 continue
 
             num_sets = len(F_set)  # number of encoding sets for this datatype
@@ -162,7 +162,7 @@ class MRGCN(nn.Module):
                         with torch.no_grad():
                             out_dev = module(batch_dev)
 
-                    X[batch_node_idx, offset:out_dim] = out_dev.to('cpu')
+                    X[batch_node_idx, offset:offset+out_dim] = out_dev.to('cpu')
 
                 offset += out_dim
 
