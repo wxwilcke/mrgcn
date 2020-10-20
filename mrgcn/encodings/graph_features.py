@@ -15,8 +15,10 @@ from mrgcn.tasks.utils import (mkbatches,
 logger = logging.getLogger(__name__)
 
 ENCODINGS_PKG = "mrgcn.encodings"
-EMBEDDING_FEATURES = {"xsd.boolean", "xsd.date", "xsd.dateTime", "xsd.gYear", "xsd.numeric"}
-PREEMBEDDING_FEATURES = {"xsd.string", "xsd.anyURI", "blob.image", "ogc.wktLiteral"}
+EMBEDDING_FEATURES = {"xsd.boolean", "xsd.numeric"}
+PREEMBEDDING_FEATURES = {"xsd.string", "xsd.anyURI", "blob.image",
+                         "ogc.wktLiteral", "xsd.date", "xsd.dateTime",
+                         "xsd.gYear"}
 AVAILABLE_FEATURES = set.union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
 
 def construct_features(nodes_map, knowledge_graph, feature_configs,
@@ -98,11 +100,18 @@ def construct_preembeddings(F, features_enabled, feature_configs):
                 encoding_sets = merge_img_encoding_sets(encoding_sets)
             elif datatype in ["xsd.string", "xsd.anyURI", "ogc:wktLiteral"]:
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
+            elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
+                encoding_sets = merge_encoding_sets(encoding_sets)
             else:
                 raise Exception("Unsupported datatype?")
 
         num_encoding_sets = len(encoding_sets)
         for encodings, node_idx, seq_lengths in encoding_sets:
+            if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
+                feature_dim = 1
+                feature_size = encodings.shape[feature_dim]
+                modules_config.append((datatype, (feature_size,
+                                                  embedding_dim)))
             if datatype in ["xsd.string", "xsd.anyURI"]:
                 # stored as list of arrays (vocab x length)
                 feature_dim = 0
@@ -152,10 +161,12 @@ def construct_preembeddings(F, features_enabled, feature_configs):
                               datatype)
 
 
-        num_batches = feature_config['num_batches']
+        num_batches = 1 if 'num_batches' not in feature_config.keys()\
+                        else feature_config['num_batches']
         encoding_sets_batched = list()
         for encodings, node_idc, enc_lengths in encoding_sets:
-            if datatype == "blob.image":
+            if datatype in ["blob.image", "xsd.date", "xsd.dateTime",
+                            "xsd.gYear"]:
                 batches = mkbatches(encodings,
                                     node_idc,
                                     num_batches=num_batches)

@@ -12,18 +12,19 @@ test = "../../datasets/aifb/aifb_test_set.nt.gz"
 [graph.structural]
 include_inverse_properties = true
 exclude_properties = []  # use empty list to include all
-separate_literals = false
+separate_literals = true
 multiprocessing = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
+include = true
 share_weights = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
 share_weights = true
+embedding_dim = 1
 
 #[[graph.features]]
 #datatype = 'xsd.date'

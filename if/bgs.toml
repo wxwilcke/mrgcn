@@ -29,6 +29,7 @@ share_weights = true
 datatype = 'xsd.date'
 include = true
 share_weights = true
+embedding_dim = 3
 
 #[[graph.features]]
 #datatype = 'xsd.boolean'

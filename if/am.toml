@@ -24,11 +24,13 @@ share_weights = false
 datatype = 'xsd.gYear'
 include = true
 share_weights = false
+embedding_dim = 1
 
 [[graph.features]]
 datatype = 'xsd.date'
 include = true
 share_weights = false
+embedding_dim = 3
 
 [[graph.features]]
 datatype = 'xsd.boolean'
