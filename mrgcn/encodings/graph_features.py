@@ -84,16 +84,29 @@ def construct_preembeddings(F, features_enabled, feature_configs):
     embeddings_width = 0
     modules_config = list()
     preembeddings = list()
+    optimizer_config = list()
     for datatype in set.intersection(set(features_enabled),
                                      set(F.keys()),
                                      PREEMBEDDING_FEATURES):
         feature_config = next((conf for conf in feature_configs
                                if conf['datatype'] == datatype),
                               None)
-        weight_sharing = feature_config['share_weights']
         embedding_dim = feature_config['embedding_dim']
 
+        # parameters to pass to optimizer
+        optim_params = dict()
+        for param_name, param_value in feature_config.items():
+            if not param_name.startswith('optim_'):
+                # not an optimizer parameter
+                continue
+
+            param_name = param_name.lstrip('optim_')
+            optim_params[param_name] = param_value
+
+        optimizer_config.append((datatype, optim_params))
+
         encoding_sets = F.pop(datatype, list())
+        weight_sharing = feature_config['share_weights']
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
             if datatype in ["blob.image"]:
@@ -179,7 +192,7 @@ def construct_preembeddings(F, features_enabled, feature_configs):
 
         preembeddings.append((datatype, encoding_sets_batched))
 
-    return (preembeddings, modules_config, embeddings_width)
+    return (preembeddings, modules_config, optimizer_config, embeddings_width)
 
 def construct_feature_matrix(F, features_enabled, num_nodes, feature_configs):
     feature_matrix = list()

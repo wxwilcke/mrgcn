@@ -10,12 +10,13 @@ import torch.optim as optim
 
 from mrgcn.encodings.graph_features import construct_features
 from mrgcn.models.mrgcn import MRGCN
+from mrgcn.tasks.utils import optimizer_params
 
 
 logger = logging.getLogger(__name__)
 
 def run(A, X, X_width, data, splits, tsv_writer, device, config,
-        modules_config, featureless, test_split):
+        modules_config, optimizer_config, featureless, test_split):
     # evaluation
     filtered_ranks = config['task']['filter_ranks']
 
@@ -28,9 +29,7 @@ def run(A, X, X_width, data, splits, tsv_writer, device, config,
     # compile model
     num_nodes = A.shape[0]
     model = build_model(X_width, A, modules_config, config, featureless)
-    opt_params = [{'params': module.parameters()} for module in
-                   model.module_dict.values()]
-    #optimizer = optim.Adam(model.parameters(),
+    opt_params = optimizer_params(model, optimizer_config)
     optimizer = optim.Adam(opt_params,
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['l2norm'])

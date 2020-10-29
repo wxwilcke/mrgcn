@@ -20,13 +20,14 @@ import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
 def run(A, X, Y, X_width, data, splits, acc_writer, device, config,
-        modules_config, featureless, test_split):
+        modules_config, optimizer_config, featureless, test_split):
     task = config['task']['type']
     logging.info("Starting {} task".format(task))
     if task == "node classification":
         loss, acc, labels, targets = node_classification.run(A, X, Y, X_width, acc_writer,
                                                           device, config,
                                                           modules_config,
+                                                          optimizer_config,
                                                           featureless, test_split)
         return (loss, acc, labels, targets)
 
@@ -34,6 +35,7 @@ def run(A, X, Y, X_width, data, splits, acc_writer, device, config,
         mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data, splits,
                                                      acc_writer, device, config,
                                                      modules_config,
+                                                     optimizer_config,
                                                      featureless, test_split)
         return (mrr, hits_at_k, ranks)
 
@@ -66,7 +68,7 @@ def main(args, acc_writer, out_writer, baseFilename, config):
     ### prep data ###
     num_nodes = A.shape[0]
     A = scipy_sparse_to_pytorch_sparse(A)
-    X, X_width, modules_config = setup_features(F, num_nodes, featureless, config)
+    X, X_width, modules_config, optimizer_config = setup_features(F, num_nodes, featureless, config)
     #if len(X) <= 1 and X[0].size(1) <= 0:  # X here is a list
     if X_width <= 0:
         featureless = True
@@ -86,7 +88,7 @@ def main(args, acc_writer, out_writer, baseFilename, config):
 
     task = config['task']['type']
     out = run(A, X, Y, X_width, data, splits, acc_writer, device,
-              config, modules_config, featureless, test_split)
+              config, modules_config, optimizer_config, featureless, test_split)
 
     if task == "node classification":
         loss, acc, labels, targets = out
