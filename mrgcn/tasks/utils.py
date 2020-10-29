@@ -8,6 +8,37 @@ from rdflib.term import URIRef
 
 logger = logging.getLogger(__name__)
 
+def optimizer_params(model, optim_config):
+    opt_params = list()
+    for module_name_numbered, module in model.module_dict.items():
+        module_name = module_name_numbered.split('_')[0]
+        module_params = {'params': module.parameters()}
+
+        if module_name == 'RGCN':
+            # use default lr
+            opt_params.append(module_params)
+            continue
+
+        for datatype, params in optim_config:
+            if datatype in ['xsd.date', 'xsd.dateTime', 'xsd.gYear']:
+                mod_name = 'FC'
+            elif datatype in ['xsd.string', 'xsd.anyURI']:
+                mod_name = 'CharCNN'
+            elif datatype in ['ogc.wktLiteral']:
+                mod_name = 'GeomCNN'
+            elif datatype in ['blob.image']:
+                mod_name = 'ImageCNN'
+            else:
+                raise Exception('Unsupported datatype: %s' % datatype)
+
+            if module_name == mod_name:
+                module_params.update(params)
+                break
+
+        opt_params.append(module_params)
+
+    return opt_params
+
 def strip_graph(knowledge_graph, config):
     target_property_inv = config['task']['target_property_inv']
     if target_property_inv == '':

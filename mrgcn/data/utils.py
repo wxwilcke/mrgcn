@@ -206,9 +206,11 @@ def setup_features(F, num_nodes, featureless, config):
         X = [torch.as_tensor(X)]
 
         # create batched pre-embedding representations for neural encodings
-        preembeddings, modules_config, emb_width = construct_preembeddings(F, features_enabled,
-                                                                           config['graph']['features'])
+        feature_configs = config['graph']['features']
+        preembeddings, modules_config, optimizer_config, emb_width = construct_preembeddings(F,
+                                                                                             features_enabled,
+                                                                                             feature_configs)
         X_width += emb_width
         X.extend(preembeddings)
 
-    return (X, X_width, modules_config)
+    return (X, X_width, modules_config, optimizer_config)
