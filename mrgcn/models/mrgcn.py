@@ -148,19 +148,19 @@ class MRGCN(nn.Module):
                         batch = torch.as_tensor(batch)
 
                     # forward pass
-                    batch_dev = batch.to(device)
+                    batch = batch.to(device)
                     # compute gradients on batch 
                     if epoch > -1 and (epoch-1) % num_batches == j:
                         logger.debug(" {} (set {} / {}) - batch {} / {} +grad".format(modality,
                                                                            i+1, num_sets,
                                                                            j+1, num_batches))
-                        out_dev = module(batch_dev)
+                        out_dev = module(batch)
                     else:
                         logger.debug(" {} (set {} / {}) - batch {} / {} -grad".format(modality,
                                                                            i+1, num_sets,
                                                                            j+1, num_batches))
                         with torch.no_grad():
-                            out_dev = module(batch_dev)
+                            out_dev = module(batch)
 
                     X[batch_node_idx, offset:offset+out_dim] = out_dev.to('cpu')
 

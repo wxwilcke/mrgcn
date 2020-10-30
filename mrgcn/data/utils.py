@@ -190,6 +190,7 @@ def setup_features(F, num_nodes, featureless, config):
     X = [torch.empty((num_nodes, X_width), dtype=torch.float32)]  # dummy
 
     modules_config = list()
+    optimizer_config = list()
     if not featureless:
         features_enabled = features_included(config)
         logging.debug("Features included: {}".format(", ".join(features_enabled)))
