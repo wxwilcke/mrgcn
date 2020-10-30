@@ -50,10 +50,13 @@ def main(args, acc_writer, out_writer, baseFilename, config):
         featureless = False
 
     device = torch.device("cpu")
-    if config['task']['gpu'] and torch.cuda.is_available():
-        device = torch.device("cuda")
-        device_name = torch.cuda.get_device_name(torch.cuda.current_device())
-        logging.debug("Running on GPU (%s) " % device_name)
+    if config['task']['gpu']:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            device_name = torch.cuda.get_device_name(torch.cuda.current_device())
+            logging.debug("Running on GPU (%s) " % device_name)
+        else:
+            raise Exception("GPU asked but not available")
 
     assert is_readable(args.input)
     logging.debug("Importing tarball")
