@@ -52,8 +52,8 @@ def main(args, acc_writer, out_writer, baseFilename, config):
     device = torch.device("cpu")
     if config['task']['gpu'] and torch.cuda.is_available():
         device = torch.device("cuda")
-        raise Warning("GPU support is not well maintained at the moment")
-        logging.debug("Running on GPU")
+        device_name = torch.cuda.get_device_name(torch.cuda.current_device())
+        logging.debug("Running on GPU (%s) " % device_name)
 
     assert is_readable(args.input)
     logging.debug("Importing tarball")

@@ -111,7 +111,7 @@ def construct_preembeddings(F, features_enabled, feature_configs):
             logger.debug("weight sharing enabled for {}".format(datatype))
             if datatype in ["blob.image"]:
                 encoding_sets = merge_img_encoding_sets(encoding_sets)
-            elif datatype in ["xsd.string", "xsd.anyURI", "ogc:wktLiteral"]:
+            elif datatype in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
             elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 encoding_sets = merge_encoding_sets(encoding_sets)
