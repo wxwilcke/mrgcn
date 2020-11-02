@@ -53,7 +53,7 @@ def main(args, acc_writer, out_writer, baseFilename, config):
 
     model_device = torch.device("cpu")
     distmult_device = torch.device("cpu")
-    if config['task']['model_on_gpu'] or ('distmult_device' in config['task'].keys()\
+    if config['task']['model_on_gpu'] or ('distmult_on_gpu' in config['task'].keys()\
                                           and config['task']['distmult_on_gpu']):
         if torch.cuda.is_available():
             if config['task']['model_on_gpu']:
