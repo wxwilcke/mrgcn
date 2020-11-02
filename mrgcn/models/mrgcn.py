@@ -111,9 +111,8 @@ class MRGCN(nn.Module):
         A_dev = A.to(device)
 
         X_dev = self.rgcn(X_dev, A_dev)
-        X = X_dev.to('cpu')
 
-        return X
+        return X_dev
 
     def _compute_modality_embeddings(self, F, epoch, device):
         X = torch.zeros((self.num_nodes, self.modality_out_dim),

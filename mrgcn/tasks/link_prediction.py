@@ -15,8 +15,8 @@ from mrgcn.tasks.utils import optimizer_params
 
 logger = logging.getLogger(__name__)
 
-def run(A, X, X_width, data, splits, tsv_writer, device, config,
-        modules_config, optimizer_config, featureless, test_split):
+def run(A, X, X_width, data, splits, tsv_writer, model_device, distmult_device,
+        config, modules_config, optimizer_config, featureless, test_split):
     # evaluation
     filtered_ranks = config['task']['filter_ranks']
 
@@ -50,7 +50,8 @@ def run(A, X, X_width, data, splits, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, X, data, splits, num_nodes, model, optimizer,
-                             criterion, nepoch, mrr_batch_size, device):
+                             criterion, nepoch, mrr_batch_size, model_device,
+                             distmult_device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -86,7 +87,7 @@ def run(A, X, X_width, data, splits, tsv_writer, device, config,
 
     mrr, hits_at_k, ranks = test_model(A, X, data, splits, num_nodes, model, criterion,
                                        filtered_ranks, mrr_batch_size, test_split,
-                                       device)
+                                       model_device, distmult_device)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
 
@@ -98,7 +99,7 @@ def run(A, X, X_width, data, splits, tsv_writer, device, config,
     return (mrr, hits_at_k, ranks)
 
 def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
-                nepoch, mrr_batch_size, device):
+                nepoch, mrr_batch_size, model_device, distmult_device):
     logging.info("Training for {} epoch".format(nepoch))
 
     idx_begin, idx_end = splits['train'][0], splits['train'][1]
@@ -107,8 +108,9 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
     for epoch in range(1, nepoch+1):
         model.train()
         # Single iteration
-        node_embeddings = model(X, A, epoch=epoch, device=device).to(device)
-        edge_embeddings = model.rgcn.relations.to(device)
+        node_embeddings = model(X, A, epoch=epoch,
+                                device=model_device).to(distmult_device)
+        edge_embeddings = model.rgcn.relations.to(distmult_device)
 
         # sample negative triples by copying and corrupting positive triples
         ncorrupt = nsamples//5
@@ -118,14 +120,13 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
 
         ncorrupt_head = ncorrupt//2
         ncorrupt_tail = ncorrupt - ncorrupt_head
-        corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64,
-                                         device=device)
+        corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
 
         corrupted_data = train_data[neg_samples_idx]
         corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
-                                                                              ncorrupt_head)).to(device)
+                                                                              ncorrupt_head))
         corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
-                                                                               ncorrupt_tail)).to(device)
+                                                                               ncorrupt_tail))
 
         # create labels; positive samples are 1, negative 0
         Y = torch.ones(nsamples+ncorrupt, dtype=torch.float32)
@@ -147,6 +148,13 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
         # compute loss
         loss = binary_crossentropy(Y_hat, Y, criterion)
 
+        # clear gpu cache
+        if model_device == torch.device('cpu') and\
+           distmult_device != torch.device('cpu'):
+            del node_embeddings
+            del edge_embeddings
+            torch.cuda.empty_cache()
+
         # Zero gradients, perform a backward pass, and update the weights.
         optimizer.zero_grad()
         loss.backward()  # training loss
@@ -158,8 +166,9 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
         # validate
         model.eval()
         with torch.no_grad():
-            node_embeddings = model(X, A, epoch=-1, device=device)
-            edge_embeddings = model.rgcn.relations
+            node_embeddings = model(X, A, epoch=-1,
+                                    device=model_device).to(distmult_device)
+            edge_embeddings = model.rgcn.relations.to(distmult_device)
 
             ranks = compute_ranks_fast(data,
                                       splits,
@@ -167,13 +176,19 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
                                       edge_embeddings,
                                       "valid",
                                       mrr_batch_size,
-                                      filtered=False,
-                                      device=device)
+                                      filtered=False)
             mrr_raw = torch.mean(1.0 / ranks.float()).item()
 
             hits_at_k = dict()
             for k in [1, 3, 10]:
                 hits_at_k[k] = float(torch.mean((ranks <= k).float()))
+
+        # clear gpu cache
+        if model_device == torch.device('cpu') and\
+           distmult_device != torch.device('cpu'):
+            del node_embeddings
+            del edge_embeddings
+            torch.cuda.empty_cache()
 
         logging.info("{:04d} ".format(epoch) \
                      + "| train loss {:.4f} ".format(loss)
@@ -184,14 +199,15 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
         yield (epoch, loss, mrr_raw, hits_at_k[1], hits_at_k[3], hits_at_k[10])
 
 def test_model(A, X, data, splits, num_nodes, model, criterion, filtered_ranks,
-               mrr_batch_size, test_split, device):
+               mrr_batch_size, test_split, model_device, distmult_device):
     model.eval()
     mrr = 0.0
     hits_at_k = {1: 0.0, 3: 0.0, 10: 0.0}
     ranks = None
     with torch.no_grad():
-        node_embeddings = model(X, A, epoch=-1, device=device)
-        edge_embeddings = model.rgcn.relations
+        node_embeddings = model(X, A, epoch=-1,
+                                device=model_device).to(distmult_device)
+        edge_embeddings = model.rgcn.relations.to(distmult_device)
 
         ranks = compute_ranks_fast(data,
                                   splits,
@@ -199,8 +215,7 @@ def test_model(A, X, data, splits, num_nodes, model, criterion, filtered_ranks,
                                   edge_embeddings,
                                   test_split,
                                   mrr_batch_size,
-                                  filtered_ranks,
-                                  device=device)
+                                  filtered_ranks)
 
         mrr = torch.mean(1.0 / ranks.float()).item()
         for k in [1, 3, 10]:
@@ -307,13 +322,11 @@ def truedicts(facts):
     return heads, tails
 
 def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_split,
-                       batch_size=16, filtered=True, device=None):
+                       batch_size=16, filtered=True):
     idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
     eval_set = data[idx_begin:idx_end]
 
     true_heads, true_tails = truedicts(data) if filtered else (None, None)
-    node_embeddings = node_embeddings.to(device)
-    edge_embeddings = edge_embeddings.to(device)
 
     num_facts = eval_set.shape[0]
     num_nodes = node_embeddings.shape[0]

@@ -79,7 +79,8 @@ embedding_dim = 128
 type = 'link prediction'
 filter_ranks = false
 seed = -1  # use < 0 for random
-gpu = false
+model_on_gpu = false
+distmult_on_gpu = false
 
 [model]
 epoch = 20

@@ -67,7 +67,7 @@ type = "node classification"
 target_property = 'http://swrc.ontoware.org/ontology#affiliation'
 target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
 seed = -1  # use < 0 for random
-gpu = false
+model_on_gpu = false
 
 [model]
 epoch = 50

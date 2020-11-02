@@ -19,13 +19,14 @@ from mrgcn.data.utils import (is_readable,
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
-def run(A, X, Y, X_width, data, splits, acc_writer, device, config,
-        modules_config, optimizer_config, featureless, test_split):
+def run(A, X, Y, X_width, data, splits, acc_writer, model_device,
+        distmult_device, config, modules_config, optimizer_config,
+        featureless, test_split):
     task = config['task']['type']
     logging.info("Starting {} task".format(task))
     if task == "node classification":
         loss, acc, labels, targets = node_classification.run(A, X, Y, X_width, acc_writer,
-                                                          device, config,
+                                                          model_device, config,
                                                           modules_config,
                                                           optimizer_config,
                                                           featureless, test_split)
@@ -33,7 +34,8 @@ def run(A, X, Y, X_width, data, splits, acc_writer, device, config,
 
     elif task == "link prediction":
         mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data, splits,
-                                                     acc_writer, device, config,
+                                                     acc_writer, model_device,
+                                                     distmult_device, config,
                                                      modules_config,
                                                      optimizer_config,
                                                      featureless, test_split)
@@ -49,10 +51,16 @@ def main(args, acc_writer, out_writer, baseFilename, config):
        True in [feature['include'] for feature in config['graph']['features']]:
         featureless = False
 
-    device = torch.device("cpu")
-    if config['task']['gpu']:
+    model_device = torch.device("cpu")
+    distmult_device = torch.device("cpu")
+    if config['task']['model_on_gpu'] or ('distmult_device' in config['task'].keys()\
+                                          and config['task']['distmult_on_gpu']):
         if torch.cuda.is_available():
-            device = torch.device("cuda")
+            if config['task']['model_on_gpu']:
+                model_device = torch.device("cuda")
+            if ('distmult_on_gpu' in config['task'].keys()\
+                and config['task']['distmult_on_gpu']):
+                distmult_device = torch.device("cuda")
             device_name = torch.cuda.get_device_name(torch.cuda.current_device())
             logging.debug("Running on GPU (%s) " % device_name)
         else:
@@ -90,8 +98,9 @@ def main(args, acc_writer, out_writer, baseFilename, config):
                                                 data['valid']], axis=0)).long()
 
     task = config['task']['type']
-    out = run(A, X, Y, X_width, data, splits, acc_writer, device,
-              config, modules_config, optimizer_config, featureless, test_split)
+    out = run(A, X, Y, X_width, data, splits, acc_writer, model_device,
+              distmult_device, config, modules_config, optimizer_config,
+              featureless, test_split)
 
     if task == "node classification":
         loss, acc, labels, targets = out

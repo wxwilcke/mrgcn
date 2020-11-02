@@ -66,7 +66,7 @@ type = "node classification"
 target_property = 'http://dl-learner.org/carcinogenesis#isMutagenic'
 target_property_inv = ''
 seed = -1  # use < 0 for random
-gpu = false
+model_on_gpu = false
 
 [model]
 epoch = 50
