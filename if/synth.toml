@@ -70,7 +70,7 @@ target_property = ''
 target_property_inv = ''
 target_classes = []
 seed = -1  # use < 0 for random
-gpu = false
+model_on_gpu = false
 
 [model]
 epoch = 100

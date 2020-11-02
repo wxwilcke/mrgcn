@@ -68,7 +68,7 @@ type = 'node classification'
 target_property = 'https://data.labs.pdok.nl/rce/def/monumentCode'
 target_property_inv = ''
 seed = -1  # use < 0 for random
-gpu = false
+model_on_gpu = false
 
 [model]
 epoch = 50

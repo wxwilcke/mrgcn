@@ -52,6 +52,8 @@ share_weights = false
 trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
+optim_lr = 0.001
+optim_momentum = 0.1
 
 [[graph.features]]
 datatype = 'xsd.anyURI'
@@ -87,9 +89,10 @@ target_property_inv = '<URI>'
 # link prediction
 type = 'link prediction'
 filter_ranks = false
+distmult_on_gpu = false
 
 seed = -1  # use < 0 for random
-gpu = false
+model_on_gpu = false
 
 [model]
 epoch = 50
