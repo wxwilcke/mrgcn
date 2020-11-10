@@ -24,6 +24,7 @@ setup(
         'scipy',
         'pillow',
         'toml',
+        'deep_geometry'
     ],
     packages=['mrgcn'],
 )

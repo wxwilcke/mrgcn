@@ -183,7 +183,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             # add to matrix structures
             encodings[p][idx] = [sign, c, dec1, dec2, y1, y2, m1, m2, d1, d2]
             node_idx[p][idx] = i
-            m[p] + idx + 1
+            m[p] = idx + 1
 
     msum = sum(m.values())
     logger.debug("Generated {} unique date encodings".format(msum))
