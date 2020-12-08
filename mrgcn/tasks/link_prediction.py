@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import logging
+from math import ceil
 from time import time
 
 import numpy as np
@@ -338,9 +339,11 @@ def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_spli
             batch_begin = batch_id * batch_size
             batch_end = min(num_facts, (batch_id+1) * batch_size)
 
-            logger.debug(" DistMult {} batch {} / {}".format(eval_split,
-                                                             (int(head)*num_batches)+batch_id+1,
-                                                             num_batches*2))
+            batch_idx = (int(head) * num_batches) + batch_id + 1
+            if batch_idx % min(ceil(2*num_batches/10), 100) == 0:
+                logger.debug(" DistMult {} batch {} / {}".format(eval_split,
+                                                                 batch_idx,
+                                                                 num_batches*2))
 
             batch_data = eval_set[batch_begin:batch_end]
             batch_num_facts = batch_data.shape[0]
