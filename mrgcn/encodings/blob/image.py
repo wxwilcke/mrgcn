@@ -7,13 +7,15 @@ from PIL import Image
 from re import fullmatch
 
 import numpy as np
-from rdflib.term import Literal
-from rdflib.namespace import XSD
+from rdflib.term import Literal, URIRef
+from rdflib import Namespace
 
 
 _REGEX_BASE64 = "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
 _IMG_SIZE = (64, 64)
 _IMG_MODE = "RGB"
+
+_KGB_NAMESPACE = Namespace(URIRef("http://kgbench.info/dt#"))
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +119,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
-        if node.datatype is None or node.datatype.neq(XSD.b64string):
-            # assume that all B64-encoded literals are images
+        if node.datatype is None or node.datatype.neq(_KGB_NAMESPACE.base64Image):
             continue
 
         try:
