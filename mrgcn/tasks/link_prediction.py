@@ -302,6 +302,9 @@ def filter_scores_(scores, batch_data, heads, tails, head=True):
         # we add the indices of all know triples except the one corresponding
         # to the target triples.
 
+    if len(indices) <= 0:
+        return
+
     indices = torch.tensor(indices)
     scores[indices[:, 0], indices[:, 1]] = float('-inf')
 

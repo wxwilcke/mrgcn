@@ -19,6 +19,7 @@ from mrgcn.data.utils import (is_readable,
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
+
 def run(A, X, Y, X_width, data, splits, acc_writer, model_device,
         distmult_device, config, modules_config, optimizer_config,
         featureless, test_split):
