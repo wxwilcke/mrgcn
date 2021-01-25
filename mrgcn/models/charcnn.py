@@ -34,12 +34,13 @@ class CharCNN(nn.Module):
                 nn.AdaptiveMaxPool1d(4)
             )
 
+            n_fc = max(32, features_out)
             self.fc = nn.Sequential(
-                nn.Linear(256, 32),
+                nn.Linear(256, n_fc),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=p_dropout),
 
-                nn.Linear(32, features_out)
+                nn.Linear(n_fc, features_out)
             )
         elif size == "M":
             # sequence length >= 12
@@ -59,16 +60,18 @@ class CharCNN(nn.Module):
                 nn.AdaptiveMaxPool1d(8)
             )
 
+            n_first = max(256, features_out)
+            n_second = max(64, features_out)
             self.fc = nn.Sequential(
-                nn.Linear(512, 256),
+                nn.Linear(512, n_first),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=p_dropout),
 
-                nn.Linear(256, 64),
+                nn.Linear(n_first, n_second),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=p_dropout),
 
-                nn.Linear(64, features_out)
+                nn.Linear(n_second, features_out)
             )
         elif size == "L":
             # sequence length >= 30
@@ -88,16 +91,18 @@ class CharCNN(nn.Module):
                 nn.AdaptiveMaxPool1d(8)
             )
 
+            n_first = max(512, features_out)
+            n_second = max(128, features_out)
             self.fc = nn.Sequential(
-                nn.Linear(1024, 512),
+                nn.Linear(1024, n_first),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=p_dropout),
 
-                nn.Linear(512, 128),
+                nn.Linear(n_first, n_second),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=p_dropout),
 
-                nn.Linear(128, features_out)
+                nn.Linear(n_second, features_out)
             )
 
     def forward(self, X):
