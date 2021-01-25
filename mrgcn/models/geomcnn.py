@@ -32,16 +32,18 @@ class GeomCNN(nn.Module):
             nn.AdaptiveAvgPool1d(8)  # out = 8 x 64 = 512
         )
 
+        n_first = max(128, features_out)
+        n_second = max(32, features_out)
         self.fc = nn.Sequential(
-            nn.Linear(512, 128),
+            nn.Linear(512, n_first),
             nn.ReLU(inplace=True),
             nn.Dropout(p=p_dropout),
 
-            nn.Linear(128, 32),
+            nn.Linear(n_first, n_second),
             nn.ReLU(inplace=True),
             nn.Dropout(p=p_dropout),
 
-            nn.Linear(32, features_out)
+            nn.Linear(n_second, features_out)
         )
 
     def forward(self, X):
