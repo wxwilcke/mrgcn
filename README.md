@@ -96,10 +96,10 @@ Spatial:
 Images:
 
 ```
-- xsd:b64string
+- kgbench:base64Image (http://kgbench.info/dt)
 ```
 
-Note that images are expected to be in binary format and included in the graph.
+Note that images are expected to be in binary format and included in the graph. 
 
 ## Cite 
 
