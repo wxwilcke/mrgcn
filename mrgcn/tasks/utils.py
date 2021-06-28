@@ -20,7 +20,9 @@ def optimizer_params(model, optim_config):
             continue
 
         for datatype, params in optim_config:
-            if datatype in ['xsd.date', 'xsd.dateTime', 'xsd.gYear']:
+            if datatype in ['xsd.boolean', 'xsd.numeric']:
+                mod_name = 'FC'
+            elif datatype in ['xsd.date', 'xsd.dateTime', 'xsd.gYear']:
                 mod_name = 'FC'
             elif datatype in ['xsd.string', 'xsd.anyURI']:
                 mod_name = 'CharCNN'

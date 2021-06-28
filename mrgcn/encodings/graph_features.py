@@ -15,11 +15,9 @@ from mrgcn.tasks.utils import (mkbatches,
 logger = logging.getLogger(__name__)
 
 ENCODINGS_PKG = "mrgcn.encodings"
-EMBEDDING_FEATURES = {"xsd.boolean", "xsd.numeric"}
-PREEMBEDDING_FEATURES = {"xsd.string", "xsd.anyURI", "blob.image",
-                         "ogc.wktLiteral", "xsd.date", "xsd.dateTime",
-                         "xsd.gYear"}
-AVAILABLE_FEATURES = set.union(EMBEDDING_FEATURES, PREEMBEDDING_FEATURES)
+AVAILABLE_FEATURES = {"xsd.boolean", "xsd.numeric","xsd.string", "xsd.anyURI",
+                      "blob.image", "ogc.wktLiteral", "xsd.date",
+                      "xsd.dateTime", "xsd.gYear"}
 
 def construct_features(nodes_map, knowledge_graph, feature_configs,
                       separate_literals):
@@ -80,14 +78,14 @@ def feature_module(hierarchy, feature_name):
 
     return None
 
-def construct_preembeddings(F, features_enabled, feature_configs):
+def construct_feature_matrix(F, features_enabled, feature_configs):
     embeddings_width = 0
     modules_config = list()
-    preembeddings = list()
+    embeddings = list()
     optimizer_config = list()
     for datatype in set.intersection(set(features_enabled),
                                      set(F.keys()),
-                                     PREEMBEDDING_FEATURES):
+                                     AVAILABLE_FEATURES):
         feature_config = next((conf for conf in feature_configs
                                if conf['datatype'] == datatype),
                               None)
@@ -115,11 +113,18 @@ def construct_preembeddings(F, features_enabled, feature_configs):
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
             elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 encoding_sets = merge_encoding_sets(encoding_sets)
+            elif datatype in ["xsd.boolean", "xsd.numeric"]:
+                encoding_sets = merge_encoding_sets(encoding_sets)
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
         num_encoding_sets = len(encoding_sets)
         for encodings, node_idx, seq_lengths in encoding_sets:
+            if datatype in ["xsd.boolean", "xsd.numeric"]:
+                feature_dim = 1
+                feature_size = encodings.shape[feature_dim]
+                modules_config.append((datatype, (feature_size,
+                                                  embedding_dim)))
             if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 feature_dim = 1
                 feature_size = encodings.shape[feature_dim]
@@ -179,7 +184,7 @@ def construct_preembeddings(F, features_enabled, feature_configs):
         encoding_sets_batched = list()
         for encodings, node_idc, enc_lengths in encoding_sets:
             if datatype in ["blob.image", "xsd.date", "xsd.dateTime",
-                            "xsd.gYear"]:
+                            "xsd.gYear", "xsd.boolean", "xsd.numeric"]:
                 batches = mkbatches(encodings,
                                     node_idc,
                                     num_batches=num_batches)
@@ -190,39 +195,10 @@ def construct_preembeddings(F, features_enabled, feature_configs):
                                               num_batches=num_batches)
             encoding_sets_batched.append((encodings, batches))
 
-        preembeddings.append((datatype, encoding_sets_batched))
+        embeddings.append((datatype, encoding_sets_batched))
 
-    return (preembeddings, modules_config, optimizer_config, embeddings_width)
+    return (embeddings, modules_config, optimizer_config, embeddings_width)
 
-def construct_feature_matrix(F, features_enabled, num_nodes, feature_configs):
-    feature_matrix = list()
-    for feature in features_enabled:
-        if feature not in F.keys():
-            logging.debug("=> WARNING: feature {} not in dataset".format(feature))
-            continue
-
-        if feature in PREEMBEDDING_FEATURES:
-            # these require additional processing before they can be
-            # concatenated to X
-            continue
-
-        feature_config = next((conf for conf in feature_configs
-                               if conf['datatype'] == feature),
-                              None)
-        encoding_sets = F[feature]
-        if feature_config['share_weights']:
-            logger.debug("weight sharing enabled for {}".format(feature))
-            encoding_sets = merge_encoding_sets(encoding_sets)
-        else:
-            encoding_sets = stack_encoding_sets(encoding_sets)
-
-        feature_matrix.extend([_mkdense(*feature_encoding, num_nodes) for
-                               feature_encoding in encoding_sets])
-
-    X = np.empty((num_nodes, 0), dtype=np.float32) if len(feature_matrix) <= 0\
-        else np.hstack(feature_matrix)
-
-    return X
 
 def _mkdense(encodings, node_idx, encodings_length_map, n):
     """ Return N x M matrix with N := NUM_NODES and M := NUM_COLS

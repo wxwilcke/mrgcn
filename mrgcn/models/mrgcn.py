@@ -42,12 +42,19 @@ class MRGCN(nn.Module):
         self.compute_modality_embeddings = False
         h, i, j, k = 0, 0, 0, 0
         for datatype, args in embedding_modules:
+            if datatype in ["xsd.boolean", "xsd.numeric"]:
+                ncols, dim_out = args
+                module = FC(input_dim=ncols,
+                            output_dim=dim_out,
+                            p_dropout=p_dropout)
+                self.module_dict["FC_num_"+str(i)] = module
+                h += 1
             if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 ncols, dim_out = args
                 module = FC(input_dim=ncols,
                             output_dim=dim_out,
                             p_dropout=p_dropout)
-                self.module_dict["FC_"+str(i)] = module
+                self.module_dict["FC_temp_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:
                 nrows, dim_out, model_size = args

@@ -13,7 +13,6 @@ from torch.utils.data import Dataset
 import scipy.sparse as sp
 
 from mrgcn.encodings.graph_features import (construct_feature_matrix,
-                                            construct_preembeddings,
                                             features_included)
 
 
@@ -200,18 +199,12 @@ def setup_features(F, num_nodes, featureless, config):
                     len(F[datatype]),
                     datatype))
 
-        # create N x M feature matrix for direct encodings
-        X = construct_feature_matrix(F, features_enabled, num_nodes,
-                                     config['graph']['features'])
-        X_width += X.shape[1]
-        X = [torch.as_tensor(X)]
-
-        # create batched pre-embedding representations for neural encodings
+        # create batched  representations for neural encodings
         feature_configs = config['graph']['features']
-        preembeddings, modules_config, optimizer_config, emb_width = construct_preembeddings(F,
-                                                                                             features_enabled,
-                                                                                             feature_configs)
-        X_width += emb_width
-        X.extend(preembeddings)
+        features, modules_config, optimizer_config, feat_width = construct_feature_matrix(F,
+                                                                                          features_enabled,
+                                                                                          feature_configs)
+        X_width += feat_width
+        X.extend(features)
 
     return (X, X_width, modules_config, optimizer_config)
