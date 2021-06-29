@@ -43,7 +43,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, model, optimizer, criterion, X, Y,
-                             nepoch, device):
+                             nepoch, test_split, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -80,7 +80,18 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
     return (loss, acc, labels, targets)
 
-def train_model(A, model, optimizer, criterion, X, Y, nepoch, device):
+def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split, device):
+    Y_train = Y['train']
+    Y_valid = Y['valid']
+    if test_split == "test":
+        # merge training and validation sets
+        ri = np.concatenate([Y_train.nonzero()[0], Y_valid.nonzero()[0]])
+        ci = np.concatenate([Y_train.nonzero()[1], Y_valid.nonzero()[1]])
+        d = np.concatenate([Y_train.data, Y_valid.data])
+
+        Y_train = sp.csr_matrix((d, (ri, ci)))
+        Y_valid = None
+
     logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(1, nepoch+1):
         # Single training iteration
@@ -88,8 +99,8 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, device):
         Y_hat = model(X, A, epoch, device=device).to('cpu')
 
         # Training scores
-        train_loss = categorical_crossentropy(Y_hat, Y['train'], criterion)
-        train_acc = categorical_accuracy(Y_hat, Y['train'])[0]
+        train_loss = categorical_crossentropy(Y_hat, Y_train, criterion)
+        train_acc = categorical_accuracy(Y_hat, Y_train)[0]
 
         # Zero gradients, perform a backward pass, and update the weights.
         optimizer.zero_grad()
@@ -97,28 +108,36 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, device):
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
-        # validation scores
-        model.eval()
-        val_loss = categorical_crossentropy(Y_hat, Y['valid'], criterion)
-        val_acc = categorical_accuracy(Y_hat, Y['valid'])[0]
-
-        # DEBUG #
-        #for name, param in model.named_parameters():
-        #    logger.info(name + " - grad mean: " + str(float(param.grad.mean())))
-        # DEBUG #
-
         # cast criterion objects to floats to free the memory of the tensors
         # they point to
         train_loss = float(train_loss)
         train_acc = float(train_acc)
-        val_loss = float(val_loss)
-        val_acc = float(val_acc)
 
-        logging.info("{:04d} ".format(epoch) \
-                     + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
-                                                                  train_acc)
-                     + "| val loss {:.4f} / acc {:.4f}".format(val_loss,
-                                                               val_acc))
+        val_loss = -1
+        val_acc = -1
+        if Y_valid is not None:
+            # validation scores
+            model.eval()
+
+            val_loss = categorical_crossentropy(Y_hat, Y_valid, criterion)
+            val_acc = categorical_accuracy(Y_hat, Y_valid)[0]
+
+            # DEBUG #
+            #for name, param in model.named_parameters():
+            #    logger.info(name + " - grad mean: " + str(float(param.grad.mean())))
+            # DEBUG #
+            val_loss = float(val_loss)
+            val_acc = float(val_acc)
+
+            logging.info("{:04d} ".format(epoch) \
+                         + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
+                                                                      train_acc)
+                         + "| val loss {:.4f} / acc {:.4f}".format(val_loss,
+                                                                   val_acc))
+        else:
+            logging.info("{:04d} ".format(epoch) \
+                         + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
+                                                                      train_acc))
 
         yield (epoch,
                train_loss, train_acc,
