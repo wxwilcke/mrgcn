@@ -19,6 +19,7 @@ multiprocessing = false
 datatype = 'xsd.numeric'
 include = true
 share_weights = true
+embedding_dim = 4
 
 #[[graph.features]]
 #datatype = 'xsd.gYear'
@@ -72,7 +73,6 @@ model_on_gpu = false
 [model]
 epoch = 50
 learning_rate = 0.01
-patience = 7  # < 0 to disable
 num_bases = 40
 p_dropout = 0.0
 l2norm = 5e-4

@@ -16,16 +16,15 @@ from mrgcn.tasks.utils import optimizer_params
 
 logger = logging.getLogger(__name__)
 
-def run(A, X, X_width, data, splits, tsv_writer, model_device, distmult_device,
-        config, modules_config, optimizer_config, featureless, test_split):
-    # evaluation
-    filtered_ranks = config['task']['filter_ranks']
 
-    tsv_label = "filtered" if filtered_ranks else "raw"
-    tsv_writer.writerow(["epoch", "train_loss",
-                         "valid_mrr_raw", "valid_H@1", "valid_H@3", "valid_H@10",
-                         "test_mrr_{}".format(tsv_label), "test_H@1", "test_H@3",
-                         "test_H@10"])
+def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
+        config, modules_config, optimizer_config, featureless, test_split):
+    header = ["epoch", "loss"]
+    for split in ["train", "valid", "test"]:
+        header.extend([split+"_mrr_raw", split+"_H@1_raw", split+"_H@3_raw",
+                       split+"_H@10_raw", split+"_mrr_flt", split+"_H@1_flt",
+                       split+"_H@3_flt", split+"_H@10_flt"])
+    tsv_writer.writerow(header)
 
     # compile model
     num_nodes = A.shape[0]
@@ -39,73 +38,69 @@ def run(A, X, X_width, data, splits, tsv_writer, model_device, distmult_device,
     # mini batching
     mrr_batch_size = int(config['model']['mrr_batch_size'])
 
-    # early stopping
-    patience = config['model']['patience']
-    patience_left = patience
-    best_score = -1
-    delta = 1e-4
-    best_state = None
-
     # train model
     nepoch = config['model']['epoch']
+    eval_interval = config['task']['eval_interval']
     # Log wall-clock time
     t0 = time()
-    for epoch in train_model(A, X, data, splits, num_nodes, model, optimizer,
-                             criterion, nepoch, mrr_batch_size, model_device,
-                             distmult_device):
-        # log metrics
-        tsv_writer.writerow([str(epoch[0]),
-                             str(epoch[1]),
-                             str(epoch[2]),
-                             str(epoch[3]),
-                             str(epoch[4]),
-                             str(epoch[5]),
-                             "-1", "-1", "-1", "-1"])
+    for result in train_model(A, X, data, num_nodes, model, optimizer,
+                              criterion, nepoch, mrr_batch_size, eval_interval,
+                              model_device, distmult_device):
 
-        # early stopping
-        val_mrr = epoch[2]
-        if patience <= 0:
-            continue
-        if best_score < 0:
-            best_score = val_mrr
-            best_state = model.state_dict()
-        if val_mrr <= best_score + delta:
-            patience_left -= 1
-        else:
-            best_score = val_mrr
-            best_state = model.state_dict()
-            patience_left = patience
-        if patience_left <= 0:
-            model.load_state_dict(best_state)
-            logger.info("Early stopping after no improvement for {} epoch".format(patience))
-            break
+        epoch, loss, train_mrr, train_hits_at_k,\
+                     valid_mrr, valid_hits_at_k = result
+
+        result_str = [str(epoch), str(loss)]
+        for mrr, hits in [(train_mrr, train_hits_at_k),
+                          (valid_mrr, valid_hits_at_k)]:
+            if mrr is None or hits is None:
+                result_str.extend([-1, -1, -1, -1, -1, -1, -1, -1])
+                continue
+
+            result_str.extend([str(mrr['raw']), str(hits['raw'][0]),
+                               str(hits['raw'][1]), str(hits['raw'][2]),
+                               str(mrr['flt']), str(hits['flt'][0]),
+                               str(hits['flt'][1]), str(hits['flt'][2])])
+
+        # add test set placeholder
+        result_str.extend([-1, -1, -1, -1, -1, -1, -1, -1])
+
+        # log metrics
+        tsv_writer.writerow(result_str)
 
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
-    ## test model
     # Log wall-clock time
     t0 = time()
 
-    mrr, hits_at_k, ranks = test_model(A, X, data, splits, num_nodes, model, criterion,
-                                       filtered_ranks, mrr_batch_size, test_split,
-                                       model_device, distmult_device)
+    test_data = data[test_split]
+    test_mrr, test_hits_at_k, test_ranks = test_model(A, X, test_data,
+                                                      model, mrr_batch_size,
+                                                      model_device,
+                                                      distmult_device)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
 
     # log metrics
-    tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1", "-1",
-                         str(mrr), str(hits_at_k[1]),
-                         str(hits_at_k[3]), str(hits_at_k[10])])
+    result_str = [-1 for _ in range(18)]
+    result_str.extend([str(test_mrr['raw']), str(test_hits_at_k['raw'][0]),
+                       str(test_hits_at_k['raw'][1]),
+                       str(test_hits_at_k['raw'][2]), str(test_mrr['flt']),
+                       str(test_hits_at_k['flt'][0]),
+                       str(test_hits_at_k['flt'][1]),
+                       str(test_hits_at_k['flt'][2])])
+    tsv_writer.writerow(result_str)
 
-    return (mrr, hits_at_k, ranks)
+    return (test_mrr, test_hits_at_k, test_ranks)
 
-def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
-                nepoch, mrr_batch_size, model_device, distmult_device):
+
+def train_model(A, X, data, num_nodes, model, optimizer, criterion,
+                nepoch, mrr_batch_size, eval_interval, model_device,
+                distmult_device):
     logging.info("Training for {} epoch".format(nepoch))
 
-    idx_begin, idx_end = splits['train'][0], splits['train'][1]
-    train_data = data[idx_begin:idx_end]
-    nsamples = idx_end - idx_begin
+    train_data = data["train"]
+    nsamples = train_data.shape[0]
     for epoch in range(1, nepoch+1):
         model.train()
         # Single iteration
@@ -163,73 +158,69 @@ def train_model(A, X, data, splits, num_nodes, model, optimizer, criterion,
         optimizer.step()
 
         loss = float(loss)  # remove pointer to gradients to free memory
+        results_str = f"{epoch:04d} | loss {loss:.4f}"
 
-        # validate
-        model.eval()
-        with torch.no_grad():
-            node_embeddings = model(X, A, epoch=-1,
-                                    device=model_device).to(distmult_device)
-            edge_embeddings = model.rgcn.relations.to(distmult_device)
+        train_mrr, train_hits_at_k = None, None
+        valid_mrr, valid_hits_at_k = None, None
+        if epoch % eval_interval == 0 or epoch == nepoch:
+            train_mrr, train_hits_at_k, _ = test_model(A, X, train_data, model,
+                                                       mrr_batch_size,
+                                                       model_device,
+                                                       distmult_device)
 
-            ranks = compute_ranks_fast(data,
-                                      splits,
-                                      node_embeddings,
-                                      edge_embeddings,
-                                      "valid",
-                                      mrr_batch_size,
-                                      filtered=False)
-            mrr_raw = torch.mean(1.0 / ranks.float()).item()
+            results_str += f" | train MRR {train_mrr['raw']:.4f} (raw) / "\
+                           + f"{train_mrr['flt']:.4f} (filtered)"
 
-            hits_at_k = dict()
-            for k in [1, 3, 10]:
-                hits_at_k[k] = float(torch.mean((ranks <= k).float()))
+            valid_mrr = None
+            valid_hits_at_k = None
+            if "valid" in data.keys() and epoch < nepoch:
+                valid_data = data["valid"]
+                valid_mrr, valid_hits_at_k, _ = test_model(A, X, valid_data,
+                                                           model,
+                                                           mrr_batch_size,
+                                                           model_device,
+                                                           distmult_device)
 
-        # clear gpu cache
-        if model_device == torch.device('cpu') and\
-           distmult_device != torch.device('cpu'):
-            del node_embeddings
-            del edge_embeddings
-            torch.cuda.empty_cache()
+                results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) / "\
+                               + f"flt {valid_mrr['flt']:.4f} (filtered)"
 
-        logging.info("{:04d} ".format(epoch) \
-                     + "| train loss {:.4f} ".format(loss)
-                     + "| valid MRR (raw) {:.4f} ".format(mrr_raw)
-                     + "/ " + " / ".join(["H@{} {:.4f}".format(k,v)
-                                         for k,v in hits_at_k.items()]))
+        logging.info(results_str)
 
-        yield (epoch, loss, mrr_raw, hits_at_k[1], hits_at_k[3], hits_at_k[10])
+        yield (epoch, loss,
+               train_mrr, train_hits_at_k,
+               valid_mrr, valid_hits_at_k)
 
-def test_model(A, X, data, splits, num_nodes, model, criterion, filtered_ranks,
-               mrr_batch_size, test_split, model_device, distmult_device):
+
+def test_model(A, X, data, model, mrr_batch_size,
+               model_device, distmult_device):
     model.eval()
-    mrr = 0.0
-    hits_at_k = {1: 0.0, 3: 0.0, 10: 0.0}
-    ranks = None
+
+    mrr = dict()
+    hits_at_k = dict()
+    rankings = dict()
     with torch.no_grad():
         node_embeddings = model(X, A, epoch=-1,
                                 device=model_device).to(distmult_device)
         edge_embeddings = model.rgcn.relations.to(distmult_device)
 
-        ranks = compute_ranks_fast(data,
-                                  splits,
-                                  node_embeddings,
-                                  edge_embeddings,
-                                  test_split,
-                                  mrr_batch_size,
-                                  filtered_ranks)
+        for filtered in [False, True]:
+            rank_type = "flt" if filtered else "raw"
+            ranks = compute_ranks_fast(data,
+                                       node_embeddings,
+                                       edge_embeddings,
+                                       mrr_batch_size,
+                                       filtered)
 
-        mrr = torch.mean(1.0 / ranks.float()).item()
-        for k in [1, 3, 10]:
-            hits_at_k[k] = float(torch.mean((ranks <= k).float()))
+            mrr[rank_type] = torch.mean(1.0 / ranks.float()).item()
+            hits_at_k[rank_type] = list()
+            for k in [1, 3, 10]:
+                hits_at_k[rank_type].append(float(torch.mean((ranks <= k).float())))
 
-    rank_type = "filtered" if filtered_ranks else "raw"
-    logging.info("Performance on {} set: MRR ({}) {:.4f}".format(test_split,
-                                                                 rank_type,
-                                                                 mrr)
-                 + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
-                                              k,v in hits_at_k.items()]))
+            ranks = ranks.tolist()
+            rankings[rank_type] = ranks
 
-    return (mrr, hits_at_k, ranks.numpy())
+    return (mrr, hits_at_k, rankings)
+
 
 def build_dataset(kg, nodes_map, config, featureless):
     logger.debug("Starting dataset build")
@@ -284,14 +275,16 @@ def build_model(C, A, modules_config, config, featureless):
 
     return model
 
+
 def binary_crossentropy(Y_hat, Y, criterion):
     # Y_hat := output of score()
     # Y := labels in [0, 1]
     # Y_hat[i] == Y[i] -> i is same triple
     return criterion(Y_hat, Y)
 
+
 def filter_scores_(scores, batch_data, heads, tails, head=True):
-     # set scores of existing facts to -inf
+    # set scores of existing facts to -inf
     indices = list()
     for i, (s, p, o) in enumerate(batch_data):
         s, p, o = (s.item(), p.item(), o.item())
@@ -307,6 +300,7 @@ def filter_scores_(scores, batch_data, heads, tails, head=True):
 
     indices = torch.tensor(indices)
     scores[indices[:, 0], indices[:, 1]] = float('-inf')
+
 
 def truedicts(facts):
     heads = dict()
@@ -325,14 +319,12 @@ def truedicts(facts):
 
     return heads, tails
 
-def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_split,
-                       batch_size=16, filtered=True):
-    idx_begin, idx_end = splits[eval_split][0], splits[eval_split][1]
-    eval_set = data[idx_begin:idx_end]
 
+def compute_ranks_fast(data, node_embeddings, edge_embeddings,
+                       batch_size=16, filtered=True):
     true_heads, true_tails = truedicts(data) if filtered else (None, None)
 
-    num_facts = eval_set.shape[0]
+    num_facts = data.shape[0]
     num_nodes = node_embeddings.shape[0]
     num_batches = int((num_facts + batch_size-1)//batch_size)
     ranks = torch.empty((num_facts*2), dtype=torch.int64)
@@ -344,16 +336,15 @@ def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_spli
 
             batch_idx = (int(head) * num_batches) + batch_id + 1
             if batch_idx % min(ceil(2*num_batches/10), 100) == 0:
-                logger.debug(" DistMult {} batch {} / {}".format(eval_split,
-                                                                 batch_idx,
-                                                                 num_batches*2))
+                logger.debug(" DistMult batch {} / {}".format(batch_idx,
+                                                              num_batches*2))
 
-            batch_data = eval_set[batch_begin:batch_end]
+            batch_data = data[batch_begin:batch_end]
             batch_num_facts = batch_data.shape[0]
 
             # compute the full score matrix (filter later)
-            bases   = batch_data[:, 1:] if head else batch_data[:, :2]
-            targets = batch_data[:, 0]  if head else batch_data[:, 2]
+            bases = batch_data[:, 1:] if head else batch_data[:, :2]
+            targets = batch_data[:, 0] if head else batch_data[:, 2]
 
             # collect the triples for which to compute scores
             bexp = bases.view(batch_num_facts, 1, 2).expand(batch_num_facts,
@@ -362,9 +353,9 @@ def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_spli
                                                                         num_nodes, 1)
             candidates = torch.cat([ar, bexp] if head else [bexp, ar], dim=2)
 
-            scores = score_distmult_bc((candidates[:,:,0],
-                                        candidates[:,:,1],
-                                        candidates[:,:,2]),
+            scores = score_distmult_bc((candidates[:, :, 0],
+                                        candidates[:, :, 1],
+                                        candidates[:, :, 2]),
                                        node_embeddings,
                                        edge_embeddings).to('cpu')
 
@@ -384,6 +375,7 @@ def compute_ranks_fast(data, splits, node_embeddings, edge_embeddings, eval_spli
             ranks[offset+batch_begin:offset+batch_end] = batch_ranks
 
     return ranks + 1
+
 
 def score_distmult_bc(data, node_embeddings, edge_embeddings):
     si, pi, oi = data
