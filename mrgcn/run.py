@@ -20,21 +20,21 @@ import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
 
-def run(A, X, Y, X_width, data, splits, acc_writer, model_device,
+def run(A, X, Y, X_width, data, acc_writer, model_device,
         distmult_device, config, modules_config, optimizer_config,
         featureless, test_split):
     task = config['task']['type']
     logging.info("Starting {} task".format(task))
     if task == "node classification":
         loss, acc, labels, targets = node_classification.run(A, X, Y, X_width, acc_writer,
-                                                          model_device, config,
-                                                          modules_config,
-                                                          optimizer_config,
-                                                          featureless, test_split)
+                                                             model_device, config,
+                                                             modules_config,
+                                                             optimizer_config,
+                                                             featureless, test_split)
         return (loss, acc, labels, targets)
 
     elif task == "link prediction":
-        mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data, splits,
+        mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data,
                                                      acc_writer, model_device,
                                                      distmult_device, config,
                                                      modules_config,
@@ -42,10 +42,11 @@ def run(A, X, Y, X_width, data, splits, acc_writer, model_device,
                                                      featureless, test_split)
         return (mrr, hits_at_k, ranks)
 
-def main(args, acc_writer, out_writer, baseFilename, config):
+
+def main(args, acc_writer, baseFilename, config):
     set_seed(config['task']['seed'])
 
-    test_split = 'test' if args.test else 'valid' # use test split?
+    test_split = 'test' if args.test else 'valid'  # use test split?
 
     featureless = True
     if 'features' in config['graph'].keys() and\
@@ -54,7 +55,7 @@ def main(args, acc_writer, out_writer, baseFilename, config):
 
     model_device = torch.device("cpu")
     distmult_device = torch.device("cpu")
-    if config['task']['model_on_gpu'] or ('distmult_on_gpu' in config['task'].keys()\
+    if config['task']['model_on_gpu'] or ('distmult_on_gpu' in config['task'].keys()
                                           and config['task']['distmult_on_gpu']):
         if torch.cuda.is_available():
             if config['task']['model_on_gpu']:
@@ -85,42 +86,55 @@ def main(args, acc_writer, out_writer, baseFilename, config):
     if X_width <= 0:
         featureless = True
 
-    splits = None
     if data is not None:
-        # ugly temporary fix; should be done at dataset generation
-        trl = data['train'].shape[0]
-        ttl = data['test'].shape[0]
-        tvl = data['valid'].shape[0]
-        splits = {'train': [0, trl],
-                  'test': [trl, trl+ttl],
-                  'valid': [trl+ttl, trl+ttl+tvl]}
-        data = torch.from_numpy(np.concatenate([data['train'],
-                                                data['test'],
-                                                data['valid']], axis=0)).long()
+        data["test"] = torch.from_numpy(data["test"]).long()
+        if test_split == "test":
+            # merge train and valid splits when testing
+            data["train"] = torch.from_numpy(np.concatenate([data["train"],
+                                                             data["valid"]],
+                                                            axis=0)).long()
+            del data["valid"]
+        else:
+            data["train"] = torch.from_numpy(data["train"]).long()
+            data["valid"] = torch.from_numpy(data["valid"]).long()
 
     task = config['task']['type']
-    out = run(A, X, Y, X_width, data, splits, acc_writer, model_device,
+    out = run(A, X, Y, X_width, data, acc_writer, model_device,
               distmult_device, config, modules_config, optimizer_config,
               featureless, test_split)
 
     if task == "node classification":
+        loss, acc, _, _ = out
+        print("loss {:.4f} / accuracy {:.4f}".format(loss, acc))
+    elif task == "link prediction":
+        mrr, hits, _ = out
+        print(f"Performance on {test_split} set: "
+              f"MRR (raw) {mrr['raw']:.4f} - H@1 {hits['raw'][0]:.4f} / "
+              f"H@3 {hits['raw'][1]:.4f} / H@10 {hits['raw'][2]:.4f} | "
+              f"MRR (filtered) {mrr['flt']:.4f} - H@1 {hits['flt'][0]:.4f} / "
+              f"H@3 {hits['flt'][1]:.4f} / H@10 {hits['flt'][2]:.4f}")
+
+    if not args.save_output:
+        return
+
+    if task == "node classification":
         loss, acc, labels, targets = out
+
+        out_writer = TSV(baseFilename+'_out.tsv', 'w')
         out_writer.writerow(['X', 'Y_hat', 'Y'])
         for i in range(len(labels)):
             out_writer.writerow([sample_map[test_split][i],
                                  class_map[labels[i]],
                                  class_map[targets[i]]])
 
-        print("loss {:.4f} / accuracy {:.4f}".format(loss, acc))
     elif task == "link prediction":
-        rank_type = "filtered" if config['task']['filter_ranks'] else "raw"
-        mrr, hits, ranks = out
-        print("MRR ({}) {:.4f}".format(rank_type, mrr)
-              + " / " + " / ".join(["H@{} {:.4f}".format(k,v) for
-                                          k,v in hits.items()]))
+        _, _, ranks = out
 
-        if args.save_ranks:
-            np.save(baseFilename+"_ranks.npy", ranks)
+        rank_writer = TSV(baseFilename+'_ranks.tsv', 'w')
+        rank_writer.writerow(["raw", "filtered"])
+        rank_writer.writerows(zip(ranks['raw'],
+                                  ranks['flt']))
+
 
 def init_logger(filename, dry_run, verbose=0):
     if dry_run:
@@ -159,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", help="Increase output verbosity", action='count', default=0)
     parser.add_argument("--dry_run", help="Suppress writing output files to disk",
                         action='store_true')
-    parser.add_argument("--save_ranks", help="Write final ranks to disk (npy). Link prediction only.",
+    parser.add_argument("--save_output", help="Write final output to disk.",
                         action='store_true')
     parser.add_argument("--test", help="Report accuracy on test set rather than on validation set",
                         action='store_true')
@@ -179,8 +193,6 @@ if __name__ == "__main__":
     init_logger(baseFilename+'.log', args.dry_run, args.verbose)
 
     acc_writer = TSV(baseFilename+'_acc.tsv', 'w', args.dry_run)
-    out_writer = TSV(baseFilename+'_out.tsv', 'w', args.dry_run)\
-            if config['task']['type'] == "node classification" else None
 
     # log parameters
     logging.debug("Arguments:\n{}".format(
@@ -189,6 +201,6 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     # run training
-    main(args, acc_writer, out_writer, baseFilename, config)
+    main(args, acc_writer, baseFilename, config)
 
     logging.shutdown()

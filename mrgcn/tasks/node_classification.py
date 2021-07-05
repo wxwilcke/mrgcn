@@ -30,14 +30,6 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
                            weight_decay=config['model']['l2norm'])
     criterion = nn.CrossEntropyLoss()
 
-
-    # early stopping
-    patience = config['model']['patience']
-    patience_left = patience
-    best_score = -1
-    delta = 1e-4
-    best_state = None
-
     # train model
     nepoch = config['model']['epoch']
     # Log wall-clock time
@@ -51,24 +43,6 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
                              str(epoch[3]),
                              str(epoch[4]),
                              "-1", "-1"])
-
-        # early stopping
-        val_loss = epoch[3]
-        if patience <= 0:
-            continue
-        if best_score < 0:
-            best_score = val_loss
-            best_state = model.state_dict()
-        if val_loss >= best_score - delta:
-            patience_left -= 1
-        else:
-            best_score = val_loss
-            best_state = model.state_dict()
-            patience_left = patience
-        if patience_left <= 0:
-            model.load_state_dict(best_state)
-            logger.info("Early stopping after no improvement for {} epoch".format(patience))
-            break
 
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
@@ -119,8 +93,9 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split, device
             # validation scores
             model.eval()
 
-            val_loss = categorical_crossentropy(Y_hat, Y_valid, criterion)
-            val_acc = categorical_accuracy(Y_hat, Y_valid)[0]
+            with torch.no_grad():
+                val_loss = categorical_crossentropy(Y_hat, Y_valid, criterion)
+                val_acc = categorical_accuracy(Y_hat, Y_valid)[0]
 
             # DEBUG #
             #for name, param in model.named_parameters():

@@ -20,6 +20,7 @@ multiprocessing = false
 datatype = 'xsd.numeric'
 include = true
 share_weights = false
+embedding_dim = 4
 
 [[graph.features]]
 datatype = 'xsd.boolean'
@@ -83,13 +84,14 @@ embedding_dim = 16
 
 [task]
 # node classification
+# type = classification
 target_property = '<URI>'
 target_property_inv = '<URI>'
 
 # link prediction
 type = 'link prediction'
-filter_ranks = false
 distmult_on_gpu = false
+eval_interval = 10
 
 seed = -1  # use < 0 for random
 model_on_gpu = false
@@ -97,7 +99,6 @@ model_on_gpu = false
 [model]
 epoch = 50
 learning_rate = 0.01
-patience = 7  # < 0 to disable
 mrr_batch_size = 5e1
 num_bases = 0
 p_dropout = 0.0
