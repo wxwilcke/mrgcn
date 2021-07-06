@@ -10,6 +10,7 @@ import random
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import torch.nn.functional as f
 import scipy.sparse as sp
 
 from mrgcn.encodings.graph_features import (construct_feature_matrix,
@@ -77,11 +78,11 @@ class SparseDataset(Dataset):
         return torch.as_tensor(self.sp[idx].todense())
 
 def collate_zero_padding(batch, time_dim, max_batch_length=999,
-                               min_padded_length=3):
+                               min_padded_length=5):
     """ batch := a list with sparse coo matrices
 
         time_dim should be 0 for RNN and 1 for temporal CNN
-        min_padded_length >= 3 to allow smallest CNN to support it
+        min_padded_length >= 5 to allow smallest CNN to support it
     """
     batch_padded = list()
 
@@ -101,6 +102,18 @@ def collate_zero_padding(batch, time_dim, max_batch_length=999,
         batch_padded.append(a)
 
     return batch_padded
+
+
+def zero_pad(t, min_seq_length, time_dim):
+    if time_dim < 0 or min_seq_length < 0:
+        return t
+
+    dim = 1 if time_dim == 1 else 3
+    padding = [0, 0, 0, 0]
+    padding[dim] = min_seq_length - t.shape[time_dim]
+
+    return f.pad(t, padding)
+
 
 def collate_repetition_padding(batch, time_dim, max_batch_length=999,
                                min_padded_length=3):
