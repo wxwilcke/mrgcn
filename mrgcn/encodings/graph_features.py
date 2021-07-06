@@ -136,12 +136,12 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 feature_size = encodings[0].shape[feature_dim]
 
                 # adjust model size to 'best' fit sequence lengths
-                model_size = "M"  # medium, seq length >= 12
+                model_size = "M"  # medium, seq length >= 20
                 if not weight_sharing or num_encoding_sets <= 1:
-                    seq_length_min = min(seq_lengths)
-                    if seq_length_min < 20:
+                    seq_length_q25 = np.quantile(seq_lengths, 0.25)
+                    if seq_length_q25 < 20:
                         model_size = "S"
-                    elif seq_length_min < 50:
+                    elif seq_length_q25 < 100:
                         model_size = "M"
                     else:
                         model_size = "L"

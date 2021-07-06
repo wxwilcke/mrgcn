@@ -8,39 +8,50 @@ class GeomCNN(nn.Module):
         """
         Temporal Convolutional Neural Network to learn geometries
 
-        features_in  :: size of point encoding (nrows of input matrix)
+        features_in  :: size of point encoding (default 9)
         features_out :: size of final layer
 
-        Based on architecture described in:
-
-            van't Veer, Rein, Peter Bloem, and Erwin Folmer.
-            "Deep Learning for Classification Tasks on Geospatial
-            Vector Polygons." arXiv preprint arXiv:1806.03857 (2018).
+        Minimal sequence length = 12
         """
         super().__init__()
 
+        self.minimal_length = 12
         self.conv = nn.Sequential(
-            nn.Conv1d(features_in, 16, kernel_size=5, padding=2),
-            nn.ReLU(inplace=True),
-            nn.MaxPool1d(kernel_size=3, stride=3),
+            nn.Conv1d(features_in, 32, kernel_size=3, padding=1),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.AvgPool1d(kernel_size=2, stride=2),
 
-            nn.Conv1d(16, 32, kernel_size=5, padding=2),
-            nn.ReLU(inplace=True),
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Conv1d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool1d(3),
 
-            nn.Conv1d(32, 64, kernel_size=5, padding=2),
-            nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool1d(8)  # out = 8 x 64 = 512
+            nn.Conv1d(256, 512, kernel_size=3),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(),
         )
 
-        n_first = max(128, features_out)
-        n_second = max(32, features_out)
+        n_first = max(256, features_out)
+        n_second = max(128, features_out)
         self.fc = nn.Sequential(
             nn.Linear(512, n_first),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Dropout(p=p_dropout),
 
             nn.Linear(n_first, n_second),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Dropout(p=p_dropout),
 
             nn.Linear(n_second, features_out)

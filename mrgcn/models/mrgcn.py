@@ -20,6 +20,7 @@ from mrgcn.models.rgcn import RGCN
 logger = logging.getLogger(__name__)
 #PROCESS = psutil.Process()  # debug
 
+
 class MRGCN(nn.Module):
     def __init__(self, modules, embedding_modules, num_relations,
                  num_nodes, num_bases=-1, p_dropout=0.0, featureless=False,
@@ -42,6 +43,8 @@ class MRGCN(nn.Module):
         self.compute_modality_embeddings = False
         h, i, j, k = 0, 0, 0, 0
         for datatype, args in embedding_modules:
+            seq_length = -1
+
             if datatype in ["xsd.boolean", "xsd.numeric"]:
                 ncols, dim_out = args
                 module = FC(input_dim=ncols,
@@ -63,14 +66,16 @@ class MRGCN(nn.Module):
                                  p_dropout=p_dropout,
                                  size=model_size)
                 self.module_dict["CharCNN_"+str(i)] = module
+                seq_length = module.minimal_length
                 i += 1
             if datatype == "blob.image":
                 (nchannels, nrows, ncols), dim_out = args
-                module = ImageCNN(channels_in=nchannels,
-                             height=nrows,
-                             width=ncols,
-                             features_out=dim_out,
-                             p_dropout=p_dropout)
+                module = ImageCNN(features_out = dim_out)
+                #module = ImageCNN(channels_in=nchannels,
+                #             height=nrows,
+                #             width=ncols,
+                #             features_out=dim_out,
+                #             p_dropout=p_dropout)
                 self.module_dict["ImageCNN_"+str(j)] = module
                 j += 1
             if datatype == "ogc.wktLiteral":
@@ -78,6 +83,7 @@ class MRGCN(nn.Module):
                 module = GeomCNN(features_in=nrows,
                                  features_out=dim_out,
                                  p_dropout=p_dropout)
+                seq_length = module.minimal_length
                 self.module_dict["GeomCNN_"+str(k)] = module
                 #ncols, dim_out = args
                 #module = RNN(input_dim=ncols,
@@ -89,9 +95,12 @@ class MRGCN(nn.Module):
 
             if datatype not in self.modality_modules.keys():
                 self.modality_modules[datatype] = list()
-            self.modality_modules[datatype].append((module, dim_out))
+            self.modality_modules[datatype].append((module, seq_length, dim_out))
             self.modality_out_dim += dim_out
             self.compute_modality_embeddings = True
+
+            if seq_length > 0:
+                logger.debug(f"Setting sequence length to {seq_length} for datatype {datatype}")
 
         # add graph convolution layers
         self.rgcn = RGCN(modules, num_relations, num_nodes,
@@ -131,7 +140,7 @@ class MRGCN(nn.Module):
 
             num_sets = len(F_set)  # number of encoding sets for this datatype
             for i, (encodings, batches) in enumerate(F_set):
-                module, out_dim = self.modality_modules[modality][i]
+                module, seq_length, out_dim = self.modality_modules[modality][i]
                 module.to(device)
 
                 num_batches = len(batches)
@@ -144,7 +153,8 @@ class MRGCN(nn.Module):
 
                         time_dim = 1 # if modality == "xsd.string" else 0  ## uncomment for RNN
                         batch = collate_zero_padding(batch,
-                                                     time_dim)
+                                                     time_dim,
+                                                     min_padded_length=seq_length)
 
                         batch = scipy_sparse_list_to_pytorch_sparse(batch)
                         batch = batch.to_dense()
