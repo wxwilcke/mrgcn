@@ -19,6 +19,7 @@ setup(
     zip_safe=True,
     install_requires=[
         'torch',
+        'torchvision',
         'numpy',
         'rdflib',
         'scipy',
