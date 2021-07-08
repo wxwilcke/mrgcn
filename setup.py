@@ -9,7 +9,7 @@ def readme():
 
 setup(
     name='mrgcn',
-    version='0.1',
+    version='2.1',
     author='Xander Wilcke',
     author_email='w.x.wilcke@vu.nl',
     url='https://gitlab.com/wxwilcke/mrgcn',
@@ -19,7 +19,6 @@ setup(
     zip_safe=True,
     install_requires=[
         'torch',
-        'torchvision',
         'numpy',
         'rdflib',
         'scipy',
