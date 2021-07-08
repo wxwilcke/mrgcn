@@ -79,7 +79,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
 
         for p in node_predicate_map[node]:
             if p not in encodings.keys():
-                encodings[p] = np.empty(size=(n, c, _IMG_CROP, _IMG_CROP))
+                encodings[p] = np.empty(shape=(n, c, _IMG_CROP, _IMG_CROP),
+                                        dtype=np.float32)
                 node_idx[p] = np.empty(shape=(n), dtype=np.int32)
                 m[p] = 0
                 values_min[p] = [None for _ in range(c)]
