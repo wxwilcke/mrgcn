@@ -20,6 +20,9 @@ datatype = 'xsd.numeric'
 include = true
 share_weights = true
 embedding_dim = 4
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 #[[graph.features]]
 #datatype = 'xsd.gYear'
@@ -35,6 +38,9 @@ embedding_dim = 4
 datatype = 'xsd.boolean'
 include = true
 share_weights = true
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 #[[graph.features]]
 #datatype = 'xsd.string'
@@ -74,7 +80,9 @@ epoch = 50
 learning_rate = 0.01
 num_bases = 30
 p_dropout = 0.0
-l2norm = 5e-4
+weight_decay = 0.0
+l1_lambda = 0.0
+l2_lambda = 0.0
 bias = false
 
 [[model.layers]]

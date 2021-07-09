@@ -16,6 +16,7 @@ from mrgcn.tasks.utils import optimizer_params
 
 logger = logging.getLogger()
 
+
 def run(A, X, Y, X_width, tsv_writer, device, config,
         modules_config, optimizer_config, featureless, test_split):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
@@ -27,15 +28,17 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     opt_params = optimizer_params(model, optimizer_config)
     optimizer = optim.Adam(opt_params,
                            lr=config['model']['learning_rate'],
-                           weight_decay=config['model']['l2norm'])
+                           weight_decay=config['model']['weight_decay'])
     criterion = nn.CrossEntropyLoss()
 
     # train model
     nepoch = config['model']['epoch']
+    l1_lambda = config['model']['l1_lambda']
+    l2_lambda = config['model']['l2_lambda']
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, model, optimizer, criterion, X, Y,
-                             nepoch, test_split, device):
+                             nepoch, test_split, l1_lambda, l2_lambda, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -54,7 +57,9 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
     return (loss, acc, labels, targets)
 
-def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split, device):
+
+def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
+                l1_lambda, l2_lambda, device):
     Y_train = Y['train']
     Y_valid = Y['valid']
     if test_split == "test":
@@ -70,14 +75,31 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split, device
     for epoch in range(1, nepoch+1):
         # Single training iteration
         model.train()
-        Y_hat = model(X, A, epoch, device=device).to('cpu')
 
+        optimizer.zero_grad()
         # Training scores
+        Y_hat = model(X, A, epoch, device=device).to('cpu')
         train_loss = categorical_crossentropy(Y_hat, Y_train, criterion)
         train_acc = categorical_accuracy(Y_hat, Y_train)[0]
 
-        # Zero gradients, perform a backward pass, and update the weights.
-        optimizer.zero_grad()
+        if l1_lambda > 0:
+            l1_regularization = torch.tensor(0.)
+            for name, param in model.named_parameters():
+                if 'weight' not in name:
+                    continue
+                l1_regularization += torch.sum(param.abs())
+
+            train_loss += l1_lambda * l1_regularization
+
+        if l2_lambda > 0:
+            l2_regularization = torch.tensor(0.)
+            for name, param in model.named_parameters():
+                if 'weight' not in name:
+                    continue
+                l2_regularization += torch.sum(param ** 2)
+
+            train_loss += l2_lambda * l2_regularization
+
         train_loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()

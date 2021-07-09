@@ -22,10 +22,10 @@ class GraphConvolution(nn.Module):
         self.featureless = featureless
         self.bias = bias
 
-        self.W_I = None
-        self.W_F = None
-        self.W_I_comp = None
-        self.W_F_comp = None
+        self.weight_I = None
+        self.weight_F = None
+        self.weight_I_comp = None
+        self.weight_F_comp = None
         self.b = None
 
         S = self.num_relations
@@ -34,21 +34,21 @@ class GraphConvolution(nn.Module):
             S = self.num_bases
 
             if self.input_layer:
-                self.W_I_comp = nn.Parameter(torch.empty((self.num_relations,
-                                                          self.num_bases)))
+                self.weight_I_comp = nn.Parameter(torch.empty((self.num_relations,
+                                                               self.num_bases)))
             if not self.featureless:
                 if shared_bases_weights:
                     # use same basis matrix for both identities and features
-                    self.W_F_comp = self.W_I_comp
+                    self.weight_F_comp = self.weight_I_comp
                 else:
-                    self.W_F_comp = nn.Parameter(torch.empty((self.num_relations,
-                                                              self.num_bases)))
+                    self.weight_F_comp = nn.Parameter(torch.empty((self.num_relations,
+                                                                   self.num_bases)))
 
         # weights for identities and features
         if self.input_layer:
-            self.W_I = nn.Parameter(torch.empty((S*self.num_nodes, self.outdim)))
+            self.weight_I = nn.Parameter(torch.empty((S*self.num_nodes, self.outdim)))
         if not self.featureless:
-            self.W_F = nn.Parameter(torch.empty((S, self.indim, self.outdim)))
+            self.weight_F = nn.Parameter(torch.empty((S, self.indim, self.outdim)))
 
         # declare bias
         if self.bias:
@@ -63,10 +63,10 @@ class GraphConvolution(nn.Module):
 
         AIW_I = 0.0
         if self.input_layer:
-            W_I = self.W_I
+            W_I = self.weight_I
             if self.num_bases > 0:
                 W_I = W_I.view(self.num_bases, self.num_nodes, self.outdim)
-                W_I = torch.einsum('rb,bij->rij', self.W_I_comp, W_I)
+                W_I = torch.einsum('rb,bij->rij', self.weight_I_comp, W_I)
                 W_I = W_I.view(self.num_relations*self.num_nodes, self.outdim)
 
             # AIW_I = AW_I
@@ -78,9 +78,9 @@ class GraphConvolution(nn.Module):
 
                 return AIW_I
 
-        W_F = self.W_F
+        W_F = self.weight_F
         if self.num_bases > 0:
-            W_F = torch.einsum('rb,bij->rij', self.W_F_comp, W_F)
+            W_F = torch.einsum('rb,bij->rij', self.weight_F_comp, W_F)
 
         FW_F = torch.einsum('ij,bjk->bik', X, W_F)
         FW_F = torch.reshape(FW_F, (self.num_relations*self.num_nodes, self.outdim))
@@ -94,8 +94,8 @@ class GraphConvolution(nn.Module):
         return AXW
 
     def init(self):
-        # initialize weights from a uniform distribution following 
-        # "Understanding the difficulty of training deep feedforward 
+        # initialize weights from a uniform distribution following
+        # "Understanding the difficulty of training deep feedforward
         #  neural networks" - Glorot, X. & Bengio, Y. (2010)
         for name, param in self.named_parameters():
             if name == 'b':

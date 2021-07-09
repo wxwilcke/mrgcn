@@ -46,31 +46,32 @@ class MRGCN(nn.Module):
             seq_length = -1
 
             if datatype in ["xsd.boolean", "xsd.numeric"]:
-                ncols, dim_out = args
+                ncols, dim_out, dropout = args
                 module = FC(input_dim=ncols,
                             output_dim=dim_out,
-                            p_dropout=p_dropout)
+                            p_dropout=dropout)
                 self.module_dict["FC_num_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
-                ncols, dim_out = args
+                ncols, dim_out, dropout = args
                 module = FC(input_dim=ncols,
                             output_dim=dim_out,
-                            p_dropout=p_dropout)
+                            p_dropout=dropout)
                 self.module_dict["FC_temp_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:
-                nrows, dim_out, model_size = args
+                nrows, dim_out, model_size, dropout = args
                 module = CharCNN(features_in=nrows,
                                  features_out=dim_out,
-                                 p_dropout=p_dropout,
+                                 p_dropout=dropout,
                                  size=model_size)
                 self.module_dict["CharCNN_"+str(i)] = module
                 seq_length = module.minimal_length
                 i += 1
             if datatype == "blob.image":
-                (nchannels, nrows, ncols), dim_out = args
-                module = ImageCNN(features_out = dim_out)
+                (nchannels, nrows, ncols), dim_out, dropout = args
+                module = ImageCNN(features_out=dim_out,
+                                  p_dropout=dropout)
                 #module = ImageCNN(channels_in=nchannels,
                 #             height=nrows,
                 #             width=ncols,
@@ -79,10 +80,10 @@ class MRGCN(nn.Module):
                 self.module_dict["ImageCNN_"+str(j)] = module
                 j += 1
             if datatype == "ogc.wktLiteral":
-                nrows, dim_out = args
+                nrows, dim_out, dropout = args
                 module = GeomCNN(features_in=nrows,
                                  features_out=dim_out,
-                                 p_dropout=p_dropout)
+                                 p_dropout=dropout)
                 seq_length = module.minimal_length
                 self.module_dict["GeomCNN_"+str(k)] = module
                 #ncols, dim_out = args
