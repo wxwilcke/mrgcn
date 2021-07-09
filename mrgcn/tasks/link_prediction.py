@@ -32,7 +32,7 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     opt_params = optimizer_params(model, optimizer_config)
     optimizer = optim.Adam(opt_params,
                            lr=config['model']['learning_rate'],
-                           weight_decay=config['model']['l2norm'])
+                           weight_decay=config['model']['weight_decay'])
     criterion = nn.BCEWithLogitsLoss()
 
     # mini batching
@@ -41,11 +41,13 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     # train model
     nepoch = config['model']['epoch']
     eval_interval = config['task']['eval_interval']
+    l1_lambda = config['model']['l1_lambda']
+    l2_lambda = config['model']['l2_lambda']
     # Log wall-clock time
     t0 = time()
     for result in train_model(A, X, data, num_nodes, model, optimizer,
                               criterion, nepoch, mrr_batch_size, eval_interval,
-                              model_device, distmult_device):
+                              l1_lambda, l2_lambda, model_device, distmult_device):
 
         epoch, loss, train_mrr, train_hits_at_k,\
                      valid_mrr, valid_hits_at_k = result
@@ -95,8 +97,8 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, mrr_batch_size, eval_interval, model_device,
-                distmult_device):
+                nepoch, mrr_batch_size, eval_interval, l1_lambda,
+                l2_lambda, model_device, distmult_device):
     logging.info("Training for {} epoch".format(nepoch))
 
     train_data = data["train"]
@@ -141,18 +143,35 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                                               node_embeddings,
                                               edge_embeddings).to('cpu')
 
-        # compute loss
-        loss = binary_crossentropy(Y_hat, Y, criterion)
-
-        # clear gpu cache
+        # clear gpu cache to save memory
         if model_device == torch.device('cpu') and\
            distmult_device != torch.device('cpu'):
             del node_embeddings
             del edge_embeddings
             torch.cuda.empty_cache()
 
-        # Zero gradients, perform a backward pass, and update the weights.
+        # compute loss
         optimizer.zero_grad()
+        loss = binary_crossentropy(Y_hat, Y, criterion)
+
+        if l1_lambda > 0:
+            l1_regularization = torch.tensor(0.)
+            for name, param in model.named_parameters():
+                if 'weight' not in name:
+                    continue
+                l1_regularization += torch.sum(param.abs())
+
+            loss += l1_lambda * l1_regularization
+
+        if l2_lambda > 0:
+            l2_regularization = torch.tensor(0.)
+            for name, param in model.named_parameters():
+                if 'weight' not in name:
+                    continue
+                l2_regularization += torch.sum(param ** 2)
+
+            loss += l2_lambda * l2_regularization
+
         loss.backward()  # training loss
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()

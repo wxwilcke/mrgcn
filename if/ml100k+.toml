@@ -19,6 +19,9 @@ datatype = 'xsd.numeric'
 include = true
 share_weights = true
 embedding_dim = 4
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 #[[graph.features]]
 #datatype = 'xsd.boolean'
@@ -40,6 +43,9 @@ datatype = 'xsd.dateTime'
 include = true
 share_weights = true
 embedding_dim = 3
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.anyURI'
@@ -49,6 +55,9 @@ share_weights = true
 trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.string'
@@ -58,6 +67,9 @@ share_weights = true
 trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'blob.image'
@@ -66,6 +78,9 @@ num_batches = 16
 share_weights = true
 remove_outliers = false
 embedding_dim = 128
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 #[[graph.features]]
 #datatype = 'ogc.wktLiteral'
@@ -75,6 +90,7 @@ embedding_dim = 128
 #trim_outliers = false
 #remove_outliers = false
 #embedding_dim = 16
+#p_dropout = 0.0
 
 [task]
 type = 'link prediction'
@@ -89,7 +105,9 @@ learning_rate = 0.01
 mrr_batch_size = 5e1
 num_bases = 2
 p_dropout = 0.0
-l2norm = 0.01
+weight_decay = 0.0
+l1_lambda = 0.0
+l2_lambda = 0.0
 bias = false
 
 [[model.layers]]

@@ -90,6 +90,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                                if conf['datatype'] == datatype),
                               None)
         embedding_dim = feature_config['embedding_dim']
+        dropout = feature_config['p_dropout']
 
         # parameters to pass to optimizer
         optim_params = dict()
@@ -111,10 +112,21 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 encoding_sets = merge_img_encoding_sets(encoding_sets)
             elif datatype in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
                 encoding_sets = merge_sparse_encodings_sets(encoding_sets)
-            elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
+            elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear",
+                              "xsd.boolean", "xsd.numeric"]:
                 encoding_sets = merge_encoding_sets(encoding_sets)
-            elif datatype in ["xsd.boolean", "xsd.numeric"]:
-                encoding_sets = merge_encoding_sets(encoding_sets)
+            else:
+                logger.warning("Unsupported datatype %s" % datatype)
+
+        noise_mp = feature_config['noise_multiplier']
+        p_noise = feature_config['p_noise']
+        if p_noise > 0:
+            logger.debug("adding noise to {}".format(datatype))
+            if datatype in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
+                add_noise_(encoding_sets, p_noise, noise_mp, sparse=True)
+            elif datatype in ["blob.image", "xsd.date", "xsd.dateTime",
+                              "xsd.gYear", "xsd.boolean", "xsd.numeric"]:
+                add_noise_(encoding_sets, p_noise, noise_mp, sparse=False)
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
@@ -124,12 +136,14 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 feature_dim = 1
                 feature_size = encodings.shape[feature_dim]
                 modules_config.append((datatype, (feature_size,
-                                                  embedding_dim)))
+                                                  embedding_dim,
+                                                  dropout)))
             if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 feature_dim = 1
                 feature_size = encodings.shape[feature_dim]
                 modules_config.append((datatype, (feature_size,
-                                                  embedding_dim)))
+                                                  embedding_dim,
+                                                  dropout)))
             if datatype in ["xsd.string", "xsd.anyURI"]:
                 # stored as list of arrays (vocab x length)
                 feature_dim = 0
@@ -148,17 +162,20 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
 
                 modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
-                                                  model_size)))
+                                                  model_size,
+                                                  dropout)))
             if datatype in ["ogc.wktLiteral"]:
                 # stored as list of arrays (point_repr x num_points)
                 feature_dim = 0  # set to 1 for RNN
                 feature_size = encodings[0].shape[feature_dim]
                 modules_config.append((datatype, (feature_size,
-                                                  embedding_dim)))
+                                                  embedding_dim,
+                                                  dropout)))
             if datatype in ["blob.image"]:
                 # stored as tensor (num_images x num_channels x width x height)
                 modules_config.append((datatype, (encodings.shape[1:],
-                                                  embedding_dim)))
+                                                  embedding_dim,
+                                                  dropout)))
 
             embeddings_width += embedding_dim
 
@@ -406,3 +423,22 @@ def stack_encoding_sets(encoding_sets):
         j += m
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
+
+
+def add_noise_(encoding_sets, p_noise, multiplier=0.01, sparse=False):
+    for mset in encoding_sets:
+        if sparse:
+            for i in range(len(mset[0])):
+                size = mset[0][i].size
+                shape = mset[0][i].shape
+
+                b = np.random.binomial(1, p_noise, size=size)
+                noise = b.reshape(shape) * (2 * np.random.random(shape) - 1)
+                mset[0][i].data += multiplier * noise
+        else:
+            size = mset[0].size
+            shape = mset[0].shape
+
+            b = np.random.binomial(1, p_noise, size=size)
+            noise = b.reshape(shape) * (2 * np.random.random(shape) - 1)
+            mset[0] += multiplier * noise

@@ -5,10 +5,16 @@ from torchvision import models
 
 
 class ImageCNN(nn.Module):
-    def __init__(self, features_out=1000, pretrained=False, bias=True):
+    def __init__(self, features_out=1000, p_dropout=0., pretrained=False, bias=True):
         super().__init__()
 
         self.model = models.mobilenet_v3_small(pretrained=pretrained)
+
+        # change dropout
+        dropout = self.model._modules['classifier'][-2]
+        if dropout.p != p_dropout:
+            self.model._modules['classifier'][-2] = nn.Dropout(p=p_dropout)
+
 
         # change output features
         classifier = self.model._modules['classifier'][-1]

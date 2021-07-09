@@ -21,22 +21,32 @@ datatype = 'xsd.numeric'
 include = true
 share_weights = true
 embedding_dim = 4
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.gYear'
 include = true
 share_weights = true 
 embedding_dim = 1
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 #[[graph.features]]
 #datatype = 'xsd.date'
 #include = true
 #share_weights = true 
+p_noise = 0.0
+noise_multiplier = 0.0
 
 #[[graph.features]]
 #datatype = 'xsd.boolean'
 #include = true
 #share_weights = true 
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.string'
@@ -46,6 +56,9 @@ share_weights = true
 trim_outliers = true
 remove_outliers = false
 embedding_dim = 16
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'blob.image'
@@ -53,6 +66,9 @@ include = true
 num_batches = 64
 share_weights = true
 embedding_dim = 128
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
@@ -62,6 +78,9 @@ share_weights = true
 trim_outliers = true
 remove_outliers = false
 embedding_dim = 16
+p_dropout = 0.0
+p_noise = 0.0
+noise_multiplier = 0.0
 
 [task]
 # node classification
@@ -78,7 +97,9 @@ epoch = 100
 learning_rate = 0.01
 num_bases = 0
 p_dropout = 0.0
-l2norm = 0.0
+weight_decay = 0.0
+l1_lambda = 0.0
+l2_lambda = 0.0
 bias = false
 
 [[model.layers]]
