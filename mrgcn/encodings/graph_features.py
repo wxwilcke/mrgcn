@@ -7,6 +7,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
+from mrgcn.models.temporal_cnn import TCNN
 from mrgcn.tasks.utils import (mkbatches,
                                mkbatches_varlength,
                                remove_outliers,
@@ -149,13 +150,13 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 feature_dim = 0
                 feature_size = encodings[0].shape[feature_dim]
 
-                # adjust model size to 'best' fit sequence lengths
-                model_size = "M"  # medium, seq length >= 20
+                # adjust model size to 'best' fit sequence lengths of CNN
+                model_size = "M"
                 if not weight_sharing or num_encoding_sets <= 1:
                     seq_length_q25 = np.quantile(seq_lengths, 0.25)
-                    if seq_length_q25 < 20:
+                    if seq_length_q25 < TCNN.LENGTH_M:
                         model_size = "S"
-                    elif seq_length_q25 < 100:
+                    elif seq_length_q25 < TCNN.LENGTH_L:
                         model_size = "M"
                     else:
                         model_size = "L"
@@ -168,8 +169,21 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 # stored as list of arrays (point_repr x num_points)
                 feature_dim = 0  # set to 1 for RNN
                 feature_size = encodings[0].shape[feature_dim]
+
+                # adjust model size to 'best' fit sequence lengths of CNN
+                model_size = "M"
+                if not weight_sharing or num_encoding_sets <= 1:
+                    seq_length_q25 = np.quantile(seq_lengths, 0.25)
+                    if seq_length_q25 < TCNN.LENGTH_M:
+                        model_size = "S"
+                    elif seq_length_q25 < TCNN.LENGTH_L:
+                        model_size = "M"
+                    else:
+                        model_size = "L"
+
                 modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
+                                                  model_size,
                                                   dropout)))
             if datatype in ["blob.image"]:
                 # stored as tensor (num_images x num_channels x width x height)

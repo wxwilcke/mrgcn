@@ -112,17 +112,12 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
         val_loss = -1
         val_acc = -1
         if Y_valid is not None:
-            # validation scores
             model.eval()
-
             with torch.no_grad():
+                Y_hat = model(X, A, epoch=-1, device=device).to('cpu')
                 val_loss = categorical_crossentropy(Y_hat, Y_valid, criterion)
                 val_acc = categorical_accuracy(Y_hat, Y_valid)[0]
 
-            # DEBUG #
-            #for name, param in model.named_parameters():
-            #    logger.info(name + " - grad mean: " + str(float(param.grad.mean())))
-            # DEBUG #
             val_loss = float(val_loss)
             val_acc = float(val_acc)
 
@@ -142,7 +137,7 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
 
 def test_model(A, model, criterion, X, Y, test_split, device):
     # Predict on full dataset
-    model.train(False)
+    model.eval()
     with torch.no_grad():
         Y_hat = model(X, A, epoch=-1, device=device).to('cpu')
 
