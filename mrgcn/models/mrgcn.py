@@ -3,22 +3,19 @@
 import logging
 from operator import itemgetter
 
-#import psutil
 import torch
 import torch.nn as nn
 
 from mrgcn.data.utils import (collate_zero_padding,
                               scipy_sparse_list_to_pytorch_sparse)
-from mrgcn.models.charcnn import CharCNN
 from mrgcn.models.fully_connected import FC
-from mrgcn.models.geomcnn import GeomCNN
 from mrgcn.models.imagecnn import ImageCNN
 #from mrgcn.models.rnn import RNN
 from mrgcn.models.rgcn import RGCN
+from mrgcn.models.temporal_cnn import TCNN
 
 
 logger = logging.getLogger(__name__)
-#PROCESS = psutil.Process()  # debug
 
 
 class MRGCN(nn.Module):
@@ -61,10 +58,10 @@ class MRGCN(nn.Module):
                 h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:
                 nrows, dim_out, model_size, dropout = args
-                module = CharCNN(features_in=nrows,
-                                 features_out=dim_out,
-                                 p_dropout=dropout,
-                                 size=model_size)
+                module = TCNN(features_in=nrows,
+                              features_out=dim_out,
+                              p_dropout=dropout,
+                              size=model_size)
                 self.module_dict["CharCNN_"+str(i)] = module
                 seq_length = module.minimal_length
                 i += 1
@@ -80,10 +77,11 @@ class MRGCN(nn.Module):
                 self.module_dict["ImageCNN_"+str(j)] = module
                 j += 1
             if datatype == "ogc.wktLiteral":
-                nrows, dim_out, dropout = args
-                module = GeomCNN(features_in=nrows,
-                                 features_out=dim_out,
-                                 p_dropout=dropout)
+                nrows, dim_out, model_size, dropout = args
+                module = TCNN(features_in=nrows,
+                              features_out=dim_out,
+                              p_dropout=dropout,
+                              size=model_size)
                 seq_length = module.minimal_length
                 self.module_dict["GeomCNN_"+str(k)] = module
                 #ncols, dim_out = args
@@ -189,7 +187,7 @@ class MRGCN(nn.Module):
         # reinitialze all weights
         for module in self.module_dict.values():
             #if type(module) in (ImageCNN, CharCNN, RGCN, RNN):
-            if type(module) in (ImageCNN, CharCNN, GeomCNN, RGCN):
+            if type(module) in (ImageCNN, TCNN, RGCN):
                 module.init()
             else:
                 raise NotImplementedError

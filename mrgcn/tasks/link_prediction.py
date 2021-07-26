@@ -389,7 +389,7 @@ def compute_ranks_fast(data, node_embeddings, edge_embeddings,
             num_ties = torch.sum(scores == true_scores.view(batch_num_facts, 1), dim=1, dtype=torch.int64)
 
             # Account for ties (put the true example halfway down the ties)
-            batch_ranks = batch_ranks + (num_ties - 1) // 2
+            batch_ranks = batch_ranks + torch.round((num_ties - 1) / 2).long()
 
             ranks[offset+batch_begin:offset+batch_end] = batch_ranks
 
