@@ -25,7 +25,7 @@ class TCNN(nn.Module):
                 nn.Conv1d(features_in, 64, kernel_size=3, padding=1),
                 nn.BatchNorm1d(64),
                 nn.ReLU(),
-                nn.Conv1d(features_in, 64, kernel_size=3, padding=1),
+                nn.Conv1d(64, 64, kernel_size=3, padding=1),
                 nn.BatchNorm1d(64),
                 nn.ReLU(),
                 nn.MaxPool1d(kernel_size=2, stride=2),
@@ -33,7 +33,7 @@ class TCNN(nn.Module):
                 nn.Conv1d(64, 128, kernel_size=3, padding=1),
                 nn.BatchNorm1d(128),
                 nn.ReLU(),
-                nn.Conv1d(64, 128, kernel_size=3, padding=1),
+                nn.Conv1d(128, 128, kernel_size=3, padding=1),
                 nn.BatchNorm1d(128),
                 nn.ReLU(),
                 nn.MaxPool1d(kernel_size=2, stride=2),
@@ -67,7 +67,7 @@ class TCNN(nn.Module):
         elif size == "M":
             self.minimal_length = self.LENGTH_L
             self.conv = nn.Sequential(
-                nn.Conv1d(features_in, 64, kernel_size=7, padding=3),
+                nn.Conv1d(64, 64, kernel_size=7, padding=3),
                 nn.BatchNorm1d(64),
                 nn.ReLU(),
                 nn.Conv1d(features_in, 64, kernel_size=7, padding=3),
@@ -118,7 +118,7 @@ class TCNN(nn.Module):
         elif size == "L":
             self.minimal_length = self.LENGTH_L
             self.conv = nn.Sequential(
-                nn.Conv1d(features_in, 64, kernel_size=7, padding=3),
+                nn.Conv1d(64, 64, kernel_size=7, padding=3),
                 nn.BatchNorm1d(64),
                 nn.ReLU(),
                 nn.Conv1d(features_in, 64, kernel_size=7, padding=3),
