@@ -12,8 +12,8 @@ from rdflib import Namespace
 
 
 _REGEX_BASE64 = "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
-_IMG_SIZE = 256
-_IMG_CROP = 224
+_IMG_SIZE = 75
+_IMG_CROP = 64
 _IMG_MODE = "RGB"
 
 _KGB_NAMESPACE = Namespace(URIRef("http://kgbench.info/dt#"))
