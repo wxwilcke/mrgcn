@@ -41,13 +41,15 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     # train model
     nepoch = config['model']['epoch']
     eval_interval = config['task']['eval_interval']
+    filter_ranks = config['task']['filter_ranks']
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
     # Log wall-clock time
     t0 = time()
     for result in train_model(A, X, data, num_nodes, model, optimizer,
                               criterion, nepoch, mrr_batch_size, eval_interval,
-                              l1_lambda, l2_lambda, model_device, distmult_device):
+                              filter_ranks, l1_lambda, l2_lambda, model_device,
+                              distmult_device):
 
         epoch, loss, train_mrr, train_hits_at_k,\
                      valid_mrr, valid_hits_at_k = result
@@ -60,9 +62,12 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
                 continue
 
             result_str.extend([str(mrr['raw']), str(hits['raw'][0]),
-                               str(hits['raw'][1]), str(hits['raw'][2]),
-                               str(mrr['flt']), str(hits['flt'][0]),
-                               str(hits['flt'][1]), str(hits['flt'][2])])
+                               str(hits['raw'][1]), str(hits['raw'][2])])
+            if filter_ranks:
+                result_str.extend([str(mrr['flt']), str(hits['flt'][0]),
+                                   str(hits['flt'][1]), str(hits['flt'][2])])
+            else:
+                result_str.extend([-1, -1, -1, -1])
 
         # add test set placeholder
         result_str.extend([-1, -1, -1, -1, -1, -1, -1, -1])
@@ -79,6 +84,7 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     test_mrr, test_hits_at_k, test_ranks = test_model(A, X, test_data,
                                                       model, mrr_batch_size,
                                                       model_device,
+                                                      filter_ranks,
                                                       distmult_device)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
@@ -87,18 +93,21 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     result_str = [-1 for _ in range(18)]
     result_str.extend([str(test_mrr['raw']), str(test_hits_at_k['raw'][0]),
                        str(test_hits_at_k['raw'][1]),
-                       str(test_hits_at_k['raw'][2]), str(test_mrr['flt']),
-                       str(test_hits_at_k['flt'][0]),
-                       str(test_hits_at_k['flt'][1]),
-                       str(test_hits_at_k['flt'][2])])
+                       str(test_hits_at_k['raw'][2])])
+    if filter_ranks:
+        result_str.extend([str(test_mrr['flt']), str(test_hits_at_k['flt'][0]),
+                           str(test_hits_at_k['flt'][1]),
+                           str(test_hits_at_k['flt'][2])])
+    else:
+        result_str.extend([-1, -1, -1, -1])
     tsv_writer.writerow(result_str)
 
     return (test_mrr, test_hits_at_k, test_ranks)
 
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, mrr_batch_size, eval_interval, l1_lambda,
-                l2_lambda, model_device, distmult_device):
+                nepoch, mrr_batch_size, eval_interval, filter_ranks,
+                l1_lambda, l2_lambda, model_device, distmult_device):
     logging.info("Training for {} epoch".format(nepoch))
 
     train_data = data["train"]
@@ -184,6 +193,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
         if epoch % eval_interval == 0 or epoch == nepoch:
             train_mrr, train_hits_at_k, _ = test_model(A, X, train_data, model,
                                                        mrr_batch_size,
+                                                       filter_ranks,
                                                        model_device,
                                                        distmult_device)
 
@@ -197,6 +207,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                 valid_mrr, valid_hits_at_k, _ = test_model(A, X, valid_data,
                                                            model,
                                                            mrr_batch_size,
+                                                           filter_ranks,
                                                            model_device,
                                                            distmult_device)
 
@@ -210,7 +221,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                valid_mrr, valid_hits_at_k)
 
 
-def test_model(A, X, data, model, mrr_batch_size,
+def test_model(A, X, data, model, mrr_batch_size, filter_ranks,
                model_device, distmult_device):
     model.eval()
 
@@ -222,7 +233,8 @@ def test_model(A, X, data, model, mrr_batch_size,
                                 device=model_device).to(distmult_device)
         edge_embeddings = model.rgcn.relations.to(distmult_device)
 
-        for filtered in [False, True]:
+        modes = [False, True] if filter_ranks else [False]
+        for filtered in modes:
             rank_type = "flt" if filtered else "raw"
             ranks = compute_ranks_fast(data,
                                        node_embeddings,
