@@ -119,6 +119,7 @@ target_property_inv = '<URI>'
 type = 'link prediction'
 distmult_on_gpu = false
 eval_interval = 10
+filter_ranks = true
 
 seed = -1  # use < 0 for random
 model_on_gpu = false
