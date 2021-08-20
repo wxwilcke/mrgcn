@@ -62,12 +62,9 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
                 continue
 
             result_str.extend([str(mrr['raw']), str(hits['raw'][0]),
-                               str(hits['raw'][1]), str(hits['raw'][2])])
-            if filter_ranks:
-                result_str.extend([str(mrr['flt']), str(hits['flt'][0]),
-                                   str(hits['flt'][1]), str(hits['flt'][2])])
-            else:
-                result_str.extend([-1, -1, -1, -1])
+                               str(hits['raw'][1]), str(hits['raw'][2]),
+                               str(mrr['flt']), str(hits['flt'][0]),
+                               str(hits['flt'][1]), str(hits['flt'][2])])
 
         # add test set placeholder
         result_str.extend([-1, -1, -1, -1, -1, -1, -1, -1])
@@ -91,15 +88,14 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
     # log metrics
     result_str = [-1 for _ in range(18)]
-    result_str.extend([str(test_mrr['raw']), str(test_hits_at_k['raw'][0]),
+    result_str.extend([str(test_mrr['raw']),
+                       str(test_hits_at_k['raw'][0]),
                        str(test_hits_at_k['raw'][1]),
-                       str(test_hits_at_k['raw'][2])])
-    if filter_ranks:
-        result_str.extend([str(test_mrr['flt']), str(test_hits_at_k['flt'][0]),
-                           str(test_hits_at_k['flt'][1]),
-                           str(test_hits_at_k['flt'][2])])
-    else:
-        result_str.extend([-1, -1, -1, -1])
+                       str(test_hits_at_k['raw'][2]),
+                       str(test_mrr['flt']),
+                       str(test_hits_at_k['flt'][0]),
+                       str(test_hits_at_k['flt'][1]),
+                       str(test_hits_at_k['flt'][2])])
     tsv_writer.writerow(result_str)
 
     return (test_mrr, test_hits_at_k, test_ranks)
@@ -197,8 +193,9 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                                                        model_device,
                                                        distmult_device)
 
-            results_str += f" | train MRR {train_mrr['raw']:.4f} (raw) / "\
-                           + f"{train_mrr['flt']:.4f} (filtered)"
+            results_str += f" | train MRR {train_mrr['raw']:.4f} (raw)"
+            if filter_ranks:
+                results_str += f" / {train_mrr['flt']:.4f} (filtered)"
 
             valid_mrr = None
             valid_hits_at_k = None
@@ -211,8 +208,9 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                                                            model_device,
                                                            distmult_device)
 
-                results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) / "\
-                               + f"flt {valid_mrr['flt']:.4f} (filtered)"
+                results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) "
+                if filter_ranks:
+                    results_str += f" / flt {valid_mrr['flt']:.4f} (filtered)"
 
         logging.info(results_str)
 
@@ -233,9 +231,15 @@ def test_model(A, X, data, model, mrr_batch_size, filter_ranks,
                                 device=model_device).to(distmult_device)
         edge_embeddings = model.rgcn.relations.to(distmult_device)
 
-        modes = [False, True] if filter_ranks else [False]
-        for filtered in modes:
+        for filtered in [False, True]:
             rank_type = "flt" if filtered else "raw"
+            if filtered is True and not filter_ranks:
+                mrr[rank_type] = -1
+                hits_at_k[rank_type] = [-1, -1, -1]
+                rankings[rank_type] = [-1]
+
+                continue
+
             ranks = compute_ranks_fast(data,
                                        node_embeddings,
                                        edge_embeddings,
