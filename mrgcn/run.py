@@ -108,12 +108,17 @@ def main(args, acc_writer, baseFilename, config):
         print("loss {:.4f} / accuracy {:.4f}".format(loss, acc))
     elif task == "link prediction":
         mrr, hits, _ = out
-        print(f"Performance on {test_split} set: "
-              f"MRR (raw) {mrr['raw']:.4f} - H@1 {hits['raw'][0]:.4f} / "
-              f"H@3 {hits['raw'][1]:.4f} / H@10 {hits['raw'][2]:.4f} | "
-              f"MRR (filtered) {mrr['flt']:.4f} - H@1 {hits['flt'][0]:.4f} / "
-              f"H@3 {hits['flt'][1]:.4f} / H@10 {hits['flt'][2]:.4f}")
+        results_str = f"Performance on {test_split} set: "\
+                      f"MRR (raw) {mrr['raw']:.4f} - H@1 {hits['raw'][0]:.4f}"\
+                      f" / H@3 {hits['raw'][1]:.4f} /"\
+                      f" H@10 {hits['raw'][2]:.4f}"
+        if config['task']['filter_ranks']:
+            results_str += f" | MRR (filtered) {mrr['flt']:.4f} - "\
+                           f"H@1 {hits['flt'][0]:.4f} / "\
+                           f"H@3 {hits['flt'][1]:.4f} / "\
+                           f"H@10 {hits['flt'][2]:.4f}"
 
+        print(results_str)
     if not args.save_output:
         return
 
@@ -131,9 +136,13 @@ def main(args, acc_writer, baseFilename, config):
         _, _, ranks = out
 
         rank_writer = TSV(baseFilename+'_ranks.tsv', 'w')
-        rank_writer.writerow(["raw", "filtered"])
-        rank_writer.writerows(zip(ranks['raw'],
-                                  ranks['flt']))
+        if config['task']['filter_ranks']:
+            rank_writer.writerow(["raw", "filtered"])
+            rank_writer.writerows(zip(ranks['raw'],
+                                      ranks['flt']))
+        else:
+            rank_writer.writerow(["raw"])
+            rank_writer.writerows(ranks['raw'])
 
 
 def init_logger(filename, dry_run, verbose=0):
