@@ -80,8 +80,8 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     test_data = data[test_split]
     test_mrr, test_hits_at_k, test_ranks = test_model(A, X, test_data,
                                                       model, mrr_batch_size,
-                                                      model_device,
                                                       filter_ranks,
+                                                      model_device,
                                                       distmult_device)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
