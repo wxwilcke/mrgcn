@@ -142,7 +142,8 @@ def main(args, acc_writer, baseFilename, config):
                                       ranks['flt']))
         else:
             rank_writer.writerow(["raw"])
-            rank_writer.writerows(ranks['raw'])
+            for row in ranks['raw']:
+                rank_writer.writerow([row])
 
 
 def init_logger(filename, dry_run, verbose=0):
