@@ -27,6 +27,9 @@ class RNN(nn.Module):
                           dropout=p_dropout)
         self.fc = nn.Linear(hidden_dim, output_dim)
 
+        # initiate weights
+        self.init()
+
     def forward(self, X):
         # default H0 is zero vector
         # output Hn is representation of entire sequence
