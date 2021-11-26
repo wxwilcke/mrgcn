@@ -107,6 +107,9 @@ class MRGCN(nn.Module):
                           link_prediction)
         self.module_dict["RGCN"] = self.rgcn
 
+        # initiate weights
+        self.init()
+
     def forward(self, X, A, epoch, device=None):
         X, F = X[0], X[1:]
 

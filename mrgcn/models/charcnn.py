@@ -141,6 +141,9 @@ class CharCNN(nn.Module):
                 nn.Linear(n_second, features_out)
             )
 
+        # initiate weights
+        self.init()
+
     def forward(self, X):
         X = self.conv(X)
         X = X.view(X.size(0), -1)

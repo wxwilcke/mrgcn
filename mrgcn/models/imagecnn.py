@@ -68,6 +68,9 @@ class ImageCNN(nn.Module):
 
         return (inverted_residual_setting, last_channel)
 
+        # initiate weights
+        self.init()
+
     def forward(self, X):
         return self.model(X)
 

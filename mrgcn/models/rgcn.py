@@ -55,6 +55,9 @@ class RGCN(nn.Module):
             self.relations = nn.Parameter(torch.empty(size))
             nn.init.xavier_uniform_(self.relations)
 
+        # initiate weights
+        self.init()
+
     def forward(self, X, A):
         # Forward pass with full batch
         for layer, f_activation in zip(self.layers.values(),
