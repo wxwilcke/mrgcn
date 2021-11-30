@@ -18,14 +18,7 @@ class FC(nn.Module):
         self.p_dropout = p_dropout
         self.fc = nn.Linear(input_dim, output_dim)
 
-        # initiate weights
-        self.init()
-
     def forward(self, X):
         X = self.fc(X)
 
         return f.dropout(X, p=self.p_dropout)
-
-    def init(self):
-        for param in self.parameters():
-            nn.init.uniform_(param)

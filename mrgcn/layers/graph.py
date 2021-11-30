@@ -55,7 +55,7 @@ class GraphConvolution(nn.Module):
             self.b = nn.Parameter(torch.empty(self.outdim))
 
         # initialize weights
-        self.init()
+        self.reset_parameters()
 
     def forward(self, X, A):
         # if input layer: AXW = A[I F]W = AIW_I + AFW_F
@@ -93,7 +93,7 @@ class GraphConvolution(nn.Module):
 
         return AXW
 
-    def init(self):
+    def reset_parameters(self):
         # initialize weights from a uniform distribution following
         # "Understanding the difficulty of training deep feedforward
         #  neural networks" - Glorot, X. & Bengio, Y. (2010)

@@ -57,9 +57,6 @@ class GeomCNN(nn.Module):
             nn.Linear(n_second, features_out)
         )
 
-        # initiate weights
-        self.init()
-
     def forward(self, X):
         X = self.conv(X)
         X = X.view(X.size(0), -1)
@@ -67,9 +64,6 @@ class GeomCNN(nn.Module):
 
         return X
 
-    def init(self):
-        for param in self.parameters():
-            nn.init.normal_(param)
 
 def out_dim(seq_length, kernel_size, padding=0, stride=1, dilation=1):
     return (seq_length+2*padding-dilation*(kernel_size-1)-1)//stride+1

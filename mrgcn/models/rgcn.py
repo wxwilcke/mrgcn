@@ -53,10 +53,9 @@ class RGCN(nn.Module):
             # simulate diag(R) with R = (r x n x h) by vectors (r x h)
             size = (num_relations, modules[-1][1])
             self.relations = nn.Parameter(torch.empty(size))
-            nn.init.xavier_uniform_(self.relations)
 
-        # initiate weights
-        self.init()
+            # initiate weights
+            self.reset_parameters()
 
     def forward(self, X, A):
         # Forward pass with full batch
@@ -80,10 +79,6 @@ class RGCN(nn.Module):
 
         return X
 
-    def init(self):
-        # reinitialze all weights
-        for layer in self.layers.values():
-            if type(layer) is GraphConvolution:
-                layer.init()
-            else:
-                raise NotImplementedError()
+    def reset_parameters(self):
+        # reset the edge embeddings when doing link prediction
+        nn.init.xavier_uniform_(self.relations)

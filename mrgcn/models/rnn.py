@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-from math import sqrt
-
 import torch
 import torch.nn as nn
 
@@ -27,9 +25,6 @@ class RNN(nn.Module):
                           dropout=p_dropout)
         self.fc = nn.Linear(hidden_dim, output_dim)
 
-        # initiate weights
-        self.init()
-
     def forward(self, X):
         # default H0 is zero vector
         # output Hn is representation of entire sequence
@@ -37,8 +32,3 @@ class RNN(nn.Module):
         X = torch.squeeze(H, dim=0)
 
         return self.fc(X)
-
-    def init(self):
-        sqrt_k = sqrt(1.0/self.hidden_dim)
-        for param in self.parameters():
-            nn.init.uniform_(param, -sqrt_k, sqrt_k)
