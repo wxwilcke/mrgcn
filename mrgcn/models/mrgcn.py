@@ -107,9 +107,6 @@ class MRGCN(nn.Module):
                           link_prediction)
         self.module_dict["RGCN"] = self.rgcn
 
-        # initiate weights
-        self.init()
-
     def forward(self, X, A, epoch, device=None):
         X, F = X[0], X[1:]
 
@@ -185,12 +182,3 @@ class MRGCN(nn.Module):
                 offset += out_dim
 
         return X
-
-    def init(self):
-        # reinitialze all weights
-        for module in self.module_dict.values():
-            #if type(module) in (ImageCNN, CharCNN, RGCN, RNN):
-            if type(module) in (ImageCNN, TCNN, RGCN):
-                module.init()
-            else:
-                raise NotImplementedError

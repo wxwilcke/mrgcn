@@ -175,19 +175,12 @@ class TCNN(nn.Module):
                 nn.Linear(n_second, features_out)
             )
 
-        # initiate weights
-        self.init()
-
     def forward(self, X):
         X = self.conv(X)
         X = X.view(X.size(0), -1)
         X = self.fc(X)
 
         return X
-
-    def init(self):
-        for param in self.parameters():
-            nn.init.normal_(param)
 
 
 def out_dim(seq_length, kernel_size, padding=0, stride=1, dilation=1):
