@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from mrgcn.data.utils import sliceSparseCOO
 import torch
 import torch.nn as nn
 
@@ -10,6 +11,7 @@ class GraphConvolution(nn.Module):
                  shared_bases_weights=False):
         """
         Relational Graph Convolutional Layer
+        Mini batch support
         """
         super().__init__()
 
@@ -57,7 +59,7 @@ class GraphConvolution(nn.Module):
         # initialize weights
         self.reset_parameters()
 
-    def forward(self, X, A):
+    def forward(self, X, A, A_idx=None):
         # if input layer: AXW = A[I F]W = AIW_I + AFW_F
         # else:           AXW = AHW
 
@@ -82,8 +84,14 @@ class GraphConvolution(nn.Module):
         if self.num_bases > 0:
             W_F = torch.einsum('rb,bij->rij', self.weight_F_comp, W_F)
 
+        num_nodes = self.num_nodes
+        if A_idx is not None:
+            # mini batch mode
+            num_nodes = X.shape[0]  # num nodes in batch
+            A = sliceSparseCOO(A, A_idx)  # slice sparse COO tensor
+
         FW_F = torch.einsum('ij,bjk->bik', X, W_F)
-        FW_F = torch.reshape(FW_F, (self.num_relations*self.num_nodes, self.outdim))
+        FW_F = torch.reshape(FW_F, (self.num_relations*num_nodes, self.outdim))
         AFW_F = torch.mm(A, FW_F)
 
         AXW = torch.add(AIW_I, AFW_F) if self.input_layer else AFW_F

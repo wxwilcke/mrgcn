@@ -8,6 +8,7 @@ from os.path import split
 import random
 
 import numpy as np
+from numpy.core.numeric import indices
 import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as f
@@ -57,8 +58,8 @@ def scipy_sparse_list_to_pytorch_sparse(sp_inputs):
                        dim = 0)
 
 def scipy_sparse_to_pytorch_sparse(sp_input):
-    return torch.sparse_coo_tensor(torch.LongTensor([sp_input.nonzero()[0],
-                                                     sp_input.nonzero()[1]]),
+    indices = np.array(sp_input.nonzero())
+    return torch.sparse_coo_tensor(torch.LongTensor(indices),
                                    torch.Tensor(sp_input.data),
                                    sp_input.shape,
                                    dtype=torch.float32)
@@ -221,3 +222,34 @@ def setup_features(F, num_nodes, featureless, config):
         X.extend(features)
 
     return (X, X_width, modules_config, optimizer_config)
+
+def getNeighboursSparse(A, idx):
+    """
+    Return indices of neighbours of nodes with idx as indices, irrespective
+    of relation.
+    Assume A is a scypi CSR tensor
+    """
+    num_nodes = A.shape[0]
+    neighbours_rel = [np.where(A[i].todense() == 1)[1] for i in idx]
+    neighbours_global = {i%num_nodes for i in np.concatenate(neighbours_rel)}
+
+    return sorted(list(neighbours_global))
+
+def getAdjacencyNodeColumnIdx(idx, num_nodes, num_relations):
+    """
+    Return column idx for all nodes in idx for all relations
+    """
+    return torch.LongTensor([int((r*num_nodes) + i)
+                             for r in range(num_relations) for i in idx])
+
+def sliceSparseCOO(t, idx):
+    row, col = t._indices()[:, torch.where(torch.isin(t._indices()[1],
+                                                      idx))[0]]
+
+    col_index_map = {int(j): i for i,j in enumerate(idx)}
+    col = torch.LongTensor([col_index_map[int(i)] for i in col])
+    
+    return torch.sparse_coo_tensor(torch.vstack([row, col]),
+                                                torch.ones(len(col),
+                                                           dtype=torch.float32),
+                                   size = [t.shape[0], len(idx)])
