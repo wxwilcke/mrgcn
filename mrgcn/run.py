@@ -80,7 +80,7 @@ def main(args, acc_writer, baseFilename, config):
 
     ### prep data ###
     num_nodes = A.shape[0]
-    A = scipy_sparse_to_pytorch_sparse(A)
+    #A = scipy_sparse_to_pytorch_sparse(A)
     X, X_width, modules_config, optimizer_config = setup_features(F, num_nodes, featureless, config)
     #if len(X) <= 1 and X[0].size(1) <= 0:  # X here is a list
     if X_width <= 0:

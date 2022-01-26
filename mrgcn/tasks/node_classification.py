@@ -33,12 +33,15 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
     # train model
     nepoch = config['model']['epoch']
+    batchsize = config['task']['batchsize']
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
+
     # Log wall-clock time
     t0 = time()
     for epoch in train_model(A, model, optimizer, criterion, X, Y,
-                             nepoch, test_split, l1_lambda, l2_lambda, device):
+                             nepoch, test_split, batchsize, l1_lambda,
+                             l2_lambda, device):
         # log metrics
         tsv_writer.writerow([str(epoch[0]),
                              str(epoch[1]),
@@ -50,7 +53,8 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
     # test model
-    loss, acc, labels, targets = test_model(A, model, criterion, X, Y, test_split, device)
+    loss, acc, labels, targets = test_model(A, model, criterion, X, Y, 
+                                           test_split, batchsize, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(loss), str(acc)])
@@ -59,7 +63,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
 
 def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
-                l1_lambda, l2_lambda, device):
+                batchsize, l1_lambda, l2_lambda, device):
     Y_train = Y['train']
     Y_valid = Y['valid']
     if test_split == "test":
@@ -71,55 +75,109 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
         Y_train = sp.csr_matrix((d, (ri, ci)))
         Y_valid = None
 
+
+    # full batch
+    num_samples_train = len(Y_train.data)
+    if batchsize <= 0:
+        batchsize = num_samples_train
+
+    batches = [slice(begin, min(begin+batchsize, num_samples_train))
+               for begin in range(0, num_samples_train, batchsize)]
+    num_batches = len(batches)
     logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(1, nepoch+1):
-        # Single training iteration
         model.train()
 
-        optimizer.zero_grad()
-        # Training scores
-        Y_hat = model(X, A, epoch, device=device).to('cpu')
-        train_loss = categorical_crossentropy(Y_hat, Y_train, criterion)
-        train_acc = categorical_accuracy(Y_hat, Y_train)[0]
+        loss_lst = list()
+        acc_lst = list()
+        for batch_id, batch in enumerate(batches, 1):
+            batch_str = " [TRAIN] - batch %2.d / %d" % (batch_id, num_batches)
+            print(batch_str, end='\b'*len(batch_str), flush=True)
 
-        if l1_lambda > 0:
-            l1_regularization = torch.tensor(0.)
-            for name, param in model.named_parameters():
-                if 'weight' not in name:
-                    continue
-                l1_regularization += torch.sum(param.abs())
+            if num_batches > 1:
+                batch_node_idx = Y_train.nonzero()[0][batch]
+            else:
+                batch_node_idx = ...
 
-            train_loss += l1_lambda * l1_regularization
+            # Training scores
+            Y_batch_hat = model(X, A, batch_node_idx, device=device).to('cpu')
+            Y_batch_train = Y_train[batch_node_idx]
 
-        if l2_lambda > 0:
-            l2_regularization = torch.tensor(0.)
-            for name, param in model.named_parameters():
-                if 'weight' not in name:
-                    continue
-                l2_regularization += torch.sum(param ** 2)
+            batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_train, criterion)
+            batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_train)[0]
 
-            train_loss += l2_lambda * l2_regularization
+            if l1_lambda > 0:
+                l1_regularization = torch.tensor(0.)
+                for name, param in model.named_parameters():
+                    if 'weight' not in name:
+                        continue
+                    l1_regularization += torch.sum(param.abs())
 
-        train_loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+                batch_loss += l1_lambda * l1_regularization
 
-        # cast criterion objects to floats to free the memory of the tensors
-        # they point to
-        train_loss = float(train_loss)
-        train_acc = float(train_acc)
+            if l2_lambda > 0:
+                l2_regularization = torch.tensor(0.)
+                for name, param in model.named_parameters():
+                    if 'weight' not in name:
+                        continue
+                    l2_regularization += torch.sum(param ** 2)
+
+                batch_loss += l2_lambda * l2_regularization
+
+            optimizer.zero_grad()
+            batch_loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+
+            # cast criterion objects to floats to free the memory of the tensors
+            # they point to
+            batch_loss = float(batch_loss)
+            batch_acc = float(batch_acc)
+
+            loss_lst.append(batch_loss)
+            acc_lst.append(batch_acc)
+
+        train_loss = np.mean(loss_lst)
+        train_acc = np.mean(acc_lst)
 
         val_loss = -1
         val_acc = -1
         if Y_valid is not None:
             model.eval()
-            with torch.no_grad():
-                Y_hat = model(X, A, epoch=-1, device=device).to('cpu')
-                val_loss = categorical_crossentropy(Y_hat, Y_valid, criterion)
-                val_acc = categorical_accuracy(Y_hat, Y_valid)[0]
 
-            val_loss = float(val_loss)
-            val_acc = float(val_acc)
+            loss_lst = list()
+            acc_lst = list()
+
+            # mini batching to accomodate large X dimension
+            # assume that number of training samples >> number of validation samples
+            num_samples_valid = len(Y_valid.data)
+            batches_valid = [slice(begin, min(begin+batchsize, num_samples_valid))
+                             for begin in range(0, num_samples_valid, batchsize)]
+            num_batches_valid = len(batches_valid)
+            for batch_id, batch in enumerate(batches_valid, 1):
+                batch_str = " [VALID] - batch %2.d / %d" % (batch_id, num_batches_valid)
+                print(batch_str, end='\b'*len(batch_str), flush=True)
+
+                if num_batches_valid > 1:
+                    batch_node_idx = Y_valid.nonzero()[0][batch]
+                else:
+                    batch_node_idx = ...
+
+                with torch.no_grad():
+                    Y_batch_hat = model(X, A, batch_node_idx, device=device).to('cpu')
+                    Y_batch_valid = Y_valid[batch_node_idx]
+
+                    batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_valid, criterion)
+                    batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_valid)[0]
+
+                batch_loss = float(batch_loss)
+                batch_acc = float(batch_acc)
+            
+                loss_lst.append(batch_loss)
+                acc_lst.append(batch_acc)
+        
+            val_loss = np.mean(loss_lst)
+            val_acc = np.mean(acc_lst)
 
             logging.info("{:04d} ".format(epoch) \
                          + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
@@ -135,18 +193,53 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
                train_loss, train_acc,
                val_loss, val_acc)
 
-def test_model(A, model, criterion, X, Y, test_split, device):
+def test_model(A, model, criterion, X, Y, test_split, batchsize, device):
     # Predict on full dataset
     model.eval()
-    with torch.no_grad():
-        Y_hat = model(X, A, epoch=-1, device=device).to('cpu')
+    Y_test = Y[test_split]
+    num_samples = len(Y_test.data)
 
-    # scores on set
-    loss = categorical_crossentropy(Y_hat, Y[test_split], criterion)
-    acc, labels, targets = categorical_accuracy(Y_hat, Y[test_split])
+    loss_lst = list()
+    acc_lst = list()
+    label_lst = list()
+    target_lst = list()
 
-    loss = float(loss)
-    acc = float(acc)
+    # full batch
+    if batchsize <= 0:
+        batchsize = num_samples
+
+    # mini batching to accomodate large X dimension
+    batches = [slice(begin, min(begin+batchsize, num_samples))
+               for begin in range(0, num_samples, batchsize)]
+    num_batches = len(batches)
+    for batch_id, batch in enumerate(batches, 1):
+        batch_str = " [%s] - batch %2.d / %d" % (test_split.upper(), batch_id, num_batches)
+        print(batch_str, end='\b'*len(batch_str), flush=True)
+
+        if num_batches > 1:
+            batch_node_idx = Y_test.nonzero()[0][batch]
+        else:
+            batch_node_idx = ...
+
+        with torch.no_grad():
+            Y_batch_hat = model(X, A, batch_node_idx, device=device).to('cpu')
+            Y_batch_test = Y_test[batch_node_idx]
+    
+            batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_test, criterion)
+            batch_acc, batch_labels, batch_targets = categorical_accuracy(Y_batch_hat, Y_batch_test)
+
+        batch_loss = float(batch_loss)
+        batch_acc = float(batch_acc)
+    
+        loss_lst.append(batch_loss)
+        acc_lst.append(batch_acc)
+        label_lst.append(batch_labels)
+        target_lst.append(batch_targets)
+
+    loss = np.mean(loss_lst)
+    acc = np.mean(acc_lst)
+    labels = np.concatenate(label_lst)
+    targets = np.concatenate(target_lst)
 
     logging.info("Performance on {} set: loss {:.4f} / accuracy {:.4f}".format(
                   test_split,

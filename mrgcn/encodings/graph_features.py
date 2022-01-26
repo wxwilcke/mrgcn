@@ -8,9 +8,7 @@ import scipy.sparse as sp
 
 from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
 from mrgcn.models.temporal_cnn import TCNN
-from mrgcn.tasks.utils import (mkbatches,
-                               mkbatches_varlength,
-                               remove_outliers,
+from mrgcn.tasks.utils import (remove_outliers,
                                trim_outliers)
 
 logger = logging.getLogger(__name__)
@@ -209,24 +207,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 raise Warning("Outlier trimming not supported for datatype %s" %
                               datatype)
 
-
-        num_batches = 1 if 'num_batches' not in feature_config.keys()\
-                        else feature_config['num_batches']
-        encoding_sets_batched = list()
-        for encodings, node_idc, enc_lengths in encoding_sets:
-            if datatype in ["blob.image", "xsd.date", "xsd.dateTime",
-                            "xsd.gYear", "xsd.boolean", "xsd.numeric"]:
-                batches = mkbatches(encodings,
-                                    node_idc,
-                                    num_batches=num_batches)
-            elif datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
-                batches = mkbatches_varlength(encodings,
-                                              node_idc,
-                                              enc_lengths,
-                                              num_batches=num_batches)
-            encoding_sets_batched.append((encodings, batches))
-
-        embeddings.append((datatype, encoding_sets_batched))
+        embeddings.append((datatype, encoding_sets))
 
     return (embeddings, modules_config, optimizer_config, embeddings_width)
 
