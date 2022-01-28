@@ -163,7 +163,7 @@ class MRGCN(nn.Module):
         H_idx_filtered = [i for i, v in enumerate(H_node_idx)
                           if v in neighbours_idx]
         H_node_idx = H_node_idx[H_idx_filtered]
-        
+
         # prepare A slices
         A_batch = A[batch_idx]
         A_neighbours_unseen = A[neighbours_unseen_idx]
@@ -196,6 +196,12 @@ class MRGCN(nn.Module):
 
             X_batch = torch.cat([X_batch, XF], dim=1)
 
+            logger.debug("Computing embeddings for %d / %d nodes" %
+                         (len(X_batch_idx), self.num_nodes))
+        else: 
+            logger.debug("Computing embeddings for %d / %d nodes" %
+                         (len(H_node_idx), self.num_nodes))
+        
         # wrap in list for easy transfer
         neighbours = [torch.LongTensor(neighbours_idx),
                       torch.LongTensor(depth2neighbours_idx),

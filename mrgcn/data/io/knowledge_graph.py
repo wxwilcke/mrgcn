@@ -1,9 +1,12 @@
 #!/usr/bin/python3
 
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import total_ordering
 import logging
 import gzip
+from tarfile import DEFAULT_FORMAT
+
+from numpy import infty
 
 from rdflib.graph import Graph
 from rdflib.term import BNode, Literal
