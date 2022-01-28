@@ -4,10 +4,10 @@
 name = "AIFB"
 
 [graph]
-context = "../../datasets/aifb/aifb_revised_stripped.nt.gz"
-train = "../../datasets/aifb/aifb_train_set.nt.gz"
-valid = "../../datasets/aifb/aifb_valid_set.nt.gz"
-test = "../../datasets/aifb/aifb_test_set.nt.gz"
+context = "/data/projects/multimodal_datasets/aifb/aifb+.nt.gz"
+train = "/data/projects/multimodal_datasets/aifb/aifb+_train_set.nt.gz"
+valid = "/data/projects/multimodal_datasets/aifb/aifb+_valid_set.nt.gz"
+test = "/data/projects/multimodal_datasets/aifb/aifb+_test_set.nt.gz"
 
 [graph.structural]
 include_inverse_properties = true
@@ -26,7 +26,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
 share_weights = true
 embedding_dim = 1
 p_dropout = 0.0
@@ -48,6 +48,7 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'xsd.string'
 include = false
+num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = true
@@ -59,6 +60,7 @@ noise_multiplier = 0.0
 #[[graph.features]]
 #datatype = 'blob.image'
 #include = false
+#num_batches = 16
 #share_weights = true
 #trim_outliers = false
 #remove_outliers = false
@@ -68,6 +70,7 @@ noise_multiplier = 0.0
 #[[graph.features]]
 #datatype = 'ogc.wktLiteral'
 #include = false
+#num_batches = 16
 #share_weights = true
 #remove_outliers = false
 #embedding_dim = 16
@@ -78,11 +81,11 @@ type = "node classification"
 target_property = 'http://swrc.ontoware.org/ontology#affiliation'
 target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
 seed = -1  # use < 0 for random
-model_on_gpu = false
-batchsize = -1  # < 1 for full batch
+model_on_gpu= false
+batchsize = -1
 
 [model]
-epoch = 50
+epoch = 15
 learning_rate = 0.01
 num_bases = 0
 p_dropout = 0

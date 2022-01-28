@@ -2,6 +2,7 @@
 
 import logging
 from math import ceil
+from shutil import get_terminal_size
 from time import time
 
 import numpy as np
@@ -36,7 +37,9 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     criterion = nn.BCEWithLogitsLoss()
 
     # mini batching
-    mrr_batch_size = int(config['model']['mrr_batch_size'])
+    mrr_batchsize = int(config['task']['mrr_batchsize'])
+    node_batchsize = int(config['task']['node_batchsize'])
+    batchsize = config['task']['batchsize']
 
     # train model
     nepoch = config['model']['epoch']
@@ -47,9 +50,9 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     # Log wall-clock time
     t0 = time()
     for result in train_model(A, X, data, num_nodes, model, optimizer,
-                              criterion, nepoch, mrr_batch_size, eval_interval,
-                              filter_ranks, l1_lambda, l2_lambda, model_device,
-                              distmult_device):
+                              criterion, nepoch, batchsize, node_batchsize, 
+                              mrr_batchsize, eval_interval, filter_ranks,
+                              l1_lambda, l2_lambda, model_device, distmult_device):
 
         epoch, loss, train_mrr, train_hits_at_k,\
                      valid_mrr, valid_hits_at_k = result
@@ -79,7 +82,8 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
     test_data = data[test_split]
     test_mrr, test_hits_at_k, test_ranks = test_model(A, X, test_data,
-                                                      model, mrr_batch_size,
+                                                      model, node_batchsize,
+                                                      mrr_batchsize,
                                                       filter_ranks,
                                                       model_device,
                                                       distmult_device)
@@ -101,94 +105,189 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     return (test_mrr, test_hits_at_k, test_ranks)
 
 
+#def train_model(A, X, data, num_nodes, model, optimizer, criterion,
+#                nepoch, mrr_batch_size, eval_interval, batchsize, 
+#                filter_ranks, l1_lambda, l2_lambda, model_device,
+#                distmult_device):
+#    logging.info("Training for {} epoch".format(nepoch))
+#
+#    train_data = data["train"]
+#    nsamples = train_data.shape[0]
+#    for epoch in range(1, nepoch+1):
+#        model.train()
+#        # Single iteration
+#        node_embeddings = model(X, A, epoch=epoch,
+#                                device=model_device).to(distmult_device)
+#        edge_embeddings = model.rgcn.relations.to(distmult_device)
+#
+#        # sample negative triples by copying and corrupting positive triples
+#        ncorrupt = nsamples//5
+#        neg_samples_idx = torch.from_numpy(np.random.choice(np.arange(nsamples),
+#                                                            ncorrupt,
+#                                                            replace=False))
+#
+#        ncorrupt_head = ncorrupt//2
+#        ncorrupt_tail = ncorrupt - ncorrupt_head
+#        corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
+#
+#        corrupted_data = train_data[neg_samples_idx]
+#        corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
+#                                                                              ncorrupt_head))
+#        corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
+#                                                                               ncorrupt_tail))
+#
+#        # create labels; positive samples are 1, negative 0
+#        Y = torch.ones(nsamples+ncorrupt, dtype=torch.float32)
+#        Y[-ncorrupt:] = 0
+#
+#        # compute score
+#        Y_hat = torch.empty((nsamples+ncorrupt), dtype=torch.float32)
+#        Y_hat[:nsamples] = score_distmult_bc((train_data[:, 0],
+#                                              train_data[:, 1],
+#                                              train_data[:, 2]),
+#                                             node_embeddings,
+#                                             edge_embeddings).to('cpu')
+#        Y_hat[-ncorrupt:] = score_distmult_bc((corrupted_data[:, 0],
+#                                               corrupted_data[:, 1],
+#                                               corrupted_data[:, 2]),
+#                                              node_embeddings,
+#                                              edge_embeddings).to('cpu')
+#
+#        # clear gpu cache to save memory
+#        if model_device == torch.device('cpu') and\
+#           distmult_device != torch.device('cpu'):
+#            del node_embeddings
+#            del edge_embeddings
+#            torch.cuda.empty_cache()
+#
+#        # compute loss
+#        optimizer.zero_grad()
+#        loss = binary_crossentropy(Y_hat, Y, criterion)
+
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, mrr_batch_size, eval_interval, filter_ranks,
-                l1_lambda, l2_lambda, model_device, distmult_device):
+                nepoch, batchsize, node_batchsize, mrr_batchsize,
+                eval_interval, filter_ranks, l1_lambda, l2_lambda,
+                model_device, distmult_device):
     logging.info("Training for {} epoch".format(nepoch))
 
     train_data = data["train"]
-    nsamples = train_data.shape[0]
+    num_samples = train_data.shape[0]
+    
+    if batchsize <= 0:
+        batchsize = num_samples
+
+    batches = [slice(begin, min(begin+batchsize, num_samples))
+               for begin in range(0, num_samples, batchsize)]
+    num_batches = len(batches)
     for epoch in range(1, nepoch+1):
         model.train()
-        # Single iteration
-        node_embeddings = model(X, A, epoch=epoch,
-                                device=model_device).to(distmult_device)
-        edge_embeddings = model.rgcn.relations.to(distmult_device)
+        
+        loss_lst = list()
+        for batch_id, batch in enumerate(batches, 1):
+            batch_str = " [TRAIN] - batch %2.d / %d" % (batch_id, num_batches)
+            print(batch_str, end='\b'*len(batch_str), flush=True)
 
-        # sample negative triples by copying and corrupting positive triples
-        ncorrupt = nsamples//5
-        neg_samples_idx = torch.from_numpy(np.random.choice(np.arange(nsamples),
-                                                            ncorrupt,
-                                                            replace=False))
+            batch_data = train_data[batch].detach().clone()
+            batch_num_samples = batch_data.shape[0]
 
-        ncorrupt_head = ncorrupt//2
-        ncorrupt_tail = ncorrupt - ncorrupt_head
-        corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
+            # sample negative triples by copying and corrupting positive triples
+            ncorrupt = batch_num_samples//5
+            neg_samples_idx = torch.from_numpy(
+                np.random.choice(np.arange(batch_num_samples),
+                                 ncorrupt,
+                                 replace=False))
 
-        corrupted_data = train_data[neg_samples_idx]
-        corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
-                                                                              ncorrupt_head))
-        corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
-                                                                               ncorrupt_tail))
+            ncorrupt_head = ncorrupt//2
+            ncorrupt_tail = ncorrupt - ncorrupt_head
+            corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
 
-        # create labels; positive samples are 1, negative 0
-        Y = torch.ones(nsamples+ncorrupt, dtype=torch.float32)
-        Y[-ncorrupt:] = 0
+            # within-batch corruption to reduce the need to compute others
+            corrupted_data = batch_data[neg_samples_idx]
+            batch_nodes = np.union1d(batch_data[:, 0], batch_data[:, 2])
+            corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(batch_nodes,
+                                                                                  ncorrupt_head))
+            corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(batch_nodes,
+                                                                                   ncorrupt_tail))
 
-        # compute score
-        Y_hat = torch.empty((nsamples+ncorrupt), dtype=torch.float32)
-        Y_hat[:nsamples] = score_distmult_bc((train_data[:, 0],
-                                              train_data[:, 1],
-                                              train_data[:, 2]),
-                                             node_embeddings,
-                                             edge_embeddings).to('cpu')
-        Y_hat[-ncorrupt:] = score_distmult_bc((corrupted_data[:, 0],
-                                               corrupted_data[:, 1],
-                                               corrupted_data[:, 2]),
-                                              node_embeddings,
-                                              edge_embeddings).to('cpu')
+            # remap nodes to match embedding index
+            node_idx_map = {i:j for j,i in enumerate(batch_nodes)}
+            batch_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
+                                                 for i in batch_data[:, 0]])
+            batch_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
+                                                 for i in batch_data[:, 2]])
+            corrupted_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
+                                                     for i in corrupted_data[:, 0]])
+            corrupted_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
+                                                     for i in corrupted_data[:, 2]])
 
-        # clear gpu cache to save memory
-        if model_device == torch.device('cpu') and\
-           distmult_device != torch.device('cpu'):
-            del node_embeddings
-            del edge_embeddings
-            torch.cuda.empty_cache()
+            # create labels; positive samples are 1, negative 0
+            Y = torch.ones(batch_num_samples+ncorrupt, dtype=torch.float32)
+            Y[-ncorrupt:] = 0
 
-        # compute loss
-        optimizer.zero_grad()
-        loss = binary_crossentropy(Y_hat, Y, criterion)
+            # compute score
+            node_embeddings = model(X, A, batch_nodes,
+                                    device=model_device).to(distmult_device)
+            edge_embeddings = model.rgcn.relations.to(distmult_device)
 
-        if l1_lambda > 0:
-            l1_regularization = torch.tensor(0.)
-            for name, param in model.named_parameters():
-                if 'weight' not in name:
-                    continue
-                l1_regularization += torch.sum(param.abs())
+            # subset of nodes in batch (rest are neighbours)
+            node_embeddings = node_embeddings[:len(batch_nodes)]
 
-            loss += l1_lambda * l1_regularization
+            Y_hat = torch.empty((batch_num_samples+ncorrupt), dtype=torch.float32)
+            Y_hat[:batch_num_samples] = score_distmult_bc((batch_data[:, 0],
+                                                           batch_data[:, 1],
+                                                           batch_data[:, 2]),
+                                                          node_embeddings,
+                                                          edge_embeddings).to('cpu')
+            Y_hat[-ncorrupt:] = score_distmult_bc((corrupted_data[:, 0],
+                                                   corrupted_data[:, 1],
+                                                   corrupted_data[:, 2]),
+                                                  node_embeddings,
+                                                  edge_embeddings).to('cpu')
 
-        if l2_lambda > 0:
-            l2_regularization = torch.tensor(0.)
-            for name, param in model.named_parameters():
-                if 'weight' not in name:
-                    continue
-                l2_regularization += torch.sum(param ** 2)
+            # clear gpu cache to save memory
+            if model_device == torch.device('cpu') and\
+               distmult_device != torch.device('cpu'):
+                del node_embeddings
+                del edge_embeddings
+                torch.cuda.empty_cache()
 
-            loss += l2_lambda * l2_regularization
+            # compute loss
+            optimizer.zero_grad()
+            loss = binary_crossentropy(Y_hat, Y, criterion)
 
-        loss.backward()  # training loss
-        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+            if l1_lambda > 0:
+                l1_regularization = torch.tensor(0.)
+                for name, param in model.named_parameters():
+                    if 'weight' not in name:
+                        continue
+                    l1_regularization += torch.sum(param.abs())
 
-        loss = float(loss)  # remove pointer to gradients to free memory
+                loss += l1_lambda * l1_regularization
+
+            if l2_lambda > 0:
+                l2_regularization = torch.tensor(0.)
+                for name, param in model.named_parameters():
+                    if 'weight' not in name:
+                        continue
+                    l2_regularization += torch.sum(param ** 2)
+
+                loss += l2_lambda * l2_regularization
+
+            loss.backward()  # training loss
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+
+            loss_lst.append(float(loss))
+        
+        loss = np.mean(loss_lst)
         results_str = f"{epoch:04d} | loss {loss:.4f}"
 
         train_mrr, train_hits_at_k = None, None
         valid_mrr, valid_hits_at_k = None, None
         if epoch % eval_interval == 0 or epoch == nepoch:
             train_mrr, train_hits_at_k, _ = test_model(A, X, train_data, model,
-                                                       mrr_batch_size,
+                                                       node_batchsize,
+                                                       mrr_batchsize,
                                                        filter_ranks,
                                                        model_device,
                                                        distmult_device)
@@ -203,7 +302,8 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                 valid_data = data["valid"]
                 valid_mrr, valid_hits_at_k, _ = test_model(A, X, valid_data,
                                                            model,
-                                                           mrr_batch_size,
+                                                           node_batchsize,
+                                                           mrr_batchsize,
                                                            filter_ranks,
                                                            model_device,
                                                            distmult_device)
@@ -211,6 +311,10 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                 results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) "
                 if filter_ranks:
                     results_str += f" / flt {valid_mrr['flt']:.4f} (filtered)"
+        else:
+            term_width = get_terminal_size().columns
+            width_remain = term_width - len(results_str)
+            results_str += " " * (width_remain//2)  # ensure overwrite of batch message
 
         logging.info(results_str)
 
@@ -219,16 +323,36 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                valid_mrr, valid_hits_at_k)
 
 
-def test_model(A, X, data, model, mrr_batch_size, filter_ranks,
+def test_model(A, X, data, model, node_batchsize, mrr_batch_size, filter_ranks,
                model_device, distmult_device):
     model.eval()
+    
+    num_nodes = A.shape[0]
+    if node_batchsize <= 0:
+        node_batchsize = num_nodes
 
+    batches = [slice(begin, min(begin+node_batchsize, num_nodes))
+               for begin in range(0, num_nodes, node_batchsize)]
+    num_batches = len(batches)
+    
     mrr = dict()
     hits_at_k = dict()
     rankings = dict()
     with torch.no_grad():
-        node_embeddings = model(X, A, epoch=-1,
-                                device=model_device).to(distmult_device)
+        out_dim = model.rgcn.layers['layer_0'].outdim  # assume one GCN layer
+        node_embeddings = torch.zeros((num_nodes, out_dim)) 
+        for batch_id, batch in enumerate(batches, 1):
+            batch_str = " [MRGCN] - batch %2.d / %d" % (batch_id, num_batches)
+            print(batch_str, end='\b'*len(batch_str), flush=True)
+
+            batch_idx = np.arange(batch.start, batch.stop)
+            batch_num_samples = len(batch_idx)
+            batch_embeddings = model(X, A, batch_idx,
+                                     device=model_device)[:batch_num_samples].to('cpu')
+
+            node_embeddings[batch_idx, :] = batch_embeddings
+
+        node_embeddings = node_embeddings.to(distmult_device)
         edge_embeddings = model.rgcn.relations.to(distmult_device)
 
         for filtered in [False, True]:
@@ -280,7 +404,7 @@ def build_model(C, A, modules_config, config, featureless):
     # get sizes from dataset
     X_dim = C  # == 0 if featureless
     num_nodes = A.shape[0]
-    num_relations = int(A.size()[1]/num_nodes)
+    num_relations = int(A.shape[1]/num_nodes)
 
     modules = list()
     # input layer
@@ -371,8 +495,9 @@ def compute_ranks_fast(data, node_embeddings, edge_embeddings,
 
             batch_idx = (int(head) * num_batches) + batch_id + 1
             if batch_idx % min(ceil(2*num_batches/10), 100) == 0:
-                logger.debug(" DistMult batch {} / {}".format(batch_idx,
-                                                              num_batches*2))
+                batch_str = " [DistMult] - batch %2.d / %d" % (batch_idx,
+                                                               num_batches*2)
+                print(batch_str, end='\b'*len(batch_str), flush=True)
 
             batch_data = data[batch_begin:batch_end]
             batch_num_facts = batch_data.shape[0]
