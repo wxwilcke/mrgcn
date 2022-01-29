@@ -196,11 +196,13 @@ class MRGCN(nn.Module):
 
             X_batch = torch.cat([X_batch, XF], dim=1)
 
+            nodes_needed = len(X_batch_idx)
             logger.debug("Computing embeddings for %d / %d nodes" %
-                         (len(X_batch_idx), self.num_nodes))
+                         (nodes_needed, self.num_nodes))
         else: 
+            nodes_needed = len(H_node_idx)
             logger.debug("Computing embeddings for %d / %d nodes" %
-                         (len(H_node_idx), self.num_nodes))
+                         (nodes_needed, self.num_nodes))
         
         # wrap in list for easy transfer
         neighbours = [torch.LongTensor(neighbours_idx),
