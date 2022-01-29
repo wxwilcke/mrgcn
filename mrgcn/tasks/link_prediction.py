@@ -27,6 +27,9 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
                        split+"_H@3_flt", split+"_H@10_flt"])
     tsv_writer.writerow(header)
 
+    # used for clearing a line
+    term_width = get_terminal_size().columns
+
     # compile model
     num_nodes = A.shape[0]
     model = build_model(X_width, A, modules_config, config, featureless)
@@ -38,7 +41,6 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
     # mini batching
     mrr_batchsize = int(config['task']['mrr_batchsize'])
-    node_batchsize = int(config['task']['node_batchsize'])
     batchsize = config['task']['batchsize']
 
     # train model
@@ -47,12 +49,17 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     filter_ranks = config['task']['filter_ranks']
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
+
+    # store nodes needed per batch; used as pointer
+    batchsize_lst = list()
+
     # Log wall-clock time
     t0 = time()
     for result in train_model(A, X, data, num_nodes, model, optimizer,
-                              criterion, nepoch, batchsize, node_batchsize, 
+                              criterion, nepoch, batchsize, batchsize_lst,
                               mrr_batchsize, eval_interval, filter_ranks,
-                              l1_lambda, l2_lambda, model_device, distmult_device):
+                              l1_lambda, l2_lambda, model_device,
+                              distmult_device, term_width):
 
         epoch, loss, train_mrr, train_hits_at_k,\
                      valid_mrr, valid_hits_at_k = result
@@ -77,16 +84,20 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
+    # the highest seen batchsize during training
+    node_batchsize = max(batchsize_lst)
+
     # Log wall-clock time
     t0 = time()
 
     test_data = data[test_split]
-    test_mrr, test_hits_at_k, test_ranks = test_model(A, X, test_data,
-                                                      model, node_batchsize,
-                                                      mrr_batchsize,
-                                                      filter_ranks,
-                                                      model_device,
-                                                      distmult_device)
+    test_mrr, test_hits_at_k, test_ranks, _ = test_model(A, X, test_data,
+                                                         model, node_batchsize,
+                                                         mrr_batchsize,
+                                                         filter_ranks,
+                                                         model_device,
+                                                         distmult_device,
+                                                         term_width)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
 
@@ -165,9 +176,9 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 #        loss = binary_crossentropy(Y_hat, Y, criterion)
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, batchsize, node_batchsize, mrr_batchsize,
+                nepoch, batchsize, batchsize_lst, mrr_batchsize,
                 eval_interval, filter_ranks, l1_lambda, l2_lambda,
-                model_device, distmult_device):
+                model_device, distmult_device, term_width):
     logging.info("Training for {} epoch".format(nepoch))
 
     train_data = data["train"]
@@ -187,8 +198,16 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
             batch_str = " [TRAIN] - batch %2.d / %d" % (batch_id, num_batches)
             print(batch_str, end='\b'*len(batch_str), flush=True)
 
-            batch_data = train_data[batch].detach().clone()
+            if num_batches > 1:
+                batch_data = train_data[batch].detach().clone()
+                batch_nodes = np.union1d(batch_data[:, 0], batch_data[:, 2])
+            else:
+                # full batch
+                batch_data = train_data
+                batch_nodes = np.arange(num_nodes)
+
             batch_num_samples = batch_data.shape[0]
+            batch_num_nodes = len(batch_nodes)
 
             # sample negative triples by copying and corrupting positive triples
             ncorrupt = batch_num_samples//5
@@ -203,22 +222,22 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
 
             # within-batch corruption to reduce the need to compute others
             corrupted_data = batch_data[neg_samples_idx]
-            batch_nodes = np.union1d(batch_data[:, 0], batch_data[:, 2])
             corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(batch_nodes,
                                                                                   ncorrupt_head))
             corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(batch_nodes,
                                                                                    ncorrupt_tail))
 
             # remap nodes to match embedding index
-            node_idx_map = {i:j for j,i in enumerate(batch_nodes)}
-            batch_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
-                                                 for i in batch_data[:, 0]])
-            batch_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
-                                                 for i in batch_data[:, 2]])
-            corrupted_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
-                                                     for i in corrupted_data[:, 0]])
-            corrupted_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
-                                                     for i in corrupted_data[:, 2]])
+            if num_batches > 1:
+                node_idx_map = {i:j for j,i in enumerate(batch_nodes)}
+                batch_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
+                                                     for i in batch_data[:, 0]])
+                batch_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
+                                                     for i in batch_data[:, 2]])
+                corrupted_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
+                                                         for i in corrupted_data[:, 0]])
+                corrupted_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
+                                                         for i in corrupted_data[:, 2]])
 
             # create labels; positive samples are 1, negative 0
             Y = torch.ones(batch_num_samples+ncorrupt, dtype=torch.float32)
@@ -230,7 +249,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
             edge_embeddings = model.rgcn.relations.to(distmult_device)
 
             # subset of nodes in batch (rest are neighbours)
-            node_embeddings = node_embeddings[:len(batch_nodes)]
+            node_embeddings = node_embeddings[:batch_num_nodes]
 
             Y_hat = torch.empty((batch_num_samples+ncorrupt), dtype=torch.float32)
             Y_hat[:batch_num_samples] = score_distmult_bc((batch_data[:, 0],
@@ -278,6 +297,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
             optimizer.step()
 
             loss_lst.append(float(loss))
+            batchsize_lst.append(batch_num_nodes)
         
         loss = np.mean(loss_lst)
         results_str = f"{epoch:04d} | loss {loss:.4f}"
@@ -285,12 +305,17 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
         train_mrr, train_hits_at_k = None, None
         valid_mrr, valid_hits_at_k = None, None
         if epoch % eval_interval == 0 or epoch == nepoch:
-            train_mrr, train_hits_at_k, _ = test_model(A, X, train_data, model,
-                                                       node_batchsize,
-                                                       mrr_batchsize,
-                                                       filter_ranks,
-                                                       model_device,
-                                                       distmult_device)
+            # the highest seen batchsize during training
+            node_batchsize = max(batchsize_lst)
+            logger.debug("Using %d nodes per batch for evaluation" % node_batchsize)
+
+            train_mrr, train_hits_at_k, _, cache = test_model(A, X, train_data, model,
+                                                              node_batchsize,
+                                                              mrr_batchsize,
+                                                              filter_ranks,
+                                                              model_device,
+                                                              distmult_device,
+                                                              term_width)
 
             results_str += f" | train MRR {train_mrr['raw']:.4f} (raw)"
             if filter_ranks:
@@ -300,19 +325,20 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
             valid_hits_at_k = None
             if "valid" in data.keys() and epoch < nepoch:
                 valid_data = data["valid"]
-                valid_mrr, valid_hits_at_k, _ = test_model(A, X, valid_data,
-                                                           model,
-                                                           node_batchsize,
-                                                           mrr_batchsize,
-                                                           filter_ranks,
-                                                           model_device,
-                                                           distmult_device)
+                valid_mrr, valid_hits_at_k, _, _ = test_model(A, X, valid_data,
+                                                              model,
+                                                              node_batchsize,
+                                                              mrr_batchsize,
+                                                              filter_ranks,
+                                                              model_device,
+                                                              distmult_device,
+                                                              term_width,
+                                                              cache)
 
                 results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) "
                 if filter_ranks:
                     results_str += f" / flt {valid_mrr['flt']:.4f} (filtered)"
         else:
-            term_width = get_terminal_size().columns
             width_remain = term_width - len(results_str)
             results_str += " " * (width_remain//2)  # ensure overwrite of batch message
 
@@ -324,7 +350,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
 
 
 def test_model(A, X, data, model, node_batchsize, mrr_batch_size, filter_ranks,
-               model_device, distmult_device):
+               model_device, distmult_device, term_width, cache=None):
     model.eval()
     
     num_nodes = A.shape[0]
@@ -339,21 +365,26 @@ def test_model(A, X, data, model, node_batchsize, mrr_batch_size, filter_ranks,
     hits_at_k = dict()
     rankings = dict()
     with torch.no_grad():
-        out_dim = model.rgcn.layers['layer_0'].outdim  # assume one GCN layer
-        node_embeddings = torch.zeros((num_nodes, out_dim)) 
-        for batch_id, batch in enumerate(batches, 1):
-            batch_str = " [MRGCN] - batch %2.d / %d" % (batch_id, num_batches)
-            print(batch_str, end='\b'*len(batch_str), flush=True)
+        if cache is not None:
+            node_embeddings, edge_embeddings = cache
+        else:
+            out_dim = model.rgcn.layers['layer_0'].outdim  # assume one GCN layer
+            node_embeddings = torch.zeros((num_nodes, out_dim)) 
+            for batch_id, batch in enumerate(batches, 1):
+                batch_str = " [MRGCN] - batch %2.d / %d" % (batch_id, num_batches)
+                width_remain = term_width - len(batch_str)
+                batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
+                print(batch_str, end='\b'*len(batch_str), flush=True)
 
-            batch_idx = np.arange(batch.start, batch.stop)
-            batch_num_samples = len(batch_idx)
-            batch_embeddings = model(X, A, batch_idx,
-                                     device=model_device)[:batch_num_samples].to('cpu')
+                batch_idx = np.arange(batch.start, batch.stop)
+                batch_num_samples = len(batch_idx)
+                batch_embeddings = model(X, A, batch_idx,
+                                         device=model_device)[:batch_num_samples].to('cpu')
 
-            node_embeddings[batch_idx, :] = batch_embeddings
+                node_embeddings[batch_idx, :] = batch_embeddings
 
-        node_embeddings = node_embeddings.to(distmult_device)
-        edge_embeddings = model.rgcn.relations.to(distmult_device)
+            node_embeddings = node_embeddings.to(distmult_device)
+            edge_embeddings = model.rgcn.relations.to(distmult_device)
 
         for filtered in [False, True]:
             rank_type = "flt" if filtered else "raw"
@@ -368,7 +399,8 @@ def test_model(A, X, data, model, node_batchsize, mrr_batch_size, filter_ranks,
                                        node_embeddings,
                                        edge_embeddings,
                                        mrr_batch_size,
-                                       filtered)
+                                       filtered,
+                                       term_width)
 
             mrr[rank_type] = torch.mean(1.0 / ranks.float()).item()
             hits_at_k[rank_type] = list()
@@ -378,7 +410,7 @@ def test_model(A, X, data, model, node_batchsize, mrr_batch_size, filter_ranks,
             ranks = ranks.tolist()
             rankings[rank_type] = ranks
 
-    return (mrr, hits_at_k, rankings)
+    return (mrr, hits_at_k, rankings, [node_embeddings, edge_embeddings])
 
 
 def build_dataset(kg, nodes_map, config, featureless):
@@ -480,7 +512,7 @@ def truedicts(facts):
 
 
 def compute_ranks_fast(data, node_embeddings, edge_embeddings,
-                       batch_size=16, filtered=True):
+                       batch_size=16, filtered=True, term_width=80):
     true_heads, true_tails = truedicts(data) if filtered else (None, None)
 
     num_facts = data.shape[0]
@@ -494,9 +526,11 @@ def compute_ranks_fast(data, node_embeddings, edge_embeddings,
             batch_end = min(num_facts, (batch_id+1) * batch_size)
 
             batch_idx = (int(head) * num_batches) + batch_id + 1
-            if batch_idx % min(ceil(2*num_batches/10), 100) == 0:
+            if batch_idx % min(ceil(2*num_batches/20), 100) == 0:
                 batch_str = " [DistMult] - batch %2.d / %d" % (batch_idx,
                                                                num_batches*2)
+                width_remain = term_width - len(batch_str)
+                batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
                 print(batch_str, end='\b'*len(batch_str), flush=True)
 
             batch_data = data[batch_begin:batch_end]
