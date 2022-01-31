@@ -4,6 +4,7 @@
 name = "AM"
 
 [graph]
+# available at https://gitlab.com/wxwilcke/mmkg
 context = "../../datasets/am/am_stripped_revised_updated.nt.gz"
 train = "../../datasets/am/am_train_set.nt.gz"
 valid = "../../datasets/am/am_valid_set.nt.gz"
@@ -53,7 +54,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -65,7 +65,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-num_batches = 16
 share_weights = false
 remove_outliers = false
 embedding_dim = 128
@@ -89,6 +88,7 @@ target_property = 'http://purl.org/collections/nl/am/objectCategory'
 target_property_inv = 'http://purl.org/collections/nl/am/material'
 seed = -1  # use < 0 for random
 model_on_gpu = false
+batchsize = -1  # < 0 for full batch
 
 [model]
 epoch = 50

@@ -63,7 +63,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-num_batches = 16
 share_weights = false
 trim_outliers = false
 remove_outliers = false
@@ -77,7 +76,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'xsd.anyURI'
 include = true
-num_batches = 16
 share_weights = false
 trim_outliers = false
 remove_outliers = false
@@ -89,7 +87,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-num_batches = 16
 share_weights = false
 trim_outliers = false
 remove_outliers = false
@@ -101,7 +98,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
-num_batches = 16
 share_weights = false
 remove_outliers = false
 embedding_dim = 16
@@ -120,14 +116,15 @@ type = 'link prediction'
 distmult_on_gpu = false
 eval_interval = 10
 filter_ranks = true
+mrr_batch_size = 5e1
 
 seed = -1  # use < 0 for random
 model_on_gpu = false
+batchsize = -1  # < 0 for full batch
 
 [model]
 epoch = 50
 learning_rate = 0.01
-mrr_batch_size = 5e1
 num_bases = 0
 p_dropout = 0.0
 weight_decay = 0.0

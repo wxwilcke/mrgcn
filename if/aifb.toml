@@ -4,6 +4,7 @@
 name = "AIFB"
 
 [graph]
+# available at https://gitlab.com/wxwilcke/mmkg
 context = "/data/projects/multimodal_datasets/aifb/aifb+.nt.gz"
 train = "/data/projects/multimodal_datasets/aifb/aifb+_train_set.nt.gz"
 valid = "/data/projects/multimodal_datasets/aifb/aifb+_valid_set.nt.gz"
@@ -17,7 +18,7 @@ multiprocessing = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
+include = true
 share_weights = false
 embedding_dim = 4
 p_dropout = 0.0
@@ -47,7 +48,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 num_batches = 16
 share_weights = true
 trim_outliers = false
@@ -82,10 +83,10 @@ target_property = 'http://swrc.ontoware.org/ontology#affiliation'
 target_property_inv = 'http://swrc.ontoware.org/ontology#employs'
 seed = -1  # use < 0 for random
 model_on_gpu= false
-batchsize = -1
+batchsize = -1  # < 0 for full batch
 
 [model]
-epoch = 15
+epoch = 50
 learning_rate = 0.01
 num_bases = 0
 p_dropout = 0

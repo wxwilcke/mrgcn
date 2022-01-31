@@ -4,6 +4,7 @@
 name = "BGS"
 
 [graph]
+# available at https://gitlab.com/wxwilcke/mmkg
 context = "../../datasets/bgs/bgs_stripped_revised.nt.gz"
 train = "../../datasets/bgs/bgs_train_set.nt.gz"
 valid = "../../datasets/bgs/bgs_valid_set.nt.gz"
@@ -48,7 +49,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -69,7 +69,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
-num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -84,6 +83,7 @@ target_property = 'http://data.bgs.ac.uk/ref/Lexicon/hasLithogenesis'
 target_property_inv = ''
 seed = -1  # use < 0 for random
 model_on_gpu = false
+batchsize = -1  # < 0 for full batch
 
 [model]
 epoch = 50

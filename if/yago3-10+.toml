@@ -4,6 +4,7 @@
 name = "YAGO3-10+"
 
 [graph]
+# available at https://gitlab.com/wxwilcke/mmkg
 train = "../../datasets/yago3-10\+/rdf/"
 valid = "../../datasets/yago3-10\+/rdf/"
 test = "../../datasets/yago3-10\+/rdf/"
@@ -42,7 +43,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-num_batches = 16
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -54,7 +54,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-num_batches = 16
 share_weights = true
 remove_outliers = false
 embedding_dim = 128
@@ -78,11 +77,12 @@ model_on_gpu = false
 distmult_on_gpu = false
 eval_interval = 10
 filter_ranks = true
+mrr_batch_size = 5e1
+batchsize = -1  # < 0 for full batch
 
 [model]
 epoch = 20
 learning_rate = 0.01
-mrr_batch_size = 5e1
 num_bases = 2
 p_dropout = 0.0
 weight_decay = 0.0
