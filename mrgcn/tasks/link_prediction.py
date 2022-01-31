@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
-        config, modules_config, optimizer_config, featureless, test_split):
+        config, modules_config, optimizer_config, featureless, test_split,
+        checkpoint):
     header = ["epoch", "loss"]
     for split in ["train", "valid", "test"]:
         header.extend([split+"_mrr_raw", split+"_H@1_raw", split+"_H@3_raw",
@@ -50,13 +51,26 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
 
+    epoch = 0
+    if checkpoint is not None:
+        model.to("cpu")
+
+        print("[LOAD] Loading model state", end='')
+        checkpoint = torch.load(checkpoint)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+
+        print(f" - {epoch} epoch")
+
     # store nodes needed per batch; used as pointer
     batchsize_lst = list()
 
     # Log wall-clock time
     t0 = time()
+    loss = 0.0
     for result in train_model(A, X, data, num_nodes, model, optimizer,
-                              criterion, nepoch, batchsize, batchsize_lst,
+                              criterion, epoch, nepoch, batchsize, batchsize_lst,
                               mrr_batchsize, eval_interval, filter_ranks,
                               l1_lambda, l2_lambda, model_device,
                               distmult_device, term_width):
@@ -113,70 +127,10 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
                        str(test_hits_at_k['flt'][2])])
     tsv_writer.writerow(result_str)
 
-    return (test_mrr, test_hits_at_k, test_ranks)
-
-
-#def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-#                nepoch, mrr_batch_size, eval_interval, batchsize, 
-#                filter_ranks, l1_lambda, l2_lambda, model_device,
-#                distmult_device):
-#    logging.info("Training for {} epoch".format(nepoch))
-#
-#    train_data = data["train"]
-#    nsamples = train_data.shape[0]
-#    for epoch in range(1, nepoch+1):
-#        model.train()
-#        # Single iteration
-#        node_embeddings = model(X, A, epoch=epoch,
-#                                device=model_device).to(distmult_device)
-#        edge_embeddings = model.rgcn.relations.to(distmult_device)
-#
-#        # sample negative triples by copying and corrupting positive triples
-#        ncorrupt = nsamples//5
-#        neg_samples_idx = torch.from_numpy(np.random.choice(np.arange(nsamples),
-#                                                            ncorrupt,
-#                                                            replace=False))
-#
-#        ncorrupt_head = ncorrupt//2
-#        ncorrupt_tail = ncorrupt - ncorrupt_head
-#        corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
-#
-#        corrupted_data = train_data[neg_samples_idx]
-#        corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
-#                                                                              ncorrupt_head))
-#        corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(np.arange(num_nodes),
-#                                                                               ncorrupt_tail))
-#
-#        # create labels; positive samples are 1, negative 0
-#        Y = torch.ones(nsamples+ncorrupt, dtype=torch.float32)
-#        Y[-ncorrupt:] = 0
-#
-#        # compute score
-#        Y_hat = torch.empty((nsamples+ncorrupt), dtype=torch.float32)
-#        Y_hat[:nsamples] = score_distmult_bc((train_data[:, 0],
-#                                              train_data[:, 1],
-#                                              train_data[:, 2]),
-#                                             node_embeddings,
-#                                             edge_embeddings).to('cpu')
-#        Y_hat[-ncorrupt:] = score_distmult_bc((corrupted_data[:, 0],
-#                                               corrupted_data[:, 1],
-#                                               corrupted_data[:, 2]),
-#                                              node_embeddings,
-#                                              edge_embeddings).to('cpu')
-#
-#        # clear gpu cache to save memory
-#        if model_device == torch.device('cpu') and\
-#           distmult_device != torch.device('cpu'):
-#            del node_embeddings
-#            del edge_embeddings
-#            torch.cuda.empty_cache()
-#
-#        # compute loss
-#        optimizer.zero_grad()
-#        loss = binary_crossentropy(Y_hat, Y, criterion)
+    return (model, optimizer, epoch+nepoch, loss, test_mrr, test_hits_at_k, test_ranks)
 
 def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                nepoch, batchsize, batchsize_lst, mrr_batchsize,
+                epoch, nepoch, batchsize, batchsize_lst, mrr_batchsize,
                 eval_interval, filter_ranks, l1_lambda, l2_lambda,
                 model_device, distmult_device, term_width):
     logging.info("Training for {} epoch".format(nepoch))
@@ -190,7 +144,7 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
     batches = [slice(begin, min(begin+batchsize, num_samples))
                for begin in range(0, num_samples, batchsize)]
     num_batches = len(batches)
-    for epoch in range(1, nepoch+1):
+    for epoch in range(epoch+1, nepoch+epoch+1):
         model.train()
         
         loss_lst = list()
