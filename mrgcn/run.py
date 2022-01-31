@@ -22,25 +22,30 @@ import mrgcn.tasks.link_prediction as link_prediction
 
 def run(A, X, Y, X_width, data, acc_writer, model_device,
         distmult_device, config, modules_config, optimizer_config,
-        featureless, test_split):
+        featureless, test_split, checkpoint):
     task = config['task']['type']
     logging.info("Starting {} task".format(task))
     if task == "node classification":
-        loss, acc, labels, targets = node_classification.run(A, X, Y, X_width, acc_writer,
+        model, optimizer, epoch, loss,\
+              acc, labels, targets = node_classification.run(A, X, Y, X_width, acc_writer,
                                                              model_device, config,
                                                              modules_config,
                                                              optimizer_config,
-                                                             featureless, test_split)
-        return (loss, acc, labels, targets)
+                                                             featureless,
+                                                             test_split,
+                                                             checkpoint)
+        return (model, optimizer, epoch, loss, acc, labels, targets)
 
     elif task == "link prediction":
-        mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data,
-                                                     acc_writer, model_device,
-                                                     distmult_device, config,
-                                                     modules_config,
-                                                     optimizer_config,
-                                                     featureless, test_split)
-        return (mrr, hits_at_k, ranks)
+        model, optimizer, epoch, loss,\
+            mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data,
+                                                         acc_writer, model_device,
+                                                         distmult_device, config,
+                                                         modules_config,
+                                                         optimizer_config,
+                                                         featureless, test_split,
+                                                         checkpoint)
+        return (model, optimizer, epoch, loss, mrr, hits_at_k, ranks)
 
 
 def main(args, acc_writer, baseFilename, config):
@@ -98,16 +103,21 @@ def main(args, acc_writer, baseFilename, config):
             data["train"] = torch.from_numpy(data["train"]).long()
             data["valid"] = torch.from_numpy(data["valid"]).long()
 
+    # order to enable state loading, else modules may get different IDs
+    modules_config.sort(key=lambda t: t[0]) 
+
     task = config['task']['type']
     out = run(A, X, Y, X_width, data, acc_writer, model_device,
               distmult_device, config, modules_config, optimizer_config,
-              featureless, test_split)
+              featureless, test_split, args.load_checkpoint)
 
+    model, optimizer = None, None
+    loss, epoch = 0.0, 0.0
     if task == "node classification":
-        loss, acc, _, _ = out
+        model, optimizer, epoch, loss, acc, _, _ = out
         print("loss {:.4f} / accuracy {:.4f}".format(loss, acc))
     elif task == "link prediction":
-        mrr, hits, _ = out
+        model, optimizer, epoch, loss, mrr, hits, _ = out
         results_str = f"Performance on {test_split} set: "\
                       f"MRR (raw) {mrr['raw']:.4f} - H@1 {hits['raw'][0]:.4f}"\
                       f" / H@3 {hits['raw'][1]:.4f} /"\
@@ -119,11 +129,12 @@ def main(args, acc_writer, baseFilename, config):
                            f"H@10 {hits['flt'][2]:.4f}"
 
         print(results_str)
+
     if not args.save_output:
-        return
+        return (model, optimizer, loss, epoch)
 
     if task == "node classification":
-        loss, acc, labels, targets = out
+        _, _, _, loss, acc, labels, targets = out
 
         out_writer = TSV(baseFilename+'_out.tsv', 'w')
         out_writer.writerow(['X', 'Y_hat', 'Y'])
@@ -133,7 +144,7 @@ def main(args, acc_writer, baseFilename, config):
                                  class_map[targets[i]]])
 
     elif task == "link prediction":
-        _, _, ranks = out
+        _, _, _, _, _, _, ranks = out
 
         rank_writer = TSV(baseFilename+'_ranks.tsv', 'w')
         if config['task']['filter_ranks']:
@@ -144,6 +155,8 @@ def main(args, acc_writer, baseFilename, config):
             rank_writer.writerow(["raw"])
             for row in ranks['raw']:
                 rank_writer.writerow([row])
+
+    return (model, optimizer, loss, epoch)
 
 
 def init_logger(filename, dry_run, verbose=0):
@@ -183,8 +196,12 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", help="Increase output verbosity", action='count', default=0)
     parser.add_argument("--dry_run", help="Suppress writing output files to disk",
                         action='store_true')
+    parser.add_argument("--load_checkpoint", help="Load model state from disk",
+                        default=None)
     parser.add_argument("--save_output", help="Write final output to disk.",
                         action='store_true')
+    parser.add_argument("--save_checkpoint", help="Save model to disk",
+                        action="store_true")
     parser.add_argument("--test", help="Report accuracy on test set rather than on validation set",
                         action='store_true')
     args = parser.parse_args()
@@ -211,6 +228,14 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     # run training
-    main(args, acc_writer, baseFilename, config)
+    model, optimizer, loss, epoch = main(args, acc_writer, baseFilename, config)
+
+    if args.save_checkpoint:
+        f_state = baseFilename + "_model_state_%d.pkl" % epoch
+        torch.save({'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss}, f_state)
+        print("[SAVE] Writing model state to %s" % f_state)
 
     logging.shutdown()

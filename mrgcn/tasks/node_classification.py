@@ -18,7 +18,8 @@ logger = logging.getLogger()
 
 
 def run(A, X, Y, X_width, tsv_writer, device, config,
-        modules_config, optimizer_config, featureless, test_split):
+        modules_config, optimizer_config, featureless,
+        test_split, checkpoint):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
                                   "validation_loss", "validation_accuracy",
                                   "test_loss", "test_accuracy"])
@@ -37,17 +38,29 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
 
+    epoch = 0
+    if checkpoint is not None:
+        model.to("cpu")
+
+        print("[LOAD] Loading model state", end='')
+        checkpoint = torch.load(checkpoint)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+
+        print(f" - {epoch} epoch")
+
     # Log wall-clock time
     t0 = time()
-    for epoch in train_model(A, model, optimizer, criterion, X, Y,
+    for result in train_model(A, model, optimizer, criterion, X, Y, epoch,
                              nepoch, test_split, batchsize, l1_lambda,
                              l2_lambda, device):
         # log metrics
-        tsv_writer.writerow([str(epoch[0]),
-                             str(epoch[1]),
-                             str(epoch[2]),
-                             str(epoch[3]),
-                             str(epoch[4]),
+        tsv_writer.writerow([str(result[0]),
+                             str(result[1]),
+                             str(result[2]),
+                             str(result[3]),
+                             str(result[4]),
                              "-1", "-1"])
 
     logging.info("Training time: {:.2f}s".format(time()-t0))
@@ -58,12 +71,14 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(loss), str(acc)])
+        
+    model.to("cpu")
 
-    return (loss, acc, labels, targets)
+    return (model, optimizer, epoch+nepoch, loss, acc, labels, targets)
 
 
-def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
-                batchsize, l1_lambda, l2_lambda, device):
+def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
+                test_split, batchsize, l1_lambda, l2_lambda, device):
     Y_train = Y['train']
     Y_valid = Y['valid']
     if test_split == "test":
@@ -85,7 +100,7 @@ def train_model(A, model, optimizer, criterion, X, Y, nepoch, test_split,
                for begin in range(0, num_samples_train, batchsize)]
     num_batches = len(batches)
     logging.info("Training for {} epoch".format(nepoch))
-    for epoch in range(1, nepoch+1):
+    for epoch in range(epoch+1, nepoch+epoch+1):
         model.train()
 
         loss_lst = list()
