@@ -4,6 +4,7 @@
 name = "SYNTH"
 
 [graph]
+# available at https://gitlab.com/wxwilcke/mmkg
 context = "../../datasets/synth/context.nt.gz"
 
 train = "../../datasets/synth/train.nt.gz"
@@ -51,7 +52,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
-num_batches = 16
 share_weights = true
 trim_outliers = true
 remove_outliers = false
@@ -63,7 +63,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'blob.image'
 include = true
-num_batches = 64
 share_weights = true
 embedding_dim = 128
 p_dropout = 0.0
@@ -73,7 +72,6 @@ noise_multiplier = 0.0
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
 include = true
-num_batches = 16
 share_weights = true
 trim_outliers = true
 remove_outliers = false
@@ -91,6 +89,7 @@ target_property_inv = ''
 target_classes = []
 seed = -1  # use < 0 for random
 model_on_gpu = false
+batchsize = -1  # < 0 for full batch
 
 [model]
 epoch = 100

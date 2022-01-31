@@ -4,6 +4,7 @@
 name = "FB15K-237"
 
 [graph]
+# available at https://gitlab.com/wxwilcke/mmkg
 train = "../../datasets/fb15k-237/rdf/freebase_mtr100_mte100_237-train.nt.gz"
 valid = "../../datasets/fb15k-237/rdf/freebase_mtr100_mte100_237-valid.nt.gz"
 test = "../../datasets/fb15k-237/rdf/freebase_mtr100_mte100_237-test.nt.gz"
@@ -75,11 +76,12 @@ model_on_gpu = false
 distmult_on_gpu = false
 eval_interval = 10
 filter_ranks = true
+mrr_batch_size = 5e1
+batchsize = -1  # < 0 for full batch
 
 [model]
 epoch = 20
 learning_rate = 0.01
-mrr_batch_size = 5e1
 num_bases = 2
 p_dropout = 0.0
 weight_decay = 0.0

@@ -4,6 +4,7 @@
 name = "MUTAG"
 
 [graph]
+# available at https://gitlab.com/wxwilcke/mmkg
 context = "../../datasets/mutag/mutag_stripped.nt.gz"
 train = "../../datasets/mutag/mutag_train_set.nt.gz"
 valid = "../../datasets/mutag/mutag_valid_set.nt.gz"
@@ -74,6 +75,7 @@ target_property = 'http://dl-learner.org/carcinogenesis#isMutagenic'
 target_property_inv = ''
 seed = -1  # use < 0 for random
 model_on_gpu = false
+batchsize = -1  # < 0 for full batch
 
 [model]
 epoch = 50
