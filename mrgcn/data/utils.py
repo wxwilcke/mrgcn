@@ -2,6 +2,7 @@
 
 from itertools import cycle
 import logging
+from operator import itemgetter
 import os
 from os import access, F_OK, R_OK, W_OK
 from os.path import split
@@ -253,3 +254,50 @@ def sliceSparseCOO(t, idx):
                                                 torch.ones(len(col),
                                                            dtype=torch.float32),
                                    size = [t.shape[0], len(idx)])
+
+def subset_data(X, sample_idx):
+    """ Subset data
+
+        Create a subset of the raw input data for the sample nodes.
+        Preserves the same structure
+    """
+    X, F = X[0], X[1:]
+
+    X_sample = [X[sample_idx]]
+    for modality, F_set in F:
+        # TODO: skip if modality not asked for (optimization)
+        F_set_sample = list()
+        for encodings, nodes_idx, seq_lengths in F_set:
+            F_sample_mask = np.in1d(nodes_idx, sample_idx)
+
+            if np.all(F_sample_mask == False):
+                # add a dummy set if these encodings are not
+                # available for this sample, to preserve order
+                # in case different modules were created per
+                # encoding set (not merged, not default)
+                F_set_sample.append(None)
+
+                continue
+
+            # sample subset
+            nodes_idx_sample = nodes_idx[F_sample_mask]
+            seq_length_sample = seq_lengths[F_sample_mask]
+            if isinstance(encodings, np.ndarray):
+                encodings_sample = encodings[F_sample_mask]
+            else:
+                # variable length features
+                F_sample_idx = np.where(F_sample_mask)[0]
+                encodings_sample = itemgetter(*F_sample_idx)(encodings)
+                if not isinstance(encodings_sample, tuple):  # single value
+                    encodings_sample = (encodings_sample,)
+
+
+            F_set_sample.append([encodings_sample, 
+                                nodes_idx_sample,
+                                seq_length_sample])
+
+        X_sample.append([modality, F_set_sample])
+
+    return X_sample
+
+

@@ -82,12 +82,14 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
     modules_config = list()
     embeddings = list()
     optimizer_config = list()
-    for datatype in set.intersection(set(features_enabled),
-                                     set(F.keys()),
-                                     AVAILABLE_FEATURES):
+
+    datatypes = list(set.intersection(set(features_enabled),
+                                      set(F.keys()),
+                                      AVAILABLE_FEATURES))
+    for datatype in sorted(datatypes):
         feature_config = next((conf for conf in feature_configs
                                if conf['datatype'] == datatype),
-                              None)
+                              dict())
         embedding_dim = feature_config['embedding_dim']
         dropout = feature_config['p_dropout']
 

@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 
 import logging
 from time import time
@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from mrgcn.encodings.graph_features import construct_features
-from mrgcn.models.mrgcn import MRGCN
+from mrgcn.models.mrgcn import MRGCN, Batch
 from mrgcn.tasks.utils import optimizer_params
 
 
@@ -91,6 +91,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
         Y_valid = None
 
 
+    num_layers = len(model.rgcn.num_layers)
     # full batch
     num_samples_train = len(Y_train.data)
     if batchsize <= 0:
@@ -110,12 +111,26 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
             print(batch_str, end='\b'*len(batch_str), flush=True)
 
             if num_batches > 1:
+                # batch of (only) labelled nodes
                 batch_node_idx = Y_train.nonzero()[0][batch]
+
+                # data needed for batch
+                # TODO: move this out of the loop
+                mrgcn_batch = Batch(X, A, batch_node_idx, num_layers)
+
+                X_in = None
+                A_in = None
             else:
+                # all nodes, incl unlabelled ones
                 batch_node_idx = ...
 
+                mrgcn_batch = None
+
+                X_in = X
+                A_in = A
+
             # Training scores
-            Y_batch_hat = model(X, A, batch_node_idx, device=device).to('cpu')
+            Y_batch_hat = model(X_in, A_in, mrgcn_batch, device=device).to('cpu')
             Y_batch_train = Y_train[batch_node_idx]
 
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_train, criterion)

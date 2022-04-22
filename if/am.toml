@@ -25,14 +25,14 @@ p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
 
-[[graph.features]]
-datatype = 'xsd.gYear'
-include = true
-share_weights = false
-embedding_dim = 1
-p_dropout = 0.0
-p_noise = 0.0
-noise_multiplier = 0.0
+#[[graph.features]]
+#datatype = 'xsd.gYear'
+#include = true
+#share_weights = false
+#embedding_dim = 1
+#p_dropout = 0.0
+#p_noise = 0.0
+#noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.date'
@@ -43,13 +43,13 @@ p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
 
-[[graph.features]]
-datatype = 'xsd.boolean'
-include = true
-share_weights = false
-p_dropout = 0.0
-p_noise = 0.0
-noise_multiplier = 0.0
+#[[graph.features]]
+#datatype = 'xsd.boolean'
+#include = true
+#share_weights = false
+#p_dropout = 0.0
+#p_noise = 0.0
+#noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.string'
