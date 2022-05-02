@@ -10,8 +10,7 @@ import torch.nn as nn
 from mrgcn.data.utils import (collate_zero_padding,
                               getNeighboursSparse,
                               scipy_sparse_list_to_pytorch_sparse,
-                              scipy_sparse_to_pytorch_sparse, subset_data,
-                              subset_data)
+                              scipy_sparse_to_pytorch_sparse)
 from mrgcn.models.fully_connected import FC
 from mrgcn.models.imagecnn import ImageCNN
 #from mrgcn.models.rnn import RNN
@@ -113,18 +112,19 @@ class MRGCN(nn.Module):
                           link_prediction)
         self.module_dict["RGCN"] = self.rgcn
 
-    def forward(self, X, A, batch, device=None):
-        if batch is None:
-            # full batch
-            return self._forward_full_batch(X, A, device)
+    def forward(self, X, A, device=None):
+        if type(A) is Batch:
+            return self._forward_mini_batch(X, A, device)
 
-        return self._forward_mini_batch(batch, device)
+        # full batch
+        return self._forward_full_batch(X, A, device)
 
     def _forward_full_batch(self, X, A, device=None):
         X, F = X[0], X[1:]
 
         # compute and concat modality-specific embeddings
         if self.compute_modality_embeddings:
+            # expects a natural ordering of nodes; same as X
             batch_idx = np.arange(self.num_nodes)  # full batch
 
             XF = self._compute_modality_embeddings(F, batch_idx, device)
@@ -137,11 +137,11 @@ class MRGCN(nn.Module):
         X_dev = X.to(device)
         A_dev = A.to(device)
 
-        X_dev = self.rgcn(X_dev, A_dev, ...)
+        X_dev = self.rgcn(X_dev, A_dev)
 
         return X_dev
 
-    def _forward_mini_batch(self, batch, device):
+    def _forward_mini_batch(self, X, A, device):
         """ Mini batch MR-GCN.
         """
 
@@ -151,17 +151,23 @@ class MRGCN(nn.Module):
             # this is only necessary for the most-distant nodes, since 
             # nodes closer to the batch nodes will use the embeddings computed
             # by the previous graph convvolution layers.
-            X = batch.X
             if X is not None:
                 X, F = X[0], X[1:]
 
-                XF = self._compute_modality_embeddings(F, batch.idx, device)
+                # nodes for which we have adjacency matrix slices
+                batch_idx = A.idx
+
+                XF = self._compute_modality_embeddings(F, batch_idx, device)
                 X = torch.cat([X,XF], dim=1)
 
                 X_dev = X.to(device)
 
+        # Forward pass through graph convolution layers
+        self.rgcn.to(device)
         # TODO: move batch to device?
-        X_dev = self.rgcn(X_dev, None, batch)
+        #A_dev = A.to(device)
+        A_dev = A
+        X_dev = self.rgcn(X_dev, A_dev)
 
         return X_dev
 
@@ -280,17 +286,17 @@ class MRGCN(nn.Module):
 
                 num_features += len(common_nodes)
                 if isinstance(encodings, np.ndarray):
-                    # encodings := numpy array
+                    # fixed-width features
                     batch = encodings[F_batch_mask]
                     batch = torch.as_tensor(batch)
                 else:
-                    # encodings := list of sparse coo matrices
+                    # variable-length features (list of sparse COO matrices)
                     F_batch_idx = np.where(F_batch_mask)[0]
                     batch = itemgetter(*F_batch_idx)(encodings)
                     if type(batch) is not tuple:  # single sample
                         batch = (batch,)
 
-                    time_dim = 1 # if modality == "xsd.string" else 0  ## uncomment for RNN
+                    time_dim = 1  # temporal CNN; set to 0 for RNN
                     batch = collate_zero_padding(batch,
                                                  time_dim,
                                                  min_padded_length=seq_length)
@@ -414,21 +420,19 @@ class MRGCN(nn.Module):
 #    return payload
 
 
-# TODO: move X out of batch; move out epoch loop
 class Batch:
     idx = list()  # nodes to compute embeddings for
     neighbours = list()  # nodes necessary to compute embeddings
-    A = list()  # adjacency matrix slices necessary to compute embeddings
-    X = None  # raw values of outer neighbours if node features are included
+    row = list()  # adjacency matrix slices necessary to compute embeddings
 
-    def __init__(self, X, A, batch_idx, num_layers):
+    def __init__(self, A, batch_idx, num_layers):
         self.idx = batch_idx
 
-        self._populate(X, A, num_layers)
+        self._populate(A, num_layers)
 
-    def _populate(self, X, A, num_layers):
+    def _populate(self, A, num_layers):
         sample_idx = self.idx  # nodes to compute the embeddings for at layer i
-        for i in range(1, num_layers+1):       
+        for _ in range(num_layers):       
             # slices of A belonging to the sample nodes at layer i
             A_samples = A[sample_idx]
             A_samples = scipy_sparse_to_pytorch_sparse(A_samples)
@@ -436,15 +440,46 @@ class Batch:
             # neighbours of the sample nodes at layer i
             neighbours_idx = getNeighboursSparse(A, sample_idx)
                     
-            self.A.append(A_samples)
+            self.row.append(A_samples)
             self.neighbours.append(neighbours_idx)
-            if i >= num_layers and X is not None:
-                # features of neighbours
-                # only necessary for most-distant nodes
-                self.X = subset_data(X, neighbours_idx)
                 
             sample_idx = neighbours_idx
 
     def to(self, device):
         # TODO
         pass
+
+## TODO: move X out of batch; move out epoch loop
+#class Batch:
+#    idx = list()  # nodes to compute embeddings for
+#    neighbours = list()  # nodes necessary to compute embeddings
+#    A = list()  # adjacency matrix slices necessary to compute embeddings
+#    X = None  # raw values of outer neighbours if node features are included
+#
+#    def __init__(self, X, A, batch_idx, num_layers):
+#        self.idx = batch_idx
+#
+#        self._populate(X, A, num_layers)
+#
+#    def _populate(self, X, A, num_layers):
+#        sample_idx = self.idx  # nodes to compute the embeddings for at layer i
+#        for i in range(1, num_layers+1):       
+#            # slices of A belonging to the sample nodes at layer i
+#            A_samples = A[sample_idx]
+#            A_samples = scipy_sparse_to_pytorch_sparse(A_samples)
+#            
+#            # neighbours of the sample nodes at layer i
+#            neighbours_idx = getNeighboursSparse(A, sample_idx)
+#                    
+#            self.A.append(A_samples)
+#            self.neighbours.append(neighbours_idx)
+#            if i >= num_layers and X is not None:
+#                # features of neighbours
+#                # only necessary for most-distant nodes
+#                self.X = subset_data(X, neighbours_idx)
+#                
+#            sample_idx = neighbours_idx
+#
+#    def to(self, device):
+#        # TODO
+#        pass

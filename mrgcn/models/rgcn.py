@@ -6,6 +6,7 @@ from torch.nn.functional import dropout
 
 from mrgcn.data.utils import getAdjacencyNodeColumnIdx
 from mrgcn.layers.graph import GraphConvolution
+from mrgcn.models.mrgcn import Batch
 
 
 class RGCN(nn.Module):
@@ -60,11 +61,11 @@ class RGCN(nn.Module):
             # initiate weights
             self.reset_parameters()
 
-    def forward(self, X, A, batch):
-        if batch is None:
-            return self._forward_full_batch(X, A)
+    def forward(self, X, A):
+        if type(A) is Batch:
+            return self._forward_mini_batch(X, A)
 
-        return self._forward_mini_batch(X, batch)
+        return self._forward_full_batch(X, A)
 
     def _forward_full_batch(self, X, A):
         # Forward pass with full batch
@@ -88,7 +89,7 @@ class RGCN(nn.Module):
 
         return X
 
-    def _forward_mini_batch(self, X, batch):
+    def _forward_mini_batch(self, X, A):
         # Forward pass with mini batch
         for layer_idx, (layer, f_activation) in enumerate(zip(self.layers.values(),
                                                               self.activations.values())):
@@ -99,20 +100,20 @@ class RGCN(nn.Module):
                     return f_activation(X)
 
             i = self.num_layers - (layer_idx + 1)  # most distant nodes
-            A_samples = batch.A[i]
+            A_slices= A.row[i]
             if layer.input_layer and layer.featureless:
-                X = layer(None, A_samples)
+                X = layer(None, A_slices)
             else:
                 # compute embeddings of nodes i hops away, using
                 # the embeddings of their neighbours at i+1 hops away.
                 # use only the relevant subset of A, by omitting
                 # irrelevant columns and rows.
-                neighbours_idx = batch.neighbours[i]
+                neighbours_idx = A.neighbours[i]
                 A_idx = getAdjacencyNodeColumnIdx(neighbours_idx,
                                                    layer.num_nodes,
                                                    layer.num_relations)
 
-                X = layer(X, A_samples, A_idx)
+                X = layer(X, A_slices, A_idx)
 
             if self.p_dropout > 0.0:
                 # add dropout to output, by elementwise multiplying with 
