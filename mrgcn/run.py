@@ -13,7 +13,6 @@ from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.io.tsv import TSV
 from mrgcn.data.utils import (is_readable,
                               is_writable,
-                              scipy_sparse_to_pytorch_sparse,
                               set_seed,
                               setup_features)
 import mrgcn.tasks.node_classification as node_classification

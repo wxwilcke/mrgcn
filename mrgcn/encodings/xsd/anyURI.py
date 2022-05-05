@@ -41,7 +41,7 @@ def generate_features(nodes_map, node_predicate_map, config):
     :returns: list of length P with lists Q of length 3;
                 P :- number of predicates that link to nodes with this feature
                 Q :- [seq, node_idx, seq_lengths];
-                    seq :- list with M numpy arrays A x L;
+                    seq :- object array with M numpy arrays A x L;
                         M :- number of nodes with this feature, such that M <= N
                         A :- number of allowed characters
                         L :- sequence length
@@ -52,51 +52,6 @@ def generate_features(nodes_map, node_predicate_map, config):
 
     return generate_relationwise_features(nodes_map, node_predicate_map,
                                           config)
-#    else:
-#        return generate_nodewise_features(nodes_map, config)
-#
-#def generate_nodewise_features(nodes_map, config):
-#    """ Stack all vectors without regard of their relation
-#    """
-#    m = 0
-#    n = len(nodes_map)
-#    node_idx = np.zeros(shape=(n), dtype=np.int32)
-#    seq_length_map = list()
-#
-#    data = list()
-#
-#    for node, i in nodes_map.items():
-#        if not isinstance(node, Literal):
-#            continue
-#        if node.datatype is None or node.datatype.neq(XSD.anyURI):
-#            continue
-#
-#        node._value = str(node)  ## empty value bug workaround
-#        #if validate(node.value) is None:  # if invalid syntax
-#        #    continue
-#
-#        sequence = preprocess(node.value)
-#        sequence = encode(sequence)[:_MAX_CHARS]
-#        seq_length = len(sequence)
-#        if seq_length <= 0:
-#            continue
-#
-#        a = sp.coo_matrix((np.repeat([1.0], repeats=seq_length),
-#                           (sequence, np.array(range(seq_length)))),
-#                          shape=(_VOCAB_MAX_IDX, seq_length),
-#                          dtype=np.float32)
-#
-#        data.append(a)
-#        seq_length_map.append(seq_length)
-#        node_idx[m] = i
-#        m += 1
-#
-#    logger.debug("Generated {} unique anyURI features".format(m))
-#
-#    if m <= 0:
-#        return None
-#
-#    return [[data, node_idx[:m], seq_length_map]]
 
 def generate_relationwise_features(nodes_map, node_predicate_map, config):
     """ Stack vectors row-wise per relation and column stack relations
@@ -130,14 +85,13 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
 
         for p in node_predicate_map[node]:
             if p not in sequences.keys():
-                sequences[p] = list()
+                sequences[p] = np.empty(shape=n, dtype=object)
                 node_idx[p] = np.empty(shape=(n), dtype=np.int32)
                 seq_length_map[p] = np.empty(shape=(n), dtype=np.int32)
                 m[p] = 0
 
-            sequences[p].append(a)
-
             idx = m[p]
+            sequences[p][idx] = a
             seq_length_map[p][idx] = seq_length
             node_idx[p][idx] = i
             m[p] = idx + 1
@@ -148,7 +102,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     if msum <= 0:
         return None
 
-    return [[sequences[p], node_idx[p][:m[p]], seq_length_map[p][:m[p]]]
+    return [[sequences[p][:m[p]], node_idx[p][:m[p]], seq_length_map[p][:m[p]]]
             for p in sequences.keys()]
 
 def encode(seq):

@@ -8,11 +8,11 @@ import toml
 
 from mrgcn.data.io.knowledge_graph import KnowledgeGraph
 from mrgcn.data.io.tarball import Tarball
-from mrgcn.data.utils import is_readable, is_writable
+from mrgcn.data.utils import is_readable, is_writable, strip_graph, triples_to_indices
 from mrgcn.encodings import graph_structure
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
-from mrgcn.tasks.utils import strip_graph, triples_to_indices
+
 
 def run(args, config):
     task = config['task']['type']

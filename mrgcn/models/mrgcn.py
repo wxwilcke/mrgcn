@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 
 from mrgcn.data.utils import (collate_zero_padding,
-                              getNeighboursSparse,
                               scipy_sparse_list_to_pytorch_sparse,
                               scipy_sparse_to_pytorch_sparse)
 from mrgcn.models.fully_connected import FC
@@ -16,6 +15,7 @@ from mrgcn.models.imagecnn import ImageCNN
 #from mrgcn.models.rnn import RNN
 from mrgcn.models.rgcn import RGCN
 from mrgcn.models.temporal_cnn import TCNN
+from mrgcn.data.batch import MiniBatch
 
 
 logger = logging.getLogger(__name__)
@@ -112,15 +112,15 @@ class MRGCN(nn.Module):
                           link_prediction)
         self.module_dict["RGCN"] = self.rgcn
 
-    def forward(self, X, A, device=None):
-        if type(A) is Batch:
-            return self._forward_mini_batch(X, A, device)
+    def forward(self, batch, device=None):
+        if isinstance(batch, MiniBatch):
+            return self._forward_mini_batch(batch, device)
 
         # full batch
-        return self._forward_full_batch(X, A, device)
+        return self._forward_full_batch(batch, device)
 
-    def _forward_full_batch(self, X, A, device=None):
-        X, F = X[0], X[1:]
+    def _forward_full_batch(self, batch, device=None):
+        X, F = batch.X[0], batch.X[1:]
 
         # compute and concat modality-specific embeddings
         if self.compute_modality_embeddings:
@@ -130,7 +130,7 @@ class MRGCN(nn.Module):
             XF = self._compute_modality_embeddings(F, batch_idx, device)
             X = torch.cat([X,XF], dim=1)
 
-        A = scipy_sparse_to_pytorch_sparse(A)
+        A = batch.A
 
         # Forward pass through graph convolution layers
         self.rgcn.to(device)
@@ -141,7 +141,7 @@ class MRGCN(nn.Module):
 
         return X_dev
 
-    def _forward_mini_batch(self, X, A, device):
+    def _forward_mini_batch(self, batch, device):
         """ Mini batch MR-GCN.
         """
 
@@ -151,11 +151,11 @@ class MRGCN(nn.Module):
             # this is only necessary for the most-distant nodes, since 
             # nodes closer to the batch nodes will use the embeddings computed
             # by the previous graph convvolution layers.
-            if X is not None:
-                X, F = X[0], X[1:]
+            if batch.X is not None:
+                X, F = batch.X[0], batch.X[1:]
 
-                # nodes for which we have adjacency matrix slices
-                batch_idx = A.idx
+                # most distant nodes
+                batch_idx = batch.A.neighbours[-1]
 
                 XF = self._compute_modality_embeddings(F, batch_idx, device)
                 X = torch.cat([X,XF], dim=1)
@@ -166,97 +166,10 @@ class MRGCN(nn.Module):
         self.rgcn.to(device)
         # TODO: move batch to device?
         #A_dev = A.to(device)
-        A_dev = A
+        A_dev = batch.A
         X_dev = self.rgcn(X_dev, A_dev)
 
         return X_dev
-
-    #def _forward_mini_batch_bak(self, X, A, batch_idx, device=None):
-    #    """ Mini batch MR-GCN.
-
-    #        For each batch, determine which neighbours are needed to compute
-    #        the nodes in the batch, and continue only with the necessary slices 
-    #        of X and A. Do all this here to reduce the memory requirements for
-    #        the GPU. 
-
-    #        NB: mini batching is currently only implemented for at most two
-    #            R-GCN layers.
-    #    """
-    #    X, F = X[0], X[1:]
-
-    #    # global node indices of the neighbours of the batch nodes
-    #    # filter batch nodes to prevent computing them twice
-    #    neighbours_idx = getNeighboursSparse(A, batch_idx)
-    #    neighbours_unseen_idx = [i for i in neighbours_idx
-    #                             if i not in batch_idx]
-
-    #    # embedding idx for non-input layer
-    #    # filter nodes which we don't need to compute batch
-    #    H_node_idx = np.concatenate([batch_idx, neighbours_unseen_idx])
-    #    H_idx_filtered = [i for i, v in enumerate(H_node_idx)
-    #                      if v in neighbours_idx]
-    #    H_node_idx = H_node_idx[H_idx_filtered]
-
-    #    # prepare A slices
-    #    A_batch = A[batch_idx]
-    #    A_neighbours_unseen = A[neighbours_unseen_idx]
-
-    #    A_batch = scipy_sparse_to_pytorch_sparse(A_batch)
-    #    A_neighbours_unseen = scipy_sparse_to_pytorch_sparse(A_neighbours_unseen)
-
-    #    # subset of X relevant for batch
-    #    X_batch_idx = None
-    #    X_batch = None
-    #    depth2neighbours_idx = list()
-    #    if self.compute_modality_embeddings:
-    #    #if not self.rgcn.layers['layer_0'].featureless:
-    #        # assume layer_0 is input layer
-    #        if len(neighbours_unseen_idx) > 0:
-    #            depth2neighbours_idx = getNeighboursSparse(A, neighbours_unseen_idx)
-    #            
-    #        X_batch_idx = set.union(set(neighbours_idx),
-    #                                set(depth2neighbours_idx))
-    #        X_batch_idx = sorted(list(X_batch_idx))
-
-    #        # compute and concat modality-specific embeddings
-    #        XF = self._compute_modality_embeddings(F, X_batch_idx,
-    #                                               device)
-
-    #        #logger.debug(" Merging structure and node features")
-    #        X_batch_idx = torch.LongTensor(X_batch_idx)
-    #        X_batch = X[X_batch_idx]
-
-    #        X_batch = torch.cat([X_batch, XF], dim=1)
-
-    #        nodes_needed = len(X_batch_idx)
-    #        logger.debug("Computing embeddings for %d / %d nodes" %
-    #                     (nodes_needed, self.num_nodes))
-    #    else: 
-    #        nodes_needed = len(H_node_idx)
-    #        logger.debug("Computing embeddings for %d / %d nodes" %
-    #                     (nodes_needed, self.num_nodes))
-    #    
-    #    # wrap in list for easy transfer
-    #    neighbours = [torch.LongTensor(neighbours_idx),
-    #                  torch.LongTensor(depth2neighbours_idx),
-    #                  torch.LongTensor(H_idx_filtered),
-    #                  torch.LongTensor(H_node_idx)]
-
-    #    # move everything to device
-    #    self.rgcn.to(device)
-    #    X_batch_dev = None if X_batch is None else X_batch.to(device)
-    #    A_batch_dev = A_batch.to(device)
-    #    A_neighbours_unseen_dev = A_neighbours_unseen.to(device)
-    #    X_batch_idx_dev = None if X_batch_idx is None else X_batch_idx.to(device)
-    #    neighbours_dev = [t.to(device) for t in neighbours]
-
-    #    X_dev = self.rgcn(X_batch_dev, 
-    #                      A_batch_dev,
-    #                      X_batch_idx_dev,
-    #                      A_neighbours_unseen_dev,
-    #                      neighbours_dev)
-
-    #    return X_dev
 
     def _compute_modality_embeddings(self, F, batch_idx, device):
         batch_num_nodes = len(batch_idx)
@@ -270,7 +183,7 @@ class MRGCN(nn.Module):
             num_sets = len(F_set)  # number of encoding sets for this datatype
             num_features = 0  # number of added node features for this modality
             for i, encoding_set in enumerate(F_set):
-                module, seq_length, out_dim = self.modality_modules[modality][i]
+                module, _, out_dim = self.modality_modules[modality][i]
                 module.to(device)
 
                 encodings, node_idx, _ = encoding_set
@@ -280,37 +193,20 @@ class MRGCN(nn.Module):
                     offset += out_dim
                     continue
 
+                num_features += len(common_nodes)
+
                 # find indices for common nodes
                 F_batch_mask = np.in1d(node_idx, common_nodes)
                 X_batch_mask = np.in1d(batch_idx, common_nodes)
 
-                num_features += len(common_nodes)
-                if isinstance(encodings, np.ndarray):
-                    # fixed-width features
-                    batch = encodings[F_batch_mask]
-                    batch = torch.as_tensor(batch)
-                else:
-                    # variable-length features (list of sparse COO matrices)
-                    F_batch_idx = np.where(F_batch_mask)[0]
-                    batch = itemgetter(*F_batch_idx)(encodings)
-                    if type(batch) is not tuple:  # single sample
-                        batch = (batch,)
-
-                    time_dim = 1  # temporal CNN; set to 0 for RNN
-                    batch = collate_zero_padding(batch,
-                                                 time_dim,
-                                                 min_padded_length=seq_length)
-
-                    batch = scipy_sparse_list_to_pytorch_sparse(batch)
-                    batch = batch.to_dense()
-
                 # forward pass
-                batch = batch.to(device)
+                data = encodings[F_batch_mask].float()
+                data = data.to(device)
                 # compute gradients on batch 
                 logger.debug(" {} (set {} / {})".format(modality,
                                                         i+1,
                                                         num_sets))
-                out_dev = module(batch)
+                out_dev = module(data)
 
                 X[X_batch_mask, offset:offset+out_dim] = out_dev.to('cpu')
 
@@ -420,34 +316,6 @@ class MRGCN(nn.Module):
 #    return payload
 
 
-class Batch:
-    idx = list()  # nodes to compute embeddings for
-    neighbours = list()  # nodes necessary to compute embeddings
-    row = list()  # adjacency matrix slices necessary to compute embeddings
-
-    def __init__(self, A, batch_idx, num_layers):
-        self.idx = batch_idx
-
-        self._populate(A, num_layers)
-
-    def _populate(self, A, num_layers):
-        sample_idx = self.idx  # nodes to compute the embeddings for at layer i
-        for _ in range(num_layers):       
-            # slices of A belonging to the sample nodes at layer i
-            A_samples = A[sample_idx]
-            A_samples = scipy_sparse_to_pytorch_sparse(A_samples)
-            
-            # neighbours of the sample nodes at layer i
-            neighbours_idx = getNeighboursSparse(A, sample_idx)
-                    
-            self.row.append(A_samples)
-            self.neighbours.append(neighbours_idx)
-                
-            sample_idx = neighbours_idx
-
-    def to(self, device):
-        # TODO
-        pass
 
 ## TODO: move X out of batch; move out epoch loop
 #class Batch:

@@ -6,7 +6,7 @@ from torch.nn.functional import dropout
 
 from mrgcn.data.utils import getAdjacencyNodeColumnIdx
 from mrgcn.layers.graph import GraphConvolution
-from mrgcn.models.mrgcn import Batch
+from mrgcn.tasks.utils import Batch
 
 
 class RGCN(nn.Module):

@@ -9,9 +9,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from mrgcn.data.utils import subset_data
+from mrgcn.data.batch import FullBatch, MiniBatch
 from mrgcn.encodings.graph_features import construct_features
-from mrgcn.models.mrgcn import MRGCN, Batch
+from mrgcn.models.mrgcn import MRGCN
 from mrgcn.tasks.utils import optimizer_params
 
 
@@ -77,34 +77,6 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
     return (model, optimizer, epoch+nepoch, loss, acc, labels, targets)
 
-def mkbatches(A, X, Y, batchsize, num_layers):
-    num_samples = len(Y.data)
-    if batchsize <= 0:
-        # full batch mode requested by user
-        batchsize = num_samples
-
-    batch_slices = [slice(begin, min(begin+batchsize, num_samples))
-                   for begin in range(0, num_samples, batchsize)]
-    batches = list()
-    if len(batch_slices) > 1:
-        # mini batch mode
-        sample_idx = Y.nonzero()[0]  # global indices of labelled nodes
-        for slce in batch_slices:
-            batch_node_idx = sample_idx[slce]
-            A_batch = Batch(A, batch_node_idx, num_layers)
-
-            X_batch = None
-            if X is not None:  # if not featureless
-                X_nodes = A_batch.neighbours[-1]  # outer nodes
-                X_batch = subset_data(X, X_nodes)
-
-            batches.append((A_batch, X_batch, batch_node_idx))
-    else:
-        # full batch mode
-        batches.append((A, X, ...))  # use numpy ellipsis to convey 'all'
-
-    return batches
-
 def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                 test_split, batchsize, l1_lambda, l2_lambda, device):
     Y_train = Y['train']
@@ -119,13 +91,17 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
         Y_valid = None
 
     # generate batches
-    num_layers = len(model.rgcn.num_layers)
+    num_layers = model.rgcn.num_layers
     train_batches = mkbatches(A, X, Y_train, batchsize, num_layers)
+    train_batches = [batch.to_dense_() for batch in train_batches]
+    train_batches = [batch.as_tensors_() for batch in train_batches]
     num_batches_train = len(train_batches)
 
     valid_batches = list()
     if Y_valid is not None:
         valid_batches = mkbatches(A, X, Y_valid, batchsize, num_layers)
+        valid_batches = [batch.to_dense_() for batch in valid_batches]
+        valid_batches = [batch.as_tensors_() for batch in valid_batches]
     num_batches_valid = len(valid_batches)
 
     logging.info("Training for {} epoch".format(nepoch))
@@ -139,12 +115,11 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                                                         num_batches_train)
             print(batch_str, end='\b'*len(batch_str), flush=True)
 
-            # data necessary for batch
-            A_in, X_in, node_idx = batch
+            node_idx = batch.node_index
 
             # Training scores
-            Y_batch_hat = model(X_in, A_in, device=device).to('cpu')
-            Y_batch_train = Y_train[node_idx]
+            Y_batch_hat = model(batch, device=device).to('cpu')
+            Y_batch_train = Y_train[node_idx]  # TODO: check if correct X to y mapping
 
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_train, criterion)
             batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_train)[0]
@@ -199,7 +174,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                 A_in, X_in, node_idx = batch
 
                 with torch.no_grad():
-                    Y_batch_hat = model(X_in, A_in, node_idx, device=device).to('cpu')
+                    Y_batch_hat = model(X_in, A_in, device=device).to('cpu')
                     Y_batch_valid = Y_valid[node_idx]
 
                     batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_valid, criterion)
@@ -238,8 +213,10 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize, device):
     target_lst = list()
 
     # generate batches
-    num_layers = len(model.rgcn.num_layers)
+    num_layers = model.rgcn.num_layers
     test_batches = mkbatches(A, X, Y_test, batchsize, num_layers)
+    test_batches = [batch.to_dense_() for batch in test_batches]
+    test_batches = [batch.as_tensors_() for batch in test_batches]
     num_batches_test = len(test_batches)
 
     for batch_id, batch in enumerate(test_batches, 1):
@@ -248,11 +225,9 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize, device):
                                                  num_batches_test)
         print(batch_str, end='\b'*len(batch_str), flush=True)
 
-        # data necessary for batch
-        A_in, X_in, node_idx = batch
- 
+        node_idx = batch.node_index
         with torch.no_grad():
-            Y_batch_hat = model(X_in, A_in, node_idx, device=device).to('cpu')
+            Y_batch_hat = model(batch, device=device).to('cpu')
             Y_batch_test = Y_test[node_idx]
     
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_test, criterion)
@@ -294,6 +269,30 @@ def build_dataset(knowledge_graph, nodes_map, target_triples, config, featureles
     logger.debug("Completed dataset build")
 
     return (F, Y, sample_map, class_map)
+
+def mkbatches(A, X, Y, batchsize, num_layers):
+    num_samples = len(Y.data)
+    if batchsize <= 0:
+        # full batch mode requested by user
+        batchsize = num_samples
+
+    batch_slices = [slice(begin, min(begin+batchsize, num_samples))
+                   for begin in range(0, num_samples, batchsize)]
+    batches = list()
+    if len(batch_slices) > 1:
+        # mini batch mode
+        sample_idx = Y.nonzero()[0]  # global indices of labelled nodes
+        for slce in batch_slices:
+            batch_node_idx = sample_idx[slce]
+            batch = MiniBatch(A, X, batch_node_idx, num_layers)
+
+            batches.append(batch)
+    else:
+        # batch_node_idx = len(Y)
+        batch = FullBatch(A, X, ...)
+        batches.append(batch)
+
+    return batches
 
 def mk_target_matrices(target_triples, nodes_map):
     classes = {str(c) for split in target_triples.values() for _,_,c in split} # unique classes
