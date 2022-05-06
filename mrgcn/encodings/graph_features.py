@@ -103,12 +103,12 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             optim_params[param_name] = param_value
 
         optimizer_config.append((datatype, optim_params))
+        encoding_sets = F.pop(datatype, list())
 
         # by default, the encodings for each modality are stored
         # as separate arrays for each predicate they are connected with.
         # Here we merge these arrays such that the result is a single array
         # per modality that is agnistic to the predicates.
-        encoding_sets = F.pop(datatype, list())
         weight_sharing = feature_config['share_weights']
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
@@ -122,6 +122,11 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
+        # TODO: remove
+        for encodings, _, seq_lengths in encoding_sets:
+            for i, v in enumerate(encodings):
+                if v is None:
+                    print(i)
         # add a bit of noise to reduce the chance of overfitting, eg
         # when one neural encoder converges faster than others.
         noise_mp = feature_config['noise_multiplier']
@@ -139,7 +144,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
         # generate modality-specific configurations to pass to
         # the MR-GCN to tell is what encoders to prepare.
         num_encoding_sets = len(encoding_sets)
-        for encodings, node_idx, seq_lengths in encoding_sets:
+        for encodings, _, seq_lengths in encoding_sets:
             if datatype in ["xsd.boolean", "xsd.numeric"]:
                 feature_dim = 1
                 feature_size = encodings.shape[feature_dim]
@@ -222,7 +227,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 raise Warning("Outlier trimming not supported for datatype %s" %
                               datatype)
 
-        embeddings.append((datatype, encoding_sets))
+        embeddings.append([datatype, encoding_sets])
 
     return (embeddings, modules_config, optimizer_config, embeddings_width)
 
@@ -256,6 +261,7 @@ def merge_sparse_encodings_sets(encoding_sets):
         return encoding_sets
 
     node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    # TODO: revert to old method to cope with repeating node entries (for different p's)
 
     N = node_idx.shape[0]  # N <= NUM_NODES
 

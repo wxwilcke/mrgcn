@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import dropout
 
-from mrgcn.data.utils import getAdjacencyNodeColumnIdx
 from mrgcn.layers.graph import GraphConvolution
-from mrgcn.tasks.utils import Batch
+from mrgcn.data.batch import getAdjacencyNodeColumnIdx, A_Batch
 
 
 class RGCN(nn.Module):
@@ -62,7 +61,7 @@ class RGCN(nn.Module):
             self.reset_parameters()
 
     def forward(self, X, A):
-        if type(A) is Batch:
+        if type(A) is A_Batch:
             return self._forward_mini_batch(X, A)
 
         return self._forward_full_batch(X, A)

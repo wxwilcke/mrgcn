@@ -137,7 +137,7 @@ def zero_pad(t, min_seq_length, time_dim):
 
 def setup_features(F, num_nodes, featureless, config):
     X_width = 0  # number of columns in X
-    X = [torch.empty((num_nodes, X_width), dtype=torch.float32)]  # dummy
+    X = [np.empty((num_nodes, X_width), dtype=float)]  # dummy
 
     modules_config = list()
     optimizer_config = list()

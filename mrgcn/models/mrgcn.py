@@ -122,21 +122,22 @@ class MRGCN(nn.Module):
     def _forward_full_batch(self, batch, device=None):
         X, F = batch.X[0], batch.X[1:]
 
-        # compute and concat modality-specific embeddings
+        X_dev = None
         if self.compute_modality_embeddings:
             # expects a natural ordering of nodes; same as X
             batch_idx = np.arange(self.num_nodes)  # full batch
 
-            XF = self._compute_modality_embeddings(F, batch_idx, device)
+            XF = self._compute_modality_embeddings(F, batch_idx)
             X = torch.cat([X,XF], dim=1)
 
-        A = batch.A
+            X_dev = X.to(device)
 
-        # Forward pass through graph convolution layers
+        A = batch.A  # A := sparse tensor
+
         self.rgcn.to(device)
-        X_dev = X.to(device)
         A_dev = A.to(device)
 
+        # Forward pass through graph convolution layers
         X_dev = self.rgcn(X_dev, A_dev)
 
         return X_dev
@@ -151,40 +152,38 @@ class MRGCN(nn.Module):
             # this is only necessary for the most-distant nodes, since 
             # nodes closer to the batch nodes will use the embeddings computed
             # by the previous graph convvolution layers.
-            if batch.X is not None:
-                X, F = batch.X[0], batch.X[1:]
+            X, F = batch.X[0], batch.X[1:]
 
-                # most distant nodes
-                batch_idx = batch.A.neighbours[-1]
+            # most distant nodes
+            batch_idx = batch.A.neighbours[-1]
 
-                XF = self._compute_modality_embeddings(F, batch_idx, device)
-                X = torch.cat([X,XF], dim=1)
+            XF = self._compute_modality_embeddings(F, batch_idx)
+            X = torch.cat([X,XF], dim=1)
 
-                X_dev = X.to(device)
+            X_dev = X.to(device)
+
+        A = batch.A  # A := object of MiniBatch class
+
+        self.rgcn.to(device)
+        A_dev = A.to(device)  # in place transfer
 
         # Forward pass through graph convolution layers
-        self.rgcn.to(device)
-        # TODO: move batch to device?
-        #A_dev = A.to(device)
-        A_dev = batch.A
         X_dev = self.rgcn(X_dev, A_dev)
 
         return X_dev
 
-    def _compute_modality_embeddings(self, F, batch_idx, device):
+    def _compute_modality_embeddings(self, F, batch_idx):
         batch_num_nodes = len(batch_idx)
         X = torch.zeros((batch_num_nodes, self.modality_out_dim),
                         dtype=torch.float32)
         offset = 0
-        for modality, F_set in F:  # F_set is actually alist
+        for modality, encoding_sets in F:
             if modality not in self.modality_modules.keys():
                 continue
 
-            num_sets = len(F_set)  # number of encoding sets for this datatype
-            num_features = 0  # number of added node features for this modality
-            for i, encoding_set in enumerate(F_set):
+            num_sets = len(encoding_sets)
+            for i, encoding_set in enumerate(encoding_sets):
                 module, _, out_dim = self.modality_modules[modality][i]
-                module.to(device)
 
                 encodings, node_idx, _ = encoding_set
                 common_nodes = np.intersect1d(node_idx, batch_idx)
@@ -193,161 +192,18 @@ class MRGCN(nn.Module):
                     offset += out_dim
                     continue
 
-                num_features += len(common_nodes)
-
                 # find indices for common nodes
                 F_batch_mask = np.in1d(node_idx, common_nodes)
                 X_batch_mask = np.in1d(batch_idx, common_nodes)
 
-                # forward pass
-                data = encodings[F_batch_mask].float()
-                data = data.to(device)
-                # compute gradients on batch 
                 logger.debug(" {} (set {} / {})".format(modality,
                                                         i+1,
                                                         num_sets))
-                out_dev = module(data)
 
-                X[X_batch_mask, offset:offset+out_dim] = out_dev.to('cpu')
+                # forward pass and store on correct position in output tensor
+                data = encodings[F_batch_mask].float()
+                X[X_batch_mask, offset:offset+out_dim] = module(data)
 
                 offset += out_dim
 
-            logger.debug("Added %d / %d feature(s) for datatype %s" % (num_features,
-                                                                       batch_num_nodes,
-                                                                       modality))
-
         return X
-
-#    def _compute_modality_embeddings(self, F, batch_idx, device):
-#        batch_num_nodes = len(batch_idx)
-#        X = torch.zeros((batch_num_nodes, self.modality_out_dim),
-#                        dtype=torch.float32)
-#        offset = 0
-#        for modality, F_set in F:  # F_set is actually alist
-#            if modality not in self.modality_modules.keys():
-#                continue
-#
-#            num_sets = len(F_set)  # number of encoding sets for this datatype
-#            num_features = 0  # number of added node features for this modality
-#            for i, encoding_set in enumerate(F_set):
-#                module, seq_length, out_dim = self.modality_modules[modality][i]
-#                module.to(device)
-#
-#                encodings, node_idx, _ = encoding_set
-#                common_nodes = np.intersect1d(node_idx, batch_idx)
-#                if len(common_nodes) <= 0:
-#                    # no nodes in this batch have this modality
-#                    offset += out_dim
-#                    continue
-#
-#                # find indices for common nodes
-#                F_batch_idx = np.where(np.in1d(node_idx, common_nodes))[0]
-#                X_batch_idx = np.where(np.in1d(batch_idx, common_nodes))[0]
-#
-#                num_features += len(common_nodes)
-#                if modality in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
-#                    # encodings := list of sparse coo matrices
-#                    batch = itemgetter(*F_batch_idx)(encodings)
-#                    if type(batch) is not tuple:  # single sample
-#                        batch = (batch,)
-#
-#                    time_dim = 1 # if modality == "xsd.string" else 0  ## uncomment for RNN
-#                    batch = collate_zero_padding(batch,
-#                                                 time_dim,
-#                                                 min_padded_length=seq_length)
-#
-#                    batch = scipy_sparse_list_to_pytorch_sparse(batch)
-#                    batch = batch.to_dense()
-#                else:
-#                    # encodings := numpy array
-#                    batch = encodings[F_batch_idx]
-#                    batch = torch.as_tensor(batch)
-#
-#                # forward pass
-#                batch = batch.to(device)
-#                # compute gradients on batch 
-#                logger.debug(" {} (set {} / {})".format(modality,
-#                                                        i+1,
-#                                                        num_sets))
-#                out_dev = module(batch)
-#
-#                X[X_batch_idx, offset:offset+out_dim] = out_dev.to('cpu')
-#
-#                offset += out_dim
-#
-#            logger.debug("Added %d / %d feature(s) for datatype %s" % (num_features,
-#                                                                       batch_num_nodes,
-#                                                                       modality))
-#
-#        return X
-
-#def mini_batch_package(X, A, batch_idx, num_layers):
-#    """ Mini-batch package
-#
-#        Gather everything necessary to compute batch embeddings.
-#        Assume A to be a sparse scipy matrix
-#    """
-#    payload = list()    
-#
-#    sample_idx = batch_idx  # nodes to compute the embeddings for at layer i
-#    for i in range(1, num_layers+1):       
-#        pack = dict()
-#                
-#        # slices of A belonging to the sample nodes at layer i
-#        A_samples = A[sample_idx]
-#        A_samples = scipy_sparse_to_pytorch_sparse(A_samples)
-#        
-#        # neighbours of the sample nodes at layer i
-#        neighbours_idx = getNeighboursSparse(A, sample_idx)
-#                
-#        pack["A_samples"] = A_samples
-#        pack["neighbours_idx"] = neighbours_idx
-#        if i >= num_layers and X is not None:
-#            # features of neighbours
-#            # only necessary for most-distant nodes
-#            pack["X_neighbours"] = subset_data(X, neighbours_idx)
-#        else:
-#            pack["X_neighbours"] = None
-#            
-#        sample_idx = neighbours_idx
-#            
-#        payload.append(pack)
-#            
-#    return payload
-
-
-
-## TODO: move X out of batch; move out epoch loop
-#class Batch:
-#    idx = list()  # nodes to compute embeddings for
-#    neighbours = list()  # nodes necessary to compute embeddings
-#    A = list()  # adjacency matrix slices necessary to compute embeddings
-#    X = None  # raw values of outer neighbours if node features are included
-#
-#    def __init__(self, X, A, batch_idx, num_layers):
-#        self.idx = batch_idx
-#
-#        self._populate(X, A, num_layers)
-#
-#    def _populate(self, X, A, num_layers):
-#        sample_idx = self.idx  # nodes to compute the embeddings for at layer i
-#        for i in range(1, num_layers+1):       
-#            # slices of A belonging to the sample nodes at layer i
-#            A_samples = A[sample_idx]
-#            A_samples = scipy_sparse_to_pytorch_sparse(A_samples)
-#            
-#            # neighbours of the sample nodes at layer i
-#            neighbours_idx = getNeighboursSparse(A, sample_idx)
-#                    
-#            self.A.append(A_samples)
-#            self.neighbours.append(neighbours_idx)
-#            if i >= num_layers and X is not None:
-#                # features of neighbours
-#                # only necessary for most-distant nodes
-#                self.X = subset_data(X, neighbours_idx)
-#                
-#            sample_idx = neighbours_idx
-#
-#    def to(self, device):
-#        # TODO
-#        pass

@@ -93,15 +93,17 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
     # generate batches
     num_layers = model.rgcn.num_layers
     train_batches = mkbatches(A, X, Y_train, batchsize, num_layers)
-    train_batches = [batch.to_dense_() for batch in train_batches]
-    train_batches = [batch.as_tensors_() for batch in train_batches]
+    for batch in train_batches:
+        batch.to_dense_()
+        batch.as_tensors_()
     num_batches_train = len(train_batches)
 
     valid_batches = list()
     if Y_valid is not None:
         valid_batches = mkbatches(A, X, Y_valid, batchsize, num_layers)
-        valid_batches = [batch.to_dense_() for batch in valid_batches]
-        valid_batches = [batch.as_tensors_() for batch in valid_batches]
+        for batch in valid_batches:
+            batch.to_dense_()
+            batch.as_tensors_()
     num_batches_valid = len(valid_batches)
 
     logging.info("Training for {} epoch".format(nepoch))
@@ -115,11 +117,14 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                                                         num_batches_train)
             print(batch_str, end='\b'*len(batch_str), flush=True)
 
-            node_idx = batch.node_index
+            batch_node_idx = batch.node_index
+            batch_dev = batch.to(device)
 
             # Training scores
-            Y_batch_hat = model(batch, device=device).to('cpu')
-            Y_batch_train = Y_train[node_idx]  # TODO: check if correct X to y mapping
+            Y_batch_hat = model(batch_dev, device=device).to('cpu')
+            Y_batch_train = Y_train[batch_node_idx]  # TODO: check if correct X to y mapping
+
+            batch = batch_dev.to('cpu')
 
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_train, criterion)
             batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_train)[0]
@@ -170,15 +175,16 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                 batch_str = " [VALID] - batch %2.d / %d" % (batch_id, num_batches_valid)
                 print(batch_str, end='\b'*len(batch_str), flush=True)
 
-                # data necessary for batch
-                A_in, X_in, node_idx = batch
-
+                batch_node_idx = batch.node_index
+                batch_dev = batch.to(device)
                 with torch.no_grad():
-                    Y_batch_hat = model(X_in, A_in, device=device).to('cpu')
-                    Y_batch_valid = Y_valid[node_idx]
+                    Y_batch_hat = model(batch_dev, device=device).to('cpu')
+                    Y_batch_valid = Y_valid[batch_node_idx]
 
                     batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_valid, criterion)
                     batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_valid)[0]
+
+                batch = batch_dev.to('cpu')
 
                 batch_loss = float(batch_loss)
                 batch_acc = float(batch_acc)
@@ -215,8 +221,9 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize, device):
     # generate batches
     num_layers = model.rgcn.num_layers
     test_batches = mkbatches(A, X, Y_test, batchsize, num_layers)
-    test_batches = [batch.to_dense_() for batch in test_batches]
-    test_batches = [batch.as_tensors_() for batch in test_batches]
+    for batch in test_batches:
+        batch.to_dense_()
+        batch.as_tensors_()
     num_batches_test = len(test_batches)
 
     for batch_id, batch in enumerate(test_batches, 1):
@@ -226,12 +233,15 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize, device):
         print(batch_str, end='\b'*len(batch_str), flush=True)
 
         node_idx = batch.node_index
+        batch_dev = batch.to(device)
         with torch.no_grad():
-            Y_batch_hat = model(batch, device=device).to('cpu')
+            Y_batch_hat = model(batch_dev, device=device).to('cpu')
             Y_batch_test = Y_test[node_idx]
     
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_test, criterion)
             batch_acc, batch_labels, batch_targets = categorical_accuracy(Y_batch_hat, Y_batch_test)
+
+        batch = batch_dev.to('cpu')
 
         batch_loss = float(batch_loss)
         batch_acc = float(batch_acc)
@@ -288,8 +298,8 @@ def mkbatches(A, X, Y, batchsize, num_layers):
 
             batches.append(batch)
     else:
-        # batch_node_idx = len(Y)
-        batch = FullBatch(A, X, ...)
+        batch_node_idx = np.arange(Y.shape[0])
+        batch = FullBatch(A, X, batch_node_idx)
         batches.append(batch)
 
     return batches
