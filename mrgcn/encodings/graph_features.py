@@ -122,11 +122,6 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
-        # TODO: remove
-        for encodings, _, seq_lengths in encoding_sets:
-            for i, v in enumerate(encodings):
-                if v is None:
-                    print(i)
         # add a bit of noise to reduce the chance of overfitting, eg
         # when one neural encoder converges faster than others.
         noise_mp = feature_config['noise_multiplier']
@@ -257,47 +252,91 @@ def features_included(config):
     return features
 
 def merge_sparse_encodings_sets(encoding_sets):
+    """ Merge sparse encoding sets into a single set; aka share weights
+
+        Expects 2D sparse matrices as encodings.
+
+        Encodings sets contain the encoded feature matrices of the same
+        datatype but connected by different predicates. If literals with the
+        same value are represented by a single node, then the same node can
+        have multiple values. This is handled by averaging the values for these
+        nodes.
+    """
     if len(encoding_sets) <= 1:
         return encoding_sets
 
     node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
-    # TODO: revert to old method to cope with repeating node entries (for different p's)
+    node_idx_unique, node_idx_counts = np.unique(node_idx, return_counts=True)
+    node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
 
-    N = node_idx.shape[0]  # N <= NUM_NODES
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
 
     encodings_merged = np.empty(shape=N, dtype=object)
-    node_idx_merged = sorted(node_idx)
+    node_idx_merged = node_idx_unique
     seq_length_merged = np.zeros(shape=N, dtype=np.int32)
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
+    to_merge = dict()
     for encodings, node_index, seq_length in encoding_sets:
         # assume that non-filled values are zero
         for i in range(len(node_index)):
             idx = node_index[i]
             merged_idx = merged_idx_map[idx]
 
-            encodings_merged[merged_idx] = encodings[i]
-            seq_length_merged[merged_idx] = seq_length[i]
+            enc = encodings[i]
+            enc_length = seq_length[i]
+            if idx in node_idx_mult:
+                if idx not in to_merge:
+                    to_merge[idx] = list()
+                to_merge[idx].append(enc)
+
+                continue
+
+            encodings_merged[merged_idx] = enc
+            seq_length_merged[merged_idx] = enc_length
+
+    for idx, encodings in to_merge.items():
+        shapes = [enc.shape for enc in encodings]
+        enc_shape = tuple(map(max, zip(*shapes)))  # maximum for all dims
+        enc_length = enc_shape[-1]
+
+        a = np.zeros(shape=enc_shape)
+        for enc in encodings:
+            a[:enc.shape[0], :enc.shape[1]] += enc.todense()
+        a /= len(encodings)
+
+        merged_idx = merged_idx_map[idx]
+        encodings_merged[merged_idx] = sp.coo_matrix(a)
+        seq_length_merged[merged_idx] = enc_length
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
 def merge_encoding_sets(encoding_sets):
-    """ Merge encoding sets into a single set
+    """ Merge encoding sets into a single set; aka share weights
+
+        Encodings sets contain the encoded feature matrices of the same
+        datatype but connected by different predicates. If literals with the
+        same value are represented by a single node, then the same node can
+        have multiple values. This is handled by averaging the values for these
+        nodes.
     """
     if len(encoding_sets) <= 1:
         return encoding_sets
 
     # all nodes with this modality
     node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    node_idx_unique, node_idx_counts = np.unique(node_idx, return_counts=True)
+    node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
 
-    N = node_idx.shape[0]  # N <= NUM_NODES
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
     M = max(map(lambda enc: enc.shape[1], encoding_sets))  # highest width
 
     encodings_merged = np.zeros(shape=(N, M), dtype=np.float32)
-    node_idx_merged = sorted(node_idx)
+    node_idx_merged = node_idx_unique
     seq_length_merged = np.zeros(shape=N, dtype=np.int32)
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
+    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idx_mult}
     for encodings, node_index, seq_length in encoding_sets:
         # assume that non-filled values are zero
         for i in range(len(node_index)):
@@ -305,32 +344,77 @@ def merge_encoding_sets(encoding_sets):
             merged_idx = merged_idx_map[idx]  # node index in merged matrix
 
             enc = encodings[i]
-            encodings_merged[merged_idx,:enc.shape[1]] = enc
-            seq_length_merged[merged_idx] = seq_length[i]
+            if idx in node_idx_mult:
+                mult_enc = merged_idx_multvalue_map[merged_idx]
+                if mult_enc is None:
+                    mult_enc = np.zeros(enc.shape, dtype=np.float32)
+                merged_idx_multvalue_map[merged_idx] = mult_enc + enc
+            else:
+                encodings_merged[merged_idx,:enc.shape[1]] = enc
+
+            if seq_length is not None:
+                # use max length for nodes that occur more than once
+                seq_length_merged[merged_idx] = max(seq_length_merged[merged_idx],
+                                                    seq_length[i])
+
+    for i in range(node_idx_mult.shape[0]):
+        idx = node_idx_mult[i]
+        merged_idx = merged_idx_map[idx]
+        count = node_idx_counts[node_idx_counts > 1][i]
+
+        # average vectors for nodes that occur more than once
+        encodings_merged[merged_idx] = merged_idx_multvalue_map[merged_idx] / count
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
 def merge_img_encoding_sets(encoding_sets):
-    """ Merge encoding sets into a single set.
+    """ Merge 3D encoding sets into a single set; aka share weights
+
+        Encodings sets contain the encoded feature matrices of the same
+        datatype but connected by different predicates. If literals with the
+        same value are represented by a single node, then the same node can
+        have multiple values. This is handled by averaging the values for these
+        nodes.
     """
     if len(encoding_sets) <= 1:
         return encoding_sets
 
     node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    node_idx_unique, node_idx_counts = np.unique(node_idx, return_counts=True)
+    node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
 
-    N = node_idx.shape[0]  # N <= NUM_NODES
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
     c, W, H = encoding_sets[0][0].shape[1:]  # assume same image size on all
 
     encodings_merged = np.zeros(shape=(N, c, W, H), dtype=np.float32)
-    node_idx_merged = sorted(node_idx)
+    node_idx_merged = node_idx
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
+    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idx_mult}
     for encodings, node_index, _ in encoding_sets:
         # assume that non-filled values are zero
         for i in range(len(node_index)):
             idx = node_index[i]
             merged_idx = merged_idx_map[idx]
-            encodings_merged[merged_idx] = encodings[i]
+
+            enc = encodings[i]
+            if idx in node_idx_mult:
+                mult_enc = merged_idx_multvalue_map[merged_idx]
+                if mult_enc is None:
+                    mult_enc = np.zeros(enc.shape, dtype=np.float32)
+                merged_idx_multvalue_map[merged_idx] = mult_enc + enc
+
+                continue
+
+            encodings_merged[merged_idx] = enc
+    
+    for i in range(node_idx_mult.shape[0]):
+        idx = node_idx_mult[i]
+        merged_idx = merged_idx_map[idx]
+        count = node_idx_counts[node_idx_counts > 1][i]
+
+        # average vectors for nodes that occur more than once
+        encodings_merged[merged_idx] = merged_idx_multvalue_map[merged_idx] / count
 
     return [[encodings_merged, node_idx_merged, -np.ones(N)]]
 

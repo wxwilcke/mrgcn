@@ -31,11 +31,12 @@ class Batch:
                  # pad time_dim with zeros such that the width of
                  # each matrix is as long as that of the widest member
                 max_width = max(seq_length)  # highest width
-                encodings_dense = collate_zero_padding(encodings,
-                                                       time_dim,
-                                                       min_padded_length=max_width)
+                encodings_padded = collate_zero_padding(encodings,
+                                                        time_dim,
+                                                        min_padded_length=max_width)
+                encodings_dense = np.array([a.todense() for a in encodings_padded])
 
-                self.X[i][1][j][0] = np.vstack(encodings_dense)
+                self.X[i][1][j][0] = encodings_dense
 
     def as_tensors_(self):
         self.node_index = torch.from_numpy(self.node_index)
@@ -212,11 +213,10 @@ def mksubset(X, sample_idx):
         # TODO: skip if modality not asked for (optimization)
         F_set_sample = list()
         for encodings, nodes_idx, seq_lengths in F_set:
-            num_samples = len(sample_idx)
-
             # find nodes in sample with this modality
-            common_nodes = np.intersect1d(nodes_idx, sample_idx)
-            if len(common_nodes) <= 0:
+            common_nodes = sorted(np.intersect1d(nodes_idx, sample_idx))
+            num_common = len(common_nodes)
+            if num_common <= 0:
                 # add a dummy set if these encodings are not
                 # available for this sample, to preserve order
                 # in case different modules were created per
@@ -228,17 +228,21 @@ def mksubset(X, sample_idx):
                 continue
 
             # initiate subset structures
-            encodings_sample = np.zeros((num_samples,
-                                        *encodings.shape[1:]))
-            nodes_idx_sample = np.copy(sample_idx)
-            seq_length_sample = np.zeros(num_samples, dtype=int)
+            if encodings.dtype is np.dtype("O"):  # object array
+                encodings_sample = np.empty(shape=num_common,
+                                            dtype=object)
+            else:
+                encodings_sample = np.zeros((num_common,
+                                            *encodings.shape[1:]))
+
+            nodes_idx_sample = np.array(common_nodes)
+            seq_length_sample = np.zeros(num_common, dtype=int)
 
             # find indices for common nodes
             F_sample_mask = np.in1d(nodes_idx, common_nodes)
-            sample_mask = np.in1d(sample_idx, common_nodes)
 
-            seq_length_sample[sample_mask] = seq_lengths[F_sample_mask]
-            encodings_sample[sample_mask] = encodings[F_sample_mask]
+            seq_length_sample = seq_lengths[F_sample_mask]
+            encodings_sample = encodings[F_sample_mask]
 
             F_set_sample.append([encodings_sample,
                                  nodes_idx_sample,
