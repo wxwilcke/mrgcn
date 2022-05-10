@@ -122,7 +122,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
 
             # Training scores
             Y_batch_hat = model(batch_dev, device=device).to('cpu')
-            Y_batch_train = Y_train[batch_node_idx]  # TODO: check if correct X to y mapping
+            Y_batch_train = Y_train[batch_node_idx]
 
             batch = batch_dev.to('cpu')
 

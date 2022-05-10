@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from mrgcn.data.batch import FullBatch, MiniBatch
 from mrgcn.encodings.graph_features import construct_features
 from mrgcn.models.mrgcn import MRGCN
 from mrgcn.tasks.utils import optimizer_params
@@ -32,7 +33,6 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     term_width = get_terminal_size().columns
 
     # compile model
-    num_nodes = A.shape[0]
     model = build_model(X_width, A, modules_config, config, featureless)
     opt_params = optimizer_params(model, optimizer_config)
     optimizer = optim.Adam(opt_params,
@@ -63,14 +63,20 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
         print(f" - {epoch} epoch")
 
-    # store nodes needed per batch; used as pointer
-    batchsize_lst = list()
+    # prepare splits
+    if data is not None:
+        if test_split == "test":
+            # merge train and valid splits when testing
+            data["train"] = np.concatenate([data["train"],
+                                            data["valid"]],
+                                           axis=0)
+            data["valid"] = np.empty(0)  # save memory
 
     # Log wall-clock time
     t0 = time()
     loss = 0.0
-    for result in train_model(A, X, data, num_nodes, model, optimizer,
-                              criterion, epoch, nepoch, batchsize, batchsize_lst,
+    for result in train_model(A, X, data, model, optimizer,
+                              criterion, epoch, nepoch, batchsize,
                               mrr_batchsize, eval_interval, filter_ranks,
                               l1_lambda, l2_lambda, model_device,
                               distmult_device, term_width):
@@ -98,20 +104,23 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
     logging.info("Training time: {:.2f}s".format(time()-t0))
 
-    # the highest seen batchsize during training
-    node_batchsize = max(batchsize_lst)
-
     # Log wall-clock time
     t0 = time()
 
+    # generate batches
+    num_layers = model.rgcn.num_layers
     test_data = data[test_split]
-    test_mrr, test_hits_at_k, test_ranks, _ = test_model(A, X, test_data,
-                                                         model, node_batchsize,
-                                                         mrr_batchsize,
-                                                         filter_ranks,
-                                                         model_device,
-                                                         distmult_device,
-                                                         term_width)
+    test_batches = mkbatches(A, X, test_data, batchsize, mrr_batchsize, num_layers)
+    for batch, _ in test_batches:
+        batch.to_dense_()
+        batch.as_tensors_()
+
+    test_mrr, test_hits_at_k, test_ranks = test_model(test_batches,
+                                                      model,
+                                                      filter_ranks,
+                                                      model_device,
+                                                      distmult_device,
+                                                      term_width)
 
     logging.info("Testing time: {:.2f}s".format(time()-t0))
 
@@ -129,99 +138,100 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
     return (model, optimizer, epoch+nepoch, loss, test_mrr, test_hits_at_k, test_ranks)
 
-def train_model(A, X, data, num_nodes, model, optimizer, criterion,
-                epoch, nepoch, batchsize, batchsize_lst, mrr_batchsize,
+def train_model(A, X, data, model, optimizer, criterion,
+                epoch, nepoch, batchsize, mrr_batchsize,
                 eval_interval, filter_ranks, l1_lambda, l2_lambda,
                 model_device, distmult_device, term_width):
-    logging.info("Training for {} epoch".format(nepoch))
 
+    # generate batches
+    num_layers = model.rgcn.num_layers
     train_data = data["train"]
-    num_samples = train_data.shape[0]
-    
-    if batchsize <= 0:
-        batchsize = num_samples
+    train_batches = mkbatches(A, X, train_data, batchsize, mrr_batchsize, num_layers)
+    for batch, _ in train_batches:
+        batch.to_dense_()
+        batch.as_tensors_()
+    num_batches_train = len(train_batches)
 
-    batches = [slice(begin, min(begin+batchsize, num_samples))
-               for begin in range(0, num_samples, batchsize)]
-    num_batches = len(batches)
+    valid_batches = list()
+    valid_data = data["valid"]
+    if valid_data is not None:
+        valid_batches = mkbatches(A, X, valid_data, batchsize, mrr_batchsize, num_layers)
+        for batch, _ in valid_batches:
+            batch.to_dense_()
+            batch.as_tensors_()
+
+    logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(epoch+1, nepoch+epoch+1):
         model.train()
         
         loss_lst = list()
-        for batch_id, batch in enumerate(batches, 1):
-            batch_str = " [TRAIN] - batch %2.d / %d" % (batch_id, num_batches)
+        for batch_id, (batch, batch_data) in enumerate(train_batches, 1):
+            batch_str = " [TRAIN] - batch %2.d / %d" % (batch_id, num_batches_train)
             print(batch_str, end='\b'*len(batch_str), flush=True)
 
-            if num_batches > 1:
-                batch_data = train_data[batch].detach().clone()
-                batch_nodes = np.union1d(batch_data[:, 0], batch_data[:, 2])
-            else:
-                # full batch
-                batch_data = train_data
-                batch_nodes = np.arange(num_nodes)
-
+            # number of triples in batch
             batch_num_samples = batch_data.shape[0]
-            batch_num_nodes = len(batch_nodes)
+
+            # node indices of all nodes in this batch.
+            # these have been remapped to local indices in mini-batch mode
+            batch_nodes = np.union1d(batch_data[:, 0],
+                                     batch_data[:, 2])
 
             # sample negative triples by copying and corrupting positive triples
-            ncorrupt = batch_num_samples//5
-            neg_samples_idx = torch.from_numpy(
-                np.random.choice(np.arange(batch_num_samples),
-                                 ncorrupt,
-                                 replace=False))
+            ncorrupt = batch_num_samples//5  # corrupt 20%
+            neg_samples_idx = np.random.choice(np.arange(batch_num_samples),
+                                               ncorrupt,
+                                               replace=False)
 
-            ncorrupt_head = ncorrupt//2
+            ncorrupt_head = ncorrupt//2  # corrupt head and tail equally
             ncorrupt_tail = ncorrupt - ncorrupt_head
-            corrupted_data = torch.empty((ncorrupt, 3), dtype=torch.int64)
+            corrupted_data = np.empty((ncorrupt, 3), dtype=int)
 
-            # within-batch corruption to reduce the need to compute others
-            corrupted_data = batch_data[neg_samples_idx]
-            corrupted_data[:ncorrupt_head, 0] = torch.from_numpy(np.random.choice(batch_nodes,
-                                                                                  ncorrupt_head))
-            corrupted_data[-ncorrupt_tail:, 2] = torch.from_numpy(np.random.choice(batch_nodes,
-                                                                                   ncorrupt_tail))
-
-            # remap nodes to match embedding index
-            if num_batches > 1:
-                node_idx_map = {i:j for j,i in enumerate(batch_nodes)}
-                batch_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
-                                                     for i in batch_data[:, 0]])
-                batch_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
-                                                     for i in batch_data[:, 2]])
-                corrupted_data[:, 0] = torch.LongTensor([node_idx_map[int(i)]
-                                                         for i in corrupted_data[:, 0]])
-                corrupted_data[:, 2] = torch.LongTensor([node_idx_map[int(i)]
-                                                         for i in corrupted_data[:, 2]])
+            # within-batch corruption to reduce the need to compute
+            # the embeddings of out-of-batch nodes.
+            # this should work fine as long as the batch size isn't too small.
+            corrupted_data[:] = batch_data[neg_samples_idx]  # deep copy
+            corrupted_data[:ncorrupt_head, 0] = np.random.choice(batch_nodes,
+                                                                 ncorrupt_head)
+            corrupted_data[-ncorrupt_tail:, 2] = np.random.choice(batch_nodes,
+                                                                  ncorrupt_tail)
 
             # create labels; positive samples are 1, negative 0
             Y = torch.ones(batch_num_samples+ncorrupt, dtype=torch.float32)
             Y[-ncorrupt:] = 0
 
-            # compute score
-            node_embeddings = model(X, A, batch_nodes,
-                                    device=model_device).to(distmult_device)
+            # compute necessary embeddings
+            batch_dev = batch.to(model_device)
+
+            node_embeddings = model(batch_dev, device=model_device).to(distmult_device)
             edge_embeddings = model.rgcn.relations.to(distmult_device)
+            
+            batch = batch_dev.to('cpu')  # free gpu memory
 
-            # subset of nodes in batch (rest are neighbours)
-            node_embeddings = node_embeddings[:batch_num_nodes]
-
+            # compute scores
             Y_hat = torch.empty((batch_num_samples+ncorrupt), dtype=torch.float32)
-            Y_hat[:batch_num_samples] = score_distmult_bc((batch_data[:, 0],
-                                                           batch_data[:, 1],
-                                                           batch_data[:, 2]),
+
+            batch_data_dev = torch.as_tensor(batch_data, device=distmult_device)
+            Y_hat[:batch_num_samples] = score_distmult_bc((batch_data_dev[:, 0],
+                                                           batch_data_dev[:, 1],
+                                                           batch_data_dev[:, 2]),
                                                           node_embeddings,
                                                           edge_embeddings).to('cpu')
-            Y_hat[-ncorrupt:] = score_distmult_bc((corrupted_data[:, 0],
-                                                   corrupted_data[:, 1],
-                                                   corrupted_data[:, 2]),
+
+            corrupted_data_dev = torch.as_tensor(corrupted_data, device=distmult_device)
+            Y_hat[-ncorrupt:] = score_distmult_bc((corrupted_data_dev[:, 0],
+                                                   corrupted_data_dev[:, 1],
+                                                   corrupted_data_dev[:, 2]),
                                                   node_embeddings,
                                                   edge_embeddings).to('cpu')
 
             # clear gpu cache to save memory
-            if model_device == torch.device('cpu') and\
-               distmult_device != torch.device('cpu'):
-                del node_embeddings
-                del edge_embeddings
+            del node_embeddings
+            del edge_embeddings
+            del batch_data_dev
+            del corrupted_data_dev
+            for cuda_dev in range(torch.cuda.device_count()):
+                torch.cuda.set_device(cuda_dev)
                 torch.cuda.empty_cache()
 
             # compute loss
@@ -251,7 +261,6 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
             optimizer.step()
 
             loss_lst.append(float(loss))
-            batchsize_lst.append(batch_num_nodes)
         
         loss = np.mean(loss_lst)
         results_str = f"{epoch:04d} | loss {loss:.4f}"
@@ -260,16 +269,12 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
         valid_mrr, valid_hits_at_k = None, None
         if epoch % eval_interval == 0 or epoch == nepoch:
             # the highest seen batchsize during training
-            node_batchsize = max(batchsize_lst)
-            logger.debug("Using %d nodes per batch for evaluation" % node_batchsize)
-
-            train_mrr, train_hits_at_k, _, cache = test_model(A, X, train_data, model,
-                                                              node_batchsize,
-                                                              mrr_batchsize,
-                                                              filter_ranks,
-                                                              model_device,
-                                                              distmult_device,
-                                                              term_width)
+            train_mrr, train_hits_at_k, _  = test_model(train_batches,
+                                                        model,
+                                                        filter_ranks,
+                                                        model_device,
+                                                        distmult_device,
+                                                        term_width)
 
             results_str += f" | train MRR {train_mrr['raw']:.4f} (raw)"
             if filter_ranks:
@@ -277,17 +282,13 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
 
             valid_mrr = None
             valid_hits_at_k = None
-            if "valid" in data.keys() and epoch < nepoch:
-                valid_data = data["valid"]
-                valid_mrr, valid_hits_at_k, _, _ = test_model(A, X, valid_data,
-                                                              model,
-                                                              node_batchsize,
-                                                              mrr_batchsize,
-                                                              filter_ranks,
-                                                              model_device,
-                                                              distmult_device,
-                                                              term_width,
-                                                              cache)
+            if valid_data is not None and epoch < nepoch:
+                valid_mrr, valid_hits_at_k, _ = test_model(valid_batches,
+                                                           model,
+                                                           filter_ranks,
+                                                           model_device,
+                                                           distmult_device,
+                                                           term_width)
 
                 results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) "
                 if filter_ranks:
@@ -302,69 +303,109 @@ def train_model(A, X, data, num_nodes, model, optimizer, criterion,
                train_mrr, train_hits_at_k,
                valid_mrr, valid_hits_at_k)
 
-
-def test_model(A, X, data, model, node_batchsize, mrr_batch_size, filter_ranks,
-               model_device, distmult_device, term_width, cache=None):
+def test_model(batches, model, filter_ranks, model_device, distmult_device,
+               term_width):
     model.eval()
     
-    num_nodes = A.shape[0]
-    if node_batchsize <= 0:
-        node_batchsize = num_nodes
+    K = [1, 3, 10]
+    hits_at_k = {"flt":[[] for _ in K], "raw":[[] for _ in K]}
+    mrr = {"flt":[], "raw":[]}
+    rankings = {"flt":[], "raw":[]}
 
-    batches = [slice(begin, min(begin+node_batchsize, num_nodes))
-               for begin in range(0, num_nodes, node_batchsize)]
     num_batches = len(batches)
-    
-    mrr = dict()
-    hits_at_k = dict()
-    rankings = dict()
     with torch.no_grad():
-        if cache is not None:
-            node_embeddings, edge_embeddings = cache
-        else:
-            out_dim = model.rgcn.layers['layer_0'].outdim  # assume one GCN layer
-            node_embeddings = torch.zeros((num_nodes, out_dim)) 
-            for batch_id, batch in enumerate(batches, 1):
-                batch_str = " [MRGCN] - batch %2.d / %d" % (batch_id, num_batches)
-                width_remain = term_width - len(batch_str)
-                batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
-                print(batch_str, end='\b'*len(batch_str), flush=True)
+        for batch_id, (batch, batch_data) in enumerate(batches, 1):
+            batch_str = " [MRGCN] - batch %2.d / %d" % (batch_id, num_batches)
+            width_remain = term_width - len(batch_str)
+            batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
+            print(batch_str, end='\b'*len(batch_str), flush=True)
 
-                batch_idx = np.arange(batch.start, batch.stop)
-                batch_num_samples = len(batch_idx)
-                batch_embeddings = model(X, A, batch_idx,
-                                         device=model_device)[:batch_num_samples].to('cpu')
-
-                node_embeddings[batch_idx, :] = batch_embeddings
-
-            node_embeddings = node_embeddings.to(distmult_device)
+            node_embeddings = model(batch, device=model_device).to(distmult_device)
             edge_embeddings = model.rgcn.relations.to(distmult_device)
+            for filtered in [False, True]:
+                rank_type = "flt" if filtered else "raw"
+                if filtered is True and not filter_ranks:
+                    mrr[rank_type].append(-1)
+                    for i, _ in enumerate(K):
+                        hits_at_k[rank_type][i].append(-1)
+                    rankings[rank_type].append(-1)
 
-        for filtered in [False, True]:
-            rank_type = "flt" if filtered else "raw"
-            if filtered is True and not filter_ranks:
-                mrr[rank_type] = -1
-                hits_at_k[rank_type] = [-1, -1, -1]
-                rankings[rank_type] = [-1]
+                    continue
 
-                continue
+                ranks = compute_ranks_fast(batch_data,
+                                           node_embeddings,
+                                           edge_embeddings,
+                                           filtered)
 
-            ranks = compute_ranks_fast(data,
-                                       node_embeddings,
-                                       edge_embeddings,
-                                       mrr_batch_size,
-                                       filtered,
-                                       term_width)
+                mrr[rank_type].append(torch.mean(1.0 / ranks.float()).item())
+                for i, k in enumerate(K):
+                    hits_at_k[rank_type][i].append(float(torch.mean((ranks <= k).float())))
+                ranks = ranks.tolist()
+                rankings[rank_type].append(ranks)
 
-            mrr[rank_type] = torch.mean(1.0 / ranks.float()).item()
-            hits_at_k[rank_type] = list()
-            for k in [1, 3, 10]:
-                hits_at_k[rank_type].append(float(torch.mean((ranks <= k).float())))
+    # average MRR and hits@K over batches; flatten ranks into list
+    for rank_type in ("flt", "raw"):
+        mrr[rank_type] = np.mean(mrr[rank_type])
+        hits_at_k[rank_type] = [np.mean(k) for k in hits_at_k[rank_type]]
+        rankings[rank_type] = [r for r_list in rankings[rank_type] for r in r_list]
 
-            ranks = ranks.tolist()
-            rankings[rank_type] = ranks
+    return (mrr, hits_at_k, rankings)
 
-    return (mrr, hits_at_k, rankings, [node_embeddings, edge_embeddings])
+
+#def test_modelx(batches, model, filter_ranks, model_device, distmult_device,
+#               term_width, cache=None):
+#    model.eval()
+#    
+#    num_batches = len(batches)
+#    
+#    mrr = dict()
+#    hits_at_k = dict()
+#    rankings = dict()
+#    with torch.no_grad():
+#        if cache is not None:
+#            node_embeddings, edge_embeddings = cache
+#        else:
+#            out_dim = model.rgcn.layers['layer_0'].outdim  # assume one GCN layer
+#            node_embeddings = torch.zeros((num_nodes, out_dim)) 
+#            for batch_id, (batch, _) in enumerate(batches, 1):
+#                batch_str = " [MRGCN] - batch %2.d / %d" % (batch_id, num_batches)
+#                width_remain = term_width - len(batch_str)
+#                batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
+#                print(batch_str, end='\b'*len(batch_str), flush=True)
+#
+#                batch_embeddings = model(batch,
+#                                         device=model_device)[:batch_num_samples].to('cpu')
+#
+#                node_embeddings[batch_idx, :] = batch_embeddings
+#
+#            node_embeddings = node_embeddings.to(distmult_device)
+#            edge_embeddings = model.rgcn.relations.to(distmult_device)
+#
+#        for filtered in [False, True]:
+#            rank_type = "flt" if filtered else "raw"
+#            if filtered is True and not filter_ranks:
+#                mrr[rank_type] = -1
+#                hits_at_k[rank_type] = [-1, -1, -1]
+#                rankings[rank_type] = [-1]
+#
+#                continue
+#
+#            ranks = compute_ranks_fast(data,
+#                                       node_embeddings,
+#                                       edge_embeddings,
+#                                       mrr_batch_size,
+#                                       filtered,
+#                                       term_width)
+#
+#            mrr[rank_type] = torch.mean(1.0 / ranks.float()).item()
+#            hits_at_k[rank_type] = list()
+#            for k in [1, 3, 10]:
+#                hits_at_k[rank_type].append(float(torch.mean((ranks <= k).float())))
+#
+#            ranks = ranks.tolist()
+#            rankings[rank_type] = ranks
+#
+#    return (mrr, hits_at_k, rankings, [node_embeddings, edge_embeddings])
 
 
 def build_dataset(kg, nodes_map, config, featureless):
@@ -420,6 +461,111 @@ def build_model(C, A, modules_config, config, featureless):
 
     return model
 
+#def mkbatches(A, X, data, batchsize, num_layers):
+#    """ Generate batches from dataset of triples
+#
+#        Prefer batches of data over batches of nodes as the latter can yield
+#        (near) empty and imballanced batches, and still doesn't prevent the
+#        need to compute embeddings of out-of-batch nodes. Omit sorting data by
+#        nodes for the same reason, which only helps in a small number of cases.
+#    """
+#    num_samples = data.shape[0]
+#    if batchsize <= 0:
+#        # full batch mode requested by user
+#        batchsize = num_samples
+#
+#    batch_slices = [slice(begin, min(begin+batchsize, num_samples))
+#                   for begin in range(0, num_samples, batchsize)]
+#    batches = list()
+#    if len(batch_slices) > 1:
+#        # mini batch mode
+#        for slce in batch_slices:
+#            batch_data = data[slce]
+#            batch_node_idx = np.union1d(batch_data[:, 0],
+#                                        batch_data[:, 2])  # nodes in batch
+#
+#            batch = MiniBatch(A, X, batch_node_idx, num_layers)
+#
+#            batches.append((batch, batch_data))
+#    else:
+#        batch_node_idx = np.union1d(data[:, 0], data[:, 2])  # all nodes
+#        batch = FullBatch(A, X, batch_node_idx)
+#        batches.append((batch, data))
+#
+#    return batches
+
+def mkbatches(A, X, data, batchsize_mrgcn, batchsize_mrr, num_layers):
+    """ Generate batches from node embeddings
+
+        Prefer batches of nodes over batches of data to avoid exceeding the
+        memory use of the MR-GCN in case of too many within-batch nodes. Split
+        batches on the number of samples if this exceeds the parameter, to
+        avoid mrr memory issues.
+
+        This avoids the need to implement memory-reducing features during
+        validation and testing, which often have a much smaller number of
+        samples with the same number of nodes.
+    """
+    sample_nodes = np.union1d(data[:, 0], data[:, 2])  # all nodes in data
+    num_nodes = len(sample_nodes)
+    if batchsize_mrgcn <= 0:
+        # full batch mode requested by user
+        batchsize_mrgcn = num_nodes
+
+    if batchsize_mrr <= 0:
+        # full batch mode requested by user
+        batchsize_mrr = data.shape[0]
+
+    batch_slices = [slice(begin, min(begin+batchsize_mrgcn, num_nodes))
+                   for begin in range(0, num_nodes, batchsize_mrgcn)]
+    batches = list()
+    if len(batch_slices) > 1:
+        # mini batch mode
+        for slce in batch_slices:
+            batch_node_idx = sample_nodes[slce]
+
+            # subset of 'data' that contains a batch node as head or tail.
+            # the same triples can occur in at most 2 different batches.
+            # prefer this over filtering repeated nodes as a) more data is
+            # better and b) avoid (near) empty data in later batches.
+            data_mask = ((np.in1d(data[:, 0], batch_node_idx))
+                         | (np.in1d(data[:, 2], batch_node_idx)))
+            batch_data = data[data_mask]
+
+            # split 'batch_data' in smaller parts to avoid OOM issues when
+            # computing their score
+            num_samples = batch_data.shape[0]
+            for subset in np.array_split(np.arange(num_samples),
+                                         num_samples//batchsize_mrr):
+                data_subset = np.copy(batch_data[subset])
+
+                # extension of the sliced batch nodes which includes also all
+                # connected nodes not part of the slice but which is still needed
+                # to compute the batch data embeddings.
+                subset_node_idx = np.union1d(data_subset[:, 0],
+                                             data_subset[:, 2])
+
+                # remap nodes to match embedding index
+                # this is only needed when batching the nodes
+                index_map = {v:i for i,v in enumerate(subset_node_idx)}
+                data_subset[:, 0] = [index_map[int(i)] for i in data_subset[:, 0]]
+                data_subset[:, 2] = [index_map[int(i)] for i in data_subset[:, 2]]
+
+                batch = MiniBatch(A, X, subset_node_idx, num_layers)
+                batches.append((batch, data_subset))
+    else:
+        num_samples = data.shape[0]
+        for subset in np.array_split(np.arange(num_samples),
+                                     num_samples//batchsize_mrr):
+            data_subset = np.copy(data[subset])
+            subset_node_idx = np.union1d(data_subset[:, 0],
+                                         data_subset[:, 2])
+
+
+            batch = FullBatch(A, X, subset_node_idx)
+            batches.append((batch, data_subset))
+
+    return batches
 
 def binary_crossentropy(Y_hat, Y, criterion):
     # Y_hat := output of score()
@@ -428,10 +574,10 @@ def binary_crossentropy(Y_hat, Y, criterion):
     return criterion(Y_hat, Y)
 
 
-def filter_scores_(scores, batch_data, heads, tails, head=True):
+def filter_scores_(scores, data, heads, tails, head=True):
     # set scores of existing facts to -inf
     indices = list()
-    for i, (s, p, o) in enumerate(batch_data):
+    for i, (s, p, o) in enumerate(data):
         s, p, o = (s.item(), p.item(), o.item())
         if head:
             indices.extend([(i, si) for si in heads[p, o] if si != s])
@@ -464,66 +610,109 @@ def truedicts(facts):
 
     return heads, tails
 
-
-def compute_ranks_fast(data, node_embeddings, edge_embeddings,
-                       batch_size=16, filtered=True, term_width=80):
+def compute_ranks_fast(data, node_embeddings, edge_embeddings, filtered=True):
     true_heads, true_tails = truedicts(data) if filtered else (None, None)
 
     num_facts = data.shape[0]
     num_nodes = node_embeddings.shape[0]
-    num_batches = int((num_facts + batch_size-1)//batch_size)
-    ranks = torch.empty((num_facts*2), dtype=torch.int64)
+
+    offset = 0
+    out = torch.empty((num_facts*2), dtype=torch.int64)
     for head in [False, True]:  # head or tail prediction
-        offset = int(head) * num_facts
-        for batch_id in range(num_batches):
-            batch_begin = batch_id * batch_size
-            batch_end = min(num_facts, (batch_id+1) * batch_size)
+        # compute the full score matrix (filter later)
+        bases = data[:, 1:] if head else data[:, :2]
+        targets = data[:, 0] if head else data[:, 2]
 
-            batch_idx = (int(head) * num_batches) + batch_id + 1
-            if batch_idx % min(ceil(2*num_batches/20), 100) == 0:
-                batch_str = " [DistMult] - batch %2.d / %d" % (batch_idx,
-                                                               num_batches*2)
-                width_remain = term_width - len(batch_str)
-                batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
-                print(batch_str, end='\b'*len(batch_str), flush=True)
+        # generate all possible triples by expanding and mutating 
+        # either head or tail
+        bexp = bases.view(num_facts, 1, 2).expand(num_facts,
+                                                  num_nodes, 2)
+        ar   = torch.arange(num_nodes).view(1, num_nodes, 1).expand(num_facts,
+                                                                    num_nodes, 1)
+        candidates = torch.cat([ar, bexp] if head else [bexp, ar], dim=2)
 
-            batch_data = data[batch_begin:batch_end]
-            batch_num_facts = batch_data.shape[0]
+        scores = score_distmult_bc((candidates[:, :, 0],
+                                    candidates[:, :, 1],
+                                    candidates[:, :, 2]),
+                                   node_embeddings,
+                                   edge_embeddings).to('cpu')
 
-            # compute the full score matrix (filter later)
-            bases = batch_data[:, 1:] if head else batch_data[:, :2]
-            targets = batch_data[:, 0] if head else batch_data[:, 2]
+        # filter out the true triples that aren't the target
+        if filtered:
+            filter_scores_(scores, data, true_heads, true_tails, head=head)
 
-            # collect the triples for which to compute scores
-            bexp = bases.view(batch_num_facts, 1, 2).expand(batch_num_facts,
-                                                            num_nodes, 2)
-            ar   = torch.arange(num_nodes).view(1, num_nodes, 1).expand(batch_num_facts,
-                                                                        num_nodes, 1)
-            candidates = torch.cat([ar, bexp] if head else [bexp, ar], dim=2)
+        # Select the true scores, and count the number of values larger than that
+        true_scores = scores[torch.arange(num_facts), targets]
+        ranks = torch.sum(scores > true_scores.view(num_facts, 1), dim=1, dtype=torch.int64)
+        # -- This is the "optimistic" rank (assuming it's sorted to the front of the ties)
+        num_ties = torch.sum(scores == true_scores.view(num_facts, 1), dim=1, dtype=torch.int64)
 
-            scores = score_distmult_bc((candidates[:, :, 0],
-                                        candidates[:, :, 1],
-                                        candidates[:, :, 2]),
-                                       node_embeddings,
-                                       edge_embeddings).to('cpu')
+        # Account for ties (put the true example halfway down the ties)
+        ranks = ranks + torch.round((num_ties - 1) / 2).long()
 
-            # filter out the true triples that aren't the target
-            if filtered:
-                filter_scores_(scores, batch_data, true_heads, true_tails, head=head)
+        out[offset:offset+num_facts] = ranks
+        offset += num_facts
 
-            # Select the true scores, and count the number of values larger than than
-            true_scores = scores[torch.arange(batch_num_facts), targets]
-            batch_ranks = torch.sum(scores > true_scores.view(batch_num_facts, 1), dim=1, dtype=torch.int64)
-            # -- This is the "optimistic" rank (assuming it's sorted to the front of the ties)
-            num_ties = torch.sum(scores == true_scores.view(batch_num_facts, 1), dim=1, dtype=torch.int64)
+    return out + 1
 
-            # Account for ties (put the true example halfway down the ties)
-            batch_ranks = batch_ranks + torch.round((num_ties - 1) / 2).long()
-
-            ranks[offset+batch_begin:offset+batch_end] = batch_ranks
-
-    return ranks + 1
-
+#def compute_ranks_fast(data, node_embeddings, edge_embeddings,
+#                       batch_size=16, filtered=True, term_width=80):
+#    true_heads, true_tails = truedicts(data) if filtered else (None, None)
+#
+#    num_facts = data.shape[0]
+#    num_nodes = node_embeddings.shape[0]
+#    num_batches = int((num_facts + batch_size-1)//batch_size)
+#    ranks = torch.empty((num_facts*2), dtype=torch.int64)
+#    for head in [False, True]:  # head or tail prediction
+#        offset = int(head) * num_facts
+#        for batch_id in range(num_batches):
+#            batch_begin = batch_id * batch_size
+#            batch_end = min(num_facts, (batch_id+1) * batch_size)
+#
+#            batch_idx = (int(head) * num_batches) + batch_id + 1
+#            if batch_idx % min(ceil(2*num_batches/20), 100) == 0:
+#                batch_str = " [DistMult] - batch %2.d / %d" % (batch_idx,
+#                                                               num_batches*2)
+#                width_remain = term_width - len(batch_str)
+#                batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
+#                print(batch_str, end='\b'*len(batch_str), flush=True)
+#
+#            batch_data = data[batch_begin:batch_end]
+#            batch_num_facts = batch_data.shape[0]
+#
+#            # compute the full score matrix (filter later)
+#            bases = batch_data[:, 1:] if head else batch_data[:, :2]
+#            targets = batch_data[:, 0] if head else batch_data[:, 2]
+#
+#            # collect the triples for which to compute scores
+#            bexp = bases.view(batch_num_facts, 1, 2).expand(batch_num_facts,
+#                                                            num_nodes, 2)
+#            ar   = torch.arange(num_nodes).view(1, num_nodes, 1).expand(batch_num_facts,
+#                                                                        num_nodes, 1)
+#            candidates = torch.cat([ar, bexp] if head else [bexp, ar], dim=2)
+#
+#            scores = score_distmult_bc((candidates[:, :, 0],
+#                                        candidates[:, :, 1],
+#                                        candidates[:, :, 2]),
+#                                       node_embeddings,
+#                                       edge_embeddings).to('cpu')
+#
+#            # filter out the true triples that aren't the target
+#            if filtered:
+#                filter_scores_(scores, batch_data, true_heads, true_tails, head=head)
+#
+#            # Select the true scores, and count the number of values larger than than
+#            true_scores = scores[torch.arange(batch_num_facts), targets]
+#            batch_ranks = torch.sum(scores > true_scores.view(batch_num_facts, 1), dim=1, dtype=torch.int64)
+#            # -- This is the "optimistic" rank (assuming it's sorted to the front of the ties)
+#            num_ties = torch.sum(scores == true_scores.view(batch_num_facts, 1), dim=1, dtype=torch.int64)
+#
+#            # Account for ties (put the true example halfway down the ties)
+#            batch_ranks = batch_ranks + torch.round((num_ties - 1) / 2).long()
+#
+#            ranks[offset+batch_begin:offset+batch_end] = batch_ranks
+#
+#    return ranks + 1
 
 def score_distmult_bc(data, node_embeddings, edge_embeddings):
     si, pi, oi = data
