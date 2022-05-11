@@ -25,7 +25,7 @@ class Batch:
 
         for i, (_, encoding_sets) in enumerate(self.X[1:], 1):
             for j, (encodings, _, seq_length) in enumerate(encoding_sets):
-                if encodings.dtype is not np.dtype("O"):  # object array
+                if encodings.dtype != np.dtype("O"):  # object array
                     continue
 
                  # pad time_dim with zeros such that the width of
@@ -228,7 +228,7 @@ def mksubset(X, sample_idx):
                 continue
 
             # initiate subset structures
-            if encodings.dtype is np.dtype("O"):  # object array
+            if encodings.dtype == np.dtype("O"):  # object array
                 encodings_sample = np.empty(shape=num_common,
                                             dtype=object)
             else:

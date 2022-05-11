@@ -329,7 +329,7 @@ def merge_encoding_sets(encoding_sets):
     node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
 
     N = node_idx_unique.shape[0]  # N <= NUM_NODES
-    M = max(map(lambda enc: enc.shape[1], encoding_sets))  # highest width
+    M = max([enc[0].shape[1] for enc in encoding_sets])  # highest width
 
     encodings_merged = np.zeros(shape=(N, M), dtype=np.float32)
     node_idx_merged = node_idx_unique
@@ -350,7 +350,7 @@ def merge_encoding_sets(encoding_sets):
                     mult_enc = np.zeros(enc.shape, dtype=np.float32)
                 merged_idx_multvalue_map[merged_idx] = mult_enc + enc
             else:
-                encodings_merged[merged_idx,:enc.shape[1]] = enc
+                encodings_merged[merged_idx,:int(seq_length[i])] = enc
 
             if seq_length is not None:
                 # use max length for nodes that occur more than once
