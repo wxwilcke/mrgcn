@@ -13,7 +13,6 @@ from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.io.tsv import TSV
 from mrgcn.data.utils import (is_readable,
                               is_writable,
-                              scipy_sparse_to_pytorch_sparse,
                               set_seed,
                               setup_features)
 import mrgcn.tasks.node_classification as node_classification
@@ -46,7 +45,6 @@ def run(A, X, Y, X_width, data, acc_writer, model_device,
                                                          featureless, test_split,
                                                          checkpoint)
         return (model, optimizer, epoch, loss, mrr, hits_at_k, ranks)
-
 
 def main(args, acc_writer, baseFilename, config):
     set_seed(config['task']['seed'])
@@ -85,23 +83,12 @@ def main(args, acc_writer, baseFilename, config):
 
     ### prep data ###
     num_nodes = A.shape[0]
-    #A = scipy_sparse_to_pytorch_sparse(A)
     X, X_width, modules_config, optimizer_config = setup_features(F, num_nodes, featureless, config)
-    #if len(X) <= 1 and X[0].size(1) <= 0:  # X here is a list
     if X_width <= 0:
         featureless = True
 
-    if data is not None:
-        data["test"] = torch.from_numpy(data["test"]).long()
-        if test_split == "test":
-            # merge train and valid splits when testing
-            data["train"] = torch.from_numpy(np.concatenate([data["train"],
-                                                             data["valid"]],
-                                                            axis=0)).long()
-            del data["valid"]
-        else:
-            data["train"] = torch.from_numpy(data["train"]).long()
-            data["valid"] = torch.from_numpy(data["valid"]).long()
+    # order to enable state loading, else modules may get different IDs
+    modules_config.sort(key=lambda t: t[0]) 
 
     # order to enable state loading, else modules may get different IDs
     modules_config.sort(key=lambda t: t[0]) 

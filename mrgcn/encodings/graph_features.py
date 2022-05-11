@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from functools import reduce
 from importlib import import_module
 import logging
 
@@ -8,8 +9,6 @@ import scipy.sparse as sp
 
 from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
 from mrgcn.models.temporal_cnn import TCNN
-from mrgcn.tasks.utils import (remove_outliers,
-                               trim_outliers)
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +81,14 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
     modules_config = list()
     embeddings = list()
     optimizer_config = list()
-    for datatype in set.intersection(set(features_enabled),
-                                     set(F.keys()),
-                                     AVAILABLE_FEATURES):
+
+    datatypes = list(set.intersection(set(features_enabled),
+                                      set(F.keys()),
+                                      AVAILABLE_FEATURES))
+    for datatype in sorted(datatypes):
         feature_config = next((conf for conf in feature_configs
                                if conf['datatype'] == datatype),
-                              None)
+                              dict())
         embedding_dim = feature_config['embedding_dim']
         dropout = feature_config['p_dropout']
 
@@ -102,8 +103,12 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             optim_params[param_name] = param_value
 
         optimizer_config.append((datatype, optim_params))
-
         encoding_sets = F.pop(datatype, list())
+
+        # by default, the encodings for each modality are stored
+        # as separate arrays for each predicate they are connected with.
+        # Here we merge these arrays such that the result is a single array
+        # per modality that is agnistic to the predicates.
         weight_sharing = feature_config['share_weights']
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
@@ -117,6 +122,8 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
+        # add a bit of noise to reduce the chance of overfitting, eg
+        # when one neural encoder converges faster than others.
         noise_mp = feature_config['noise_multiplier']
         p_noise = feature_config['p_noise']
         if p_noise > 0:
@@ -129,24 +136,28 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
+        # generate modality-specific configurations to pass to
+        # the MR-GCN to tell is what encoders to prepare.
         num_encoding_sets = len(encoding_sets)
-        for encodings, node_idx, seq_lengths in encoding_sets:
+        for encodings, _, seq_lengths in encoding_sets:
             if datatype in ["xsd.boolean", "xsd.numeric"]:
                 feature_dim = 1
                 feature_size = encodings.shape[feature_dim]
                 modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
                                                   dropout)))
-            if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
+            elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 feature_dim = 1
                 feature_size = encodings.shape[feature_dim]
                 modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
                                                   dropout)))
-            if datatype in ["xsd.string", "xsd.anyURI"]:
-                # stored as list of arrays (vocab x length)
+            elif datatype in ["xsd.string", "xsd.anyURI"]:
+                # stored as array of arrays (vocab x length)
+                # determine average vector length
                 feature_dim = 0
-                feature_size = encodings[0].shape[feature_dim]
+                feature_size = reduce(lambda total, enc: total + enc.shape[feature_dim],
+                                      encodings, 0) // len(encodings)
 
                 # adjust model size to 'best' fit sequence lengths of CNN
                 model_size = "M"
@@ -163,10 +174,12 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                                                   embedding_dim,
                                                   model_size,
                                                   dropout)))
-            if datatype in ["ogc.wktLiteral"]:
-                # stored as list of arrays (point_repr x num_points)
+            elif datatype in ["ogc.wktLiteral"]:
+                # stored as array of arrays (point_repr x num_points)
+                # determine average vector length
                 feature_dim = 0  # set to 1 for RNN
-                feature_size = encodings[0].shape[feature_dim]
+                feature_size = reduce(lambda total, enc: total + enc.shape[feature_dim],
+                                      encodings, 0) // len(encodings)
 
                 # adjust model size to 'best' fit sequence lengths of CNN
                 model_size = "M"
@@ -183,15 +196,17 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                                                   embedding_dim,
                                                   model_size,
                                                   dropout)))
-            if datatype in ["blob.image"]:
+            elif datatype in ["blob.image"]:
                 # stored as tensor (num_images x num_channels x width x height)
                 modules_config.append((datatype, (encodings.shape[1:],
                                                   embedding_dim,
                                                   dropout)))
+            else:
+                logger.warning("Unsupported datatype %s" % datatype)
 
             embeddings_width += embedding_dim
 
-        # deal with outliers?;
+        # deal with outliers
         if 'remove_outliers' in feature_config.keys() and feature_config['remove_outliers']:
             if datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
                 encoding_sets = [remove_outliers(*f) for f in encoding_sets]
@@ -207,7 +222,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 raise Warning("Outlier trimming not supported for datatype %s" %
                               datatype)
 
-        embeddings.append((datatype, encoding_sets))
+        embeddings.append([datatype, encoding_sets])
 
     return (embeddings, modules_config, optimizer_config, embeddings_width)
 
@@ -216,7 +231,7 @@ def _mkdense(encodings, node_idx, encodings_length_map, n):
     """ Return N x M matrix with N := NUM_NODES and M := NUM_COLS
         Use node index to map encodings to correct nodes
     """
-    F = np.zeros(shape=(n, encodings.shape[1]), dtype=np.float32)
+    F = np.zeros(shape=(n, *encodings.shape[1:]), dtype=np.float32)
     F[node_idx] = encodings
 
     return F
@@ -237,103 +252,115 @@ def features_included(config):
     return features
 
 def merge_sparse_encodings_sets(encoding_sets):
+    """ Merge sparse encoding sets into a single set; aka share weights
+
+        Expects 2D sparse matrices as encodings.
+
+        Encodings sets contain the encoded feature matrices of the same
+        datatype but connected by different predicates. If literals with the
+        same value are represented by a single node, then the same node can
+        have multiple values. This is handled by averaging the values for these
+        nodes.
+    """
     if len(encoding_sets) <= 1:
         return encoding_sets
 
-    node_idc = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
-    node_idc_unique, node_idc_counts = np.unique(node_idc, return_counts=True)
-    node_idc_mult = node_idc_unique[node_idc_counts > 1]
+    node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    node_idx_unique, node_idx_counts = np.unique(node_idx, return_counts=True)
+    node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
 
-    N = node_idc_unique.shape[0]  # N <= NUM_NODES
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
 
-    encodings_merged = [None for _ in range(N)]
-    node_idx_merged = node_idc_unique
+    encodings_merged = np.empty(shape=N, dtype=object)
+    node_idx_merged = node_idx_unique
     seq_length_merged = np.zeros(shape=N, dtype=np.int32)
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
     to_merge = dict()
     for encodings, node_index, seq_length in encoding_sets:
         # assume that non-filled values are zero
-        for i in range(node_index.shape[0]):
+        for i in range(len(node_index)):
             idx = node_index[i]
             merged_idx = merged_idx_map[idx]
 
             enc = encodings[i]
             enc_length = seq_length[i]
-            if idx in node_idc_mult:
+            if idx in node_idx_mult:
                 if idx not in to_merge:
                     to_merge[idx] = list()
-                to_merge[idx].append((enc, enc_length))
+                to_merge[idx].append(enc)
+
+                continue
 
             encodings_merged[merged_idx] = enc
             seq_length_merged[merged_idx] = enc_length
 
-    for idx, encodings_and_lengths in to_merge.items():
-        encodings, encodings_length = zip(*encodings_and_lengths)
-        enc_length = max(encodings_length)
-        enc_shape = max([enc.shape for enc in encodings])
+    for idx, encodings in to_merge.items():
+        shapes = [enc.shape for enc in encodings]
+        enc_shape = tuple(map(max, zip(*shapes)))  # maximum for all dims
+        enc_length = enc_shape[-1]
 
-        for i, enc in enumerate(encodings):
-            if not isinstance(enc, sp.coo.coo_matrix):
-                encodings[i] = enc.tocoo()
-
-        n = len(encodings)
-        data = np.concatenate([enc.data for enc in encodings]) / n
-        row = np.concatenate([enc.row for enc in encodings])
-        col = np.concatenate([enc.col for enc in encodings])
-        enc = sp.coo_matrix((data, (row, col)), shape=enc_shape)
+        a = np.zeros(shape=enc_shape)
+        for enc in encodings:
+            a[:enc.shape[0], :enc.shape[1]] += enc.todense()
+        a /= len(encodings)
 
         merged_idx = merged_idx_map[idx]
-        encodings_merged[merged_idx] = enc
+        encodings_merged[merged_idx] = sp.coo_matrix(a)
         seq_length_merged[merged_idx] = enc_length
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
 def merge_encoding_sets(encoding_sets):
-    """ Merge encoding sets into a single set. Entries for the same node are
-    merged by averaging the values, which actually only matters if node
-    encodings depend on more than their content (eg content+predicates),
-    which they do not atm.
+    """ Merge encoding sets into a single set; aka share weights
+
+        Encodings sets contain the encoded feature matrices of the same
+        datatype but connected by different predicates. If literals with the
+        same value are represented by a single node, then the same node can
+        have multiple values. This is handled by averaging the values for these
+        nodes.
     """
     if len(encoding_sets) <= 1:
         return encoding_sets
 
-    node_idc = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
-    node_idc_unique, node_idc_counts = np.unique(node_idc, return_counts=True)
-    node_idc_mult = node_idc_unique[node_idc_counts > 1]
+    # all nodes with this modality
+    node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    node_idx_unique, node_idx_counts = np.unique(node_idx, return_counts=True)
+    node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
 
-    N = node_idc_unique.shape[0]  # N <= NUM_NODES
-    M = max([enc.shape[1] for enc, _, _ in encoding_sets])  # M = MAX(NUM_COLS per set)
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
+    M = max([enc[0].shape[1] for enc in encoding_sets])  # highest width
 
     encodings_merged = np.zeros(shape=(N, M), dtype=np.float32)
-    node_idx_merged = node_idc_unique
+    node_idx_merged = node_idx_unique
     seq_length_merged = np.zeros(shape=N, dtype=np.int32)
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
-    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idc_mult}
+    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idx_mult}
     for encodings, node_index, seq_length in encoding_sets:
         # assume that non-filled values are zero
-        for i in range(node_index.shape[0]):
-            idx = node_index[i]
-            merged_idx = merged_idx_map[idx]
+        for i in range(len(node_index)):
+            idx = node_index[i]  # global node index
+            merged_idx = merged_idx_map[idx]  # node index in merged matrix
 
             enc = encodings[i]
-            if idx in node_idc_mult:
+            if idx in node_idx_mult:
                 mult_enc = merged_idx_multvalue_map[merged_idx]
                 if mult_enc is None:
                     mult_enc = np.zeros(enc.shape, dtype=np.float32)
                 merged_idx_multvalue_map[merged_idx] = mult_enc + enc
+            else:
+                encodings_merged[merged_idx,:int(seq_length[i])] = enc
 
-            encodings_merged[merged_idx,:encodings.shape[1]] = enc
             if seq_length is not None:
                 # use max length for nodes that occur more than once
                 seq_length_merged[merged_idx] = max(seq_length_merged[merged_idx],
                                                     seq_length[i])
 
-    for i in range(node_idc_mult.shape[0]):
-        idx = node_idc_mult[i]
+    for i in range(node_idx_mult.shape[0]):
+        idx = node_idx_mult[i]
         merged_idx = merged_idx_map[idx]
-        count = node_idc_counts[node_idc_counts > 1][i]
+        count = node_idx_counts[node_idx_counts > 1][i]
 
         # average vectors for nodes that occur more than once
         encodings_merged[merged_idx] = merged_idx_multvalue_map[merged_idx] / count
@@ -341,45 +368,50 @@ def merge_encoding_sets(encoding_sets):
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
 def merge_img_encoding_sets(encoding_sets):
-    """ Merge encoding sets into a single set. Entries for the same node are
-    merged by averaging the values, which actually only matters if node
-    encodings depend on more than their content (eg content+predicates),
-    which they do not atm.
+    """ Merge 3D encoding sets into a single set; aka share weights
+
+        Encodings sets contain the encoded feature matrices of the same
+        datatype but connected by different predicates. If literals with the
+        same value are represented by a single node, then the same node can
+        have multiple values. This is handled by averaging the values for these
+        nodes.
     """
     if len(encoding_sets) <= 1:
         return encoding_sets
 
-    node_idc = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
-    node_idc_unique, node_idc_counts = np.unique(node_idc, return_counts=True)
-    node_idc_mult = node_idc_unique[node_idc_counts > 1]
+    node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    node_idx_unique, node_idx_counts = np.unique(node_idx, return_counts=True)
+    node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
 
-    N = node_idc_unique.shape[0]  # N <= NUM_NODES
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
     c, W, H = encoding_sets[0][0].shape[1:]  # assume same image size on all
 
     encodings_merged = np.zeros(shape=(N, c, W, H), dtype=np.float32)
-    node_idx_merged = node_idc_unique
+    node_idx_merged = node_idx
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
-    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idc_mult}
+    merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idx_mult}
     for encodings, node_index, _ in encoding_sets:
         # assume that non-filled values are zero
-        for i in range(node_index.shape[0]):
+        for i in range(len(node_index)):
             idx = node_index[i]
             merged_idx = merged_idx_map[idx]
 
             enc = encodings[i]
-            if idx in node_idc_mult:
+            if idx in node_idx_mult:
                 mult_enc = merged_idx_multvalue_map[merged_idx]
                 if mult_enc is None:
                     mult_enc = np.zeros(enc.shape, dtype=np.float32)
                 merged_idx_multvalue_map[merged_idx] = mult_enc + enc
 
-            encodings_merged[merged_idx] = enc
+                continue
 
-    for i in range(node_idc_mult.shape[0]):
-        idx = node_idc_mult[i]
+            encodings_merged[merged_idx] = enc
+    
+    for i in range(node_idx_mult.shape[0]):
+        idx = node_idx_mult[i]
         merged_idx = merged_idx_map[idx]
-        count = node_idc_counts[node_idc_counts > 1][i]
+        count = node_idx_counts[node_idx_counts > 1][i]
 
         # average vectors for nodes that occur more than once
         encodings_merged[merged_idx] = merged_idx_multvalue_map[merged_idx] / count
@@ -393,14 +425,14 @@ def stack_encoding_sets(encoding_sets):
     if len(encoding_sets) <= 1:
         return encoding_sets
 
-    node_idc = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
-    node_idc_unique = np.unique(node_idc)
+    node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    node_idx_unique = np.unique(node_idx)
 
-    N = node_idc_unique.shape[0]  # N <= NUM_NODES
-    M = sum([enc.shape[1] for enc, _, _ in encoding_sets])  # M = SUM(NUM_COLS per set)
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
+    M = sum(map(lambda enc: enc.shape[1], encoding_sets))  # sum of widths
 
     encodings_merged = np.zeros(shape=(N, M), dtype=np.float32)
-    node_idx_merged = node_idc_unique
+    node_idx_merged = sorted(node_idx_unique)
     seq_length_merged = np.repeat([M], repeats=N)
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
@@ -408,7 +440,7 @@ def stack_encoding_sets(encoding_sets):
     for encodings, node_index, seq_length in encoding_sets:
         m = encodings.shape[1]
         # assume that non-filled values are zero
-        for k in range(node_index.shape[0]):
+        for k in range(len(node_index)):
             idx = node_index[k]
             merged_idx = merged_idx_map[idx]
 
@@ -419,21 +451,84 @@ def stack_encoding_sets(encoding_sets):
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
-
 def add_noise_(encoding_sets, p_noise, multiplier=0.01, sparse=False):
     for mset in encoding_sets:
-        if sparse:
-            for i in range(len(mset[0])):
-                size = mset[0][i].size
-                shape = mset[0][i].shape
+        encodings = mset[0]  # numpy array
+        if sparse:  # variable length encodings
+            for i in range(len(encodings)):
+                size = encodings[i].size
+                shape = encodings[i].shape
 
                 b = np.random.binomial(1, p_noise, size=size)
                 noise = b.reshape(shape) * (2 * np.random.random(shape) - 1)
-                mset[0][i].data += multiplier * noise
+                encodings[i].data += multiplier * noise
         else:
-            size = mset[0].size
-            shape = mset[0].shape
+            size = encodings.size
+            shape = encodings.shape
 
             b = np.random.binomial(1, p_noise, size=size)
             noise = b.reshape(shape) * (2 * np.random.random(shape) - 1)
-            mset[0] += multiplier * noise
+            encodings += multiplier * noise
+
+def trim_outliers(sequences, node_idx, seq_length_map, feature_dim=0):
+    # split outliers
+    q25 = np.quantile(seq_length_map, 0.25)
+    q75 = np.quantile(seq_length_map, 0.75)
+    IQR = q75 - q25
+    cut_off = IQR * 1.5
+
+    if IQR <= 0.0:  # no length difference
+        return [sequences, node_idx, seq_length_map]
+
+    n = len(sequences)
+    sequences_trimmed = np.empty(n, dtype=object)
+    seq_length_map_trimmed = np.zeros(n, dtype=int)
+    for i, seq_length in enumerate(seq_length_map):
+        sequence = sequences[i]
+        threshold = int(q75 + cut_off)
+        if seq_length > threshold:
+            sequence = sequence.tolil()[:, :threshold].tocoo() if feature_dim == 0\
+                else sequence.tolil()[:threshold, :].tocoo()
+
+        sequences_trimmed[i] = sequence
+        seq_length_map_trimmed[i] = sequence.shape[1-feature_dim]
+
+    m = len(sequences_trimmed)
+    d = len(sequences) - m
+    if d > 0:
+        logger.debug("Trimmed {} outliers)".format(d))
+
+    return [sequences_trimmed, node_idx, seq_length_map_trimmed]
+
+def remove_outliers(sequences, node_idx, seq_length_map):
+    # split outliers
+    q25 = np.quantile(seq_length_map, 0.25)
+    q75 = np.quantile(seq_length_map, 0.75)
+    IQR = q75 - q25
+    cut_off = IQR * 1.5
+
+    if IQR <= 0.0:  # no length difference
+        return [sequences, node_idx, seq_length_map]
+
+    n = len(sequences)
+    sequences_filtered = np.empty(n, dtype=object)
+    node_idx_filtered = np.zeros(n, dtype=int)
+    seq_length_map_filtered = np.zeros(n, dtype=int)
+    j = 0
+    for i, seq_length in enumerate(seq_length_map):
+        if seq_length < q25 - cut_off or seq_length > q75 + cut_off:
+            # skip outlier
+            continue
+
+        sequences_filtered[j] = sequences[i]
+        node_idx_filtered[j] = node_idx[i]
+        seq_length_map_filtered[j] = seq_length
+
+        j += 1
+
+    d = len(sequences) - j
+    if d > 0:
+        logger.debug("Filtered {} outliers ({} remain)".format(d, j))
+
+    return [sequences_filtered[:j], node_idx_filtered[:j], seq_length_map_filtered[:j]]
+

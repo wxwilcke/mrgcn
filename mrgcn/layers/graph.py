@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from mrgcn.data.utils import sliceSparseCOO
+from mrgcn.data.batch import sliceSparseCOO
 import torch
 import torch.nn as nn
 

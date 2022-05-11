@@ -96,50 +96,6 @@ def generate_features(node_map, node_predicate_map, config):
 
     return generate_relationwise_features(node_map, node_predicate_map, C,
                                           config, datatype)
-    #else:
-    #    return generate_nodewise_features(node_map, C, config, datatype)
-
-#def generate_nodewise_features(node_map, C, config, datatype):
-#    """ Stack all vectors without regard of their relation
-#    """
-#    m = 0
-#    n = len(node_map)
-#    encodings = np.zeros(shape=(n, C), dtype=np.float32)
-#    node_idx = np.zeros(shape=(n), dtype=np.int32)
-#    value_max = None
-#    value_min = None
-#    for node, i in node_map.items():
-#        if not isinstance(node, Literal):
-#            continue
-#        if node.datatype is None or node.datatype not in datatype:
-#            continue
-#
-#        value = str(node)  ## empty value bug workaround
-#        if validate(value) is None:
-#            continue
-#        value = float(value)
-#
-#        if value_max is None or value > value_max:
-#            value_max = value
-#        if value_min is None or value < value_min:
-#            value_min = value
-#
-#        # add to matrix structures
-#        encodings[m] = [value]
-#        node_idx[m] = i
-#        m += 1
-#
-#    logger.debug("Generated {} unique {} encodings".format(m,
-#                                                           config['datatype']))
-#
-#    if m <= 0:
-#        return None
-#
-#    # normalization over encodings
-#    encodings[:m] = (2*(encodings[:m] - value_min) /
-#                     (value_max - value_min)) -1.0
-#
-#    return [[encodings[:m], node_idx[:m], None]]
 
 def generate_relationwise_features(node_map, node_predicate_map, C, config,
                                    datatype):
