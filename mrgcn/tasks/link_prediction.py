@@ -70,7 +70,7 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
             data["train"] = np.concatenate([data["train"],
                                             data["valid"]],
                                            axis=0)
-            data["valid"] = np.empty(0)  # save memory
+            data["valid"] = None  # save memory
 
     # Log wall-clock time
     t0 = time()
