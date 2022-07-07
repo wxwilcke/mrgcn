@@ -109,26 +109,31 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
         # as separate arrays for each predicate they are connected with.
         # Here we merge these arrays such that the result is a single array
         # per modality that is agnistic to the predicates.
-        weight_sharing = feature_config['share_weights']
+        weight_sharing = False if 'share_weights' not in feature_config.keys()\
+                         else feature_config['share_weights']
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
             if datatype in ["blob.image"]:
                 encoding_sets = merge_img_encoding_sets(encoding_sets)
-            elif datatype in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
-                encoding_sets = merge_sparse_encodings_sets(encoding_sets)
+            elif datatype in ["ogc.wktLiteral"]:
+                encoding_sets = merge_sparse_encoding_sets(encoding_sets)
+            elif datatype in ["xsd.string", "xsd.anyURI"]:
+                encoding_sets = merge_discrete_encoding_sets(encoding_sets)
             elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear",
                               "xsd.boolean", "xsd.numeric"]:
-                encoding_sets = merge_encoding_sets(encoding_sets)
+                encoding_sets = merge_continuous_encoding_sets(encoding_sets)
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
         # add a bit of noise to reduce the chance of overfitting, eg
         # when one neural encoder converges faster than others.
-        noise_mp = feature_config['noise_multiplier']
-        p_noise = feature_config['p_noise']
+        noise_mp = -1 if 'noise_multiplier' not in feature_config.keys()\
+                   else feature_config['noise_multiplier']
+        p_noise = -1 if 'p_noise' not in feature_config.keys()\
+                  else feature_config['p_noise']
         if p_noise > 0:
             logger.debug("adding noise to {}".format(datatype))
-            if datatype in ["xsd.string", "xsd.anyURI", "ogc.wktLiteral"]:
+            if datatype in ["ogc.wktLiteral"]:
                 add_noise_(encoding_sets, p_noise, noise_mp, sparse=True)
             elif datatype in ["blob.image", "xsd.date", "xsd.dateTime",
                               "xsd.gYear", "xsd.boolean", "xsd.numeric"]:
@@ -153,26 +158,10 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                                                   embedding_dim,
                                                   dropout)))
             elif datatype in ["xsd.string", "xsd.anyURI"]:
-                # stored as array of arrays (vocab x length)
-                # determine average vector length
-                feature_dim = 0
-                feature_size = reduce(lambda total, enc: total + enc.shape[feature_dim],
-                                      encodings, 0) // len(encodings)
-
-                # adjust model size to 'best' fit sequence lengths of CNN
-                model_size = "M"
-                if not weight_sharing or num_encoding_sets <= 1:
-                    seq_length_q25 = np.quantile(seq_lengths, 0.25)
-                    if seq_length_q25 < TCNN.LENGTH_M:
-                        model_size = "S"
-                    elif seq_length_q25 < TCNN.LENGTH_L:
-                        model_size = "M"
-                    else:
-                        model_size = "L"
-
-                modules_config.append((datatype, (feature_size,
+                # stored as vstacked arrays of tokens of variable length
+                model_config = feature_config['model']
+                modules_config.append((datatype, (model_config,
                                                   embedding_dim,
-                                                  model_size,
                                                   dropout)))
             elif datatype in ["ogc.wktLiteral"]:
                 # stored as array of arrays (point_repr x num_points)
@@ -198,7 +187,8 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                                                   dropout)))
             elif datatype in ["blob.image"]:
                 # stored as tensor (num_images x num_channels x width x height)
-                modules_config.append((datatype, (encodings.shape[1:],
+                model_config = feature_config['model']
+                modules_config.append((datatype, (model_config,
                                                   embedding_dim,
                                                   dropout)))
             else:
@@ -215,9 +205,13 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                               datatype)
 
         if 'trim_outliers' in feature_config.keys() and feature_config['trim_outliers']:
-            if datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
+            if datatype in ["ogc.wktLiteral"]:
                 feature_dim = 0  # set to 1 for RNN
-                encoding_sets = [trim_outliers(*f, feature_dim) for f in encoding_sets]
+                encoding_sets = [trim_outliers_sparse(*f, feature_dim) for f in encoding_sets]
+            elif datatype in ["xsd.string", "xsd.anyURI"]:
+                feature_dim = 0  # set to 1 for RNN
+                encoding_sets = [trim_outliers_dense(*f, feature_dim) for f in encoding_sets]
+
             else:
                 raise Warning("Outlier trimming not supported for datatype %s" %
                               datatype)
@@ -251,7 +245,7 @@ def features_included(config):
 
     return features
 
-def merge_sparse_encodings_sets(encoding_sets):
+def merge_sparse_encoding_sets(encoding_sets):
     """ Merge sparse encoding sets into a single set; aka share weights
 
         Expects 2D sparse matrices as encodings.
@@ -311,7 +305,74 @@ def merge_sparse_encodings_sets(encoding_sets):
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
 
-def merge_encoding_sets(encoding_sets):
+def merge_discrete_encoding_sets(encoding_sets):
+    """ Merge encoding sets into a single set; aka share weights
+
+        Encodings sets contain the encoded feature matrices of the same
+        datatype but connected by different predicates. If literals with the
+        same value are represented by a single node, then the same node can
+        have multiple values. This is handled by averaging the values for these
+        nodes.
+    """
+    if len(encoding_sets) <= 1:
+        return encoding_sets
+
+    # all nodes with this modality
+    node_idx = np.concatenate([node_idx for _, node_idx, _ in encoding_sets])
+    node_idx_unique, node_idx_counts = np.unique(node_idx, return_counts=True)
+    node_idx_mult = node_idx_unique[node_idx_counts > 1]  # nodes with multiple features
+
+    N = node_idx_unique.shape[0]  # N <= NUM_NODES
+
+    encodings_merged = np.empty(shape=N, dtype=object)
+    node_idx_merged = node_idx_unique
+    seq_length_merged = np.zeros(shape=N, dtype=np.int32)
+
+    merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
+    merged_idx_multvalue_map = {merged_idx_map[v]:list() for v in node_idx_mult}
+    merged_idx_multlength_map = {merged_idx_map[v]:list() for v in node_idx_mult}
+    for encodings, node_index, seq_length in encoding_sets:
+        # assume that non-filled values are zero
+        for i in range(len(node_index)):
+            idx = node_index[i]  # global node index
+            merged_idx = merged_idx_map[idx]  # node index in merged matrix
+
+            enc = encodings[i]
+            if idx in node_idx_mult:
+                merged_idx_multvalue_map[merged_idx].append(enc)
+                merged_idx_multlength_map[merged_idx].append(seq_length)
+            else:
+                encodings_merged[merged_idx] = enc
+
+            if seq_length is not None:
+                # use max length for nodes that occur more than once
+                seq_length_merged[merged_idx] = max(seq_length_merged[merged_idx],
+                                                    seq_length[i])
+
+    for i in range(node_idx_mult.shape[0]):
+        # majority vote per column
+        idx = node_idx_mult[i]
+        merged_idx = merged_idx_map[idx]
+        encodings = merged_idx_multvalue_map[merged_idx]
+        lengths = merged_idx_multlength_map[merged_idx]
+
+        longest_enc_idx = np.argmax([len(enc) for enc in encodings])
+        longest_enc_length = len(encodings[longest_enc_idx])
+        a = -np.ones(shape=(len(encodings), longest_enc_length), dtype=int)
+        for j in range(len(encodings)):
+            a[j,:lengths[j]] = encodings[j]
+        
+        merged_enc = list()
+        for j in range(longest_enc_length):
+            values, counts = np.unique(a[a[:,j]>=0], return_counts=True)
+            merged_enc.append(values[np.argmax(counts)])
+
+        encodings_merged[merged_idx] = np.array(merged_enc)
+        seq_length_merged[merged_idx] = longest_enc_length
+
+    return [[encodings_merged, node_idx_merged, seq_length_merged]]
+
+def merge_continuous_encoding_sets(encoding_sets):
     """ Merge encoding sets into a single set; aka share weights
 
         Encodings sets contain the encoded feature matrices of the same
@@ -470,7 +531,37 @@ def add_noise_(encoding_sets, p_noise, multiplier=0.01, sparse=False):
             noise = b.reshape(shape) * (2 * np.random.random(shape) - 1)
             encodings += multiplier * noise
 
-def trim_outliers(sequences, node_idx, seq_length_map, feature_dim=0):
+def trim_outliers_dense(sequences, node_idx, seq_length_map, feature_dim=0):
+    # split outliers
+    q25 = np.quantile(seq_length_map, 0.25)
+    q75 = np.quantile(seq_length_map, 0.75)
+    IQR = q75 - q25
+    cut_off = IQR * 1.5
+
+    if IQR <= 0.0:  # no length difference
+        return [sequences, node_idx, seq_length_map]
+
+    n = len(sequences)
+    sequences_trimmed = np.empty(n, dtype=object)
+    seq_length_map_trimmed = np.zeros(n, dtype=int)
+    for i, seq_length in enumerate(seq_length_map):
+        sequence = sequences[i]
+        threshold = int(q75 + cut_off)
+        if seq_length > threshold:
+            sequence = np.concatenate([sequence[:threshold-1],
+                                       sequence[-1]])
+
+        sequences_trimmed[i] = sequence
+        seq_length_map_trimmed[i] = sequence.shape[1-feature_dim]
+
+    m = len(sequences_trimmed)
+    d = len(sequences) - m
+    if d > 0:
+        logger.debug("Trimmed {} outliers)".format(d))
+
+    return [sequences_trimmed, node_idx, seq_length_map_trimmed]
+
+def trim_outliers_sparse(sequences, node_idx, seq_length_map, feature_dim=0):
     # split outliers
     q25 = np.quantile(seq_length_map, 0.25)
     q75 = np.quantile(seq_length_map, 0.75)
@@ -532,3 +623,22 @@ def remove_outliers(sequences, node_idx, seq_length_map):
 
     return [sequences_filtered[:j], node_idx_filtered[:j], seq_length_map_filtered[:j]]
 
+def isDatatypeIncluded(config, datatype):
+    if 'graph' in config.keys()\
+        and 'features' in config['graph'].keys():
+            features = config['graph']['features']
+            for feature in features:
+                if feature['datatype'] == datatype:
+                   return feature['include']
+
+    return False
+
+def getDatatypeConfig(config, datatype):
+    if 'graph' in config.keys()\
+        and 'features' in config['graph'].keys():
+            features = config['graph']['features']
+            for feature in features:
+                if feature['datatype'] == datatype:
+                    return feature
+
+    return None

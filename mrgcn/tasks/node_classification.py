@@ -10,8 +10,11 @@ import torch.nn as nn
 import torch.optim as optim
 
 from mrgcn.data.batch import FullBatch, MiniBatch
-from mrgcn.encodings.graph_features import construct_features
+from mrgcn.encodings.graph_features import (construct_features,
+                                            isDatatypeIncluded,
+                                            getDatatypeConfig)
 from mrgcn.models.mrgcn import MRGCN
+from mrgcn.models.utils import getPadSymbol
 from mrgcn.tasks.utils import optimizer_params
 
 
@@ -39,6 +42,18 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
 
+    # get pad symbol in case of language model(s)
+    pad_symbol_map = dict()
+    for datatype in ["xsd.string", "xsd.anyURI"]:
+        if isDatatypeIncluded(config, datatype):
+            feature_config = getDatatypeConfig(config, datatype)
+            if feature_config is None\
+               or 'tokenizer' not in feature_config.keys():
+                continue
+
+            pad_symbol = getPadSymbol(feature_config['tokenizer'])
+            pad_symbol_map[datatype] = pad_symbol
+
     epoch = 0
     if checkpoint is not None:
         model.to("cpu")
@@ -55,7 +70,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     t0 = time()
     for result in train_model(A, model, optimizer, criterion, X, Y, epoch,
                              nepoch, test_split, batchsize, l1_lambda,
-                             l2_lambda, device):
+                             l2_lambda, pad_symbol_map, device):
         # log metrics
         tsv_writer.writerow([str(result[0]),
                              str(result[1]),
@@ -68,7 +83,8 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
     # test model
     loss, acc, labels, targets = test_model(A, model, criterion, X, Y, 
-                                           test_split, batchsize, device)
+                                           test_split, batchsize,
+                                           pad_symbol_map, device)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(loss), str(acc)])
@@ -78,7 +94,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     return (model, optimizer, epoch+nepoch, loss, acc, labels, targets)
 
 def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
-                test_split, batchsize, l1_lambda, l2_lambda, device):
+                test_split, batchsize, l1_lambda, l2_lambda, pad_symbol_map, device):
     Y_train = Y['train']
     Y_valid = Y['valid']
     if test_split == "test":
@@ -94,6 +110,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
     num_layers = model.rgcn.num_layers
     train_batches = mkbatches(A, X, Y_train, batchsize, num_layers)
     for batch in train_batches:
+        batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
     num_batches_train = len(train_batches)
@@ -102,6 +119,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
     if Y_valid is not None:
         valid_batches = mkbatches(A, X, Y_valid, batchsize, num_layers)
         for batch in valid_batches:
+            batch.pad_(pad_symbols=pad_symbol_map)
             batch.to_dense_()
             batch.as_tensors_()
     num_batches_valid = len(valid_batches)
@@ -209,7 +227,8 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                train_loss, train_acc,
                val_loss, val_acc)
 
-def test_model(A, model, criterion, X, Y, test_split, batchsize, device):
+def test_model(A, model, criterion, X, Y, test_split, batchsize,
+               pad_symbol_map, device):
     model.eval()
     Y_test = Y[test_split]
 
@@ -222,6 +241,7 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize, device):
     num_layers = model.rgcn.num_layers
     test_batches = mkbatches(A, X, Y_test, batchsize, num_layers)
     for batch in test_batches:
+        batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
     num_batches_test = len(test_batches)

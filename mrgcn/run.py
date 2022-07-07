@@ -90,9 +90,6 @@ def main(args, acc_writer, baseFilename, config):
     # order to enable state loading, else modules may get different IDs
     modules_config.sort(key=lambda t: t[0]) 
 
-    # order to enable state loading, else modules may get different IDs
-    modules_config.sort(key=lambda t: t[0]) 
-
     task = config['task']['type']
     out = run(A, X, Y, X_width, data, acc_writer, model_device,
               distmult_device, config, modules_config, optimizer_config,

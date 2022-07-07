@@ -2,19 +2,17 @@
 
 import logging
 from operator import itemgetter
+from mrgcn.models.imagecnn import ImageCNN
+from mrgcn.models.transformer import Transformer
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-from mrgcn.data.utils import (collate_zero_padding,
-                              scipy_sparse_list_to_pytorch_sparse,
-                              scipy_sparse_to_pytorch_sparse)
 from mrgcn.models.fully_connected import FC
-from mrgcn.models.imagecnn import ImageCNN
-#from mrgcn.models.rnn import RNN
-from mrgcn.models.rgcn import RGCN
 from mrgcn.models.temporal_cnn import TCNN
+from mrgcn.models.rgcn import RGCN
+from mrgcn.models.utils import loadFromHub
 from mrgcn.data.batch import MiniBatch
 
 
@@ -27,7 +25,6 @@ class MRGCN(nn.Module):
         """
         Multimodal Relational Graph Convolutional Network
         Mini Batch support
-
         """
         super().__init__()
 
@@ -36,6 +33,9 @@ class MRGCN(nn.Module):
         self.num_nodes = num_nodes  # != labelled nodes
         self.p_dropout = p_dropout
         self.module_dict = nn.ModuleDict()
+
+        language_model = None
+        image_model = None
 
         # add embedding layers
         self.modality_modules = dict()
@@ -62,23 +62,25 @@ class MRGCN(nn.Module):
                 self.module_dict["FC_temp_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:
-                nrows, dim_out, model_size, dropout = args
-                module = TCNN(features_in=nrows,
-                              features_out=dim_out,
-                              p_dropout=dropout,
-                              size=model_size)
-                self.module_dict["CharCNN_"+str(i)] = module
-                seq_length = module.minimal_length
+                model_config, dim_out, dropout = args
+                if language_model is None:
+                    language_model = loadFromHub(model_config)
+
+                module = Transformer(language_model,
+                                     output_dim=dim_out,
+                                     p_dropout=dropout)
+
+                self.module_dict["Transformer_"+str(i)] = module
                 i += 1
             if datatype == "blob.image":
-                (nchannels, nrows, ncols), dim_out, dropout = args
-                module = ImageCNN(features_out=dim_out,
+                model_config, dim_out, dropout = args
+                if image_model is None:
+                    image_model = loadFromHub(model_config)
+
+                module = ImageCNN(image_model,
+                                  output_dim=dim_out,
                                   p_dropout=dropout)
-                #module = ImageCNN(channels_in=nchannels,
-                #             height=nrows,
-                #             width=ncols,
-                #             features_out=dim_out,
-                #             p_dropout=p_dropout)
+
                 self.module_dict["ImageCNN_"+str(j)] = module
                 j += 1
             if datatype == "ogc.wktLiteral":
@@ -89,12 +91,6 @@ class MRGCN(nn.Module):
                               size=model_size)
                 seq_length = module.minimal_length
                 self.module_dict["GeomCNN_"+str(k)] = module
-                #ncols, dim_out = args
-                #module = RNN(input_dim=ncols,
-                #             output_dim=dim_out,
-                #             hidden_dim=ncols*2,
-                #             p_dropout=p_dropout)
-                #self.module_dict["RNN_"+str(k)] = module
                 k += 1
 
             if datatype not in self.modality_modules.keys():
@@ -201,7 +197,11 @@ class MRGCN(nn.Module):
                                                         num_sets))
 
                 # forward pass and store on correct position in output tensor
-                data = encodings[F_batch_mask].float()
+                if modality in ["xsd.string", "xsd.anyURI"]:
+                    data = encodings[F_batch_mask].long()
+                else:
+                    data = encodings[F_batch_mask].float()
+
                 X[X_batch_mask, offset:offset+out_dim] = module(data)
 
                 offset += out_dim

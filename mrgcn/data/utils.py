@@ -97,8 +97,8 @@ class SparseDataset(Dataset):
     def __getitem__(self, idx):
         return torch.as_tensor(self.sp[idx].todense())
 
-def collate_zero_padding(batch, time_dim, max_batch_length=999,
-                               min_padded_length=5):
+def collate_zero_padding_sparse(batch, time_dim, max_batch_length=999,
+                                min_padded_length=5):
     """ batch := an object array with sparse coo matrices
 
         time_dim should be 0 for RNN and 1 for temporal CNN
@@ -121,6 +121,24 @@ def collate_zero_padding(batch, time_dim, max_batch_length=999,
         a = sp.coo_matrix((seq.data, (seq.row, seq.col)),
                           shape=shape, dtype=np.float32)
         batch_padded[i] = a
+
+    return batch_padded
+
+def collate_padding(batch, pad_symbol=0, max_batch_length=999,
+                         min_padded_length=5):
+    """ batch := an object array with ndarrays of variable length
+    """
+    n = len(batch)
+
+    max_length = np.max([len(a) for a in batch])
+    max_length = min(max_length, max_batch_length)
+    padded_length = max(min_padded_length, max_length)
+
+    batch_padded = -np.ones(shape=(n, padded_length), dtype=int)
+    for i, seq in enumerate(batch):
+        batch_padded[i,:len(seq)] = seq
+    
+    batch_padded[batch_padded==-1] = pad_symbol
 
     return batch_padded
 
@@ -170,5 +188,4 @@ def scipy_sparse_to_pytorch_sparse(sp_input):
                                    torch.Tensor(sp_input.data),
                                    sp_input.shape,
                                    dtype=torch.float32)
-
 

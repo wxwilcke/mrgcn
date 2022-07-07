@@ -1,21 +1,16 @@
 #!/usr/bin/python3
 
 import logging
-from re import fullmatch, sub
-from string import punctuation
 
 import numpy as np
 from rdflib.term import Literal
 from rdflib.namespace import XSD
 import scipy.sparse as sp
 
+from models.utils import loadFromHub
 
-_REGEX_CHAR = "[\u0001-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
-_REGEX_ANYURI = "{}+".format(_REGEX_CHAR)  # skip empty string
+
 _MAX_CHARS = 512  # one-hot encoded
-_VOCAB = [chr(32)] + [chr(i) for i in range(97, 123)] + [chr(i) for i in range(48, 58)]
-_VOCAB_MAP = {v:k for k,v in enumerate(_VOCAB)}
-_VOCAB_MAX_IDX = len(_VOCAB)
 
 logger = logging.getLogger(__name__)
 
@@ -29,22 +24,15 @@ def generate_features(nodes_map, node_predicate_map, config):
     - anyURI := Char*
     -- Char  := [\t\r\n] + {unicode} + {ISO/IEC 10646}
 
-    This is a character level encoding, in which each character is represented
-    by a one-hot vector. Prior to encoding, all words
-    are stemmed and punctuation is filtered.
-    Note that this encoding treats similar spelling as roughly the same word
-    Note that UNICODE is ignored as it skews the value distribution
-
     :param nodes_map: dictionary of node labels (URIs) : node idx {0, N}
     :param node_predicate_map: dictionary of node labels (URIs): {predicates}
     :param config: configuration dictionary
     :returns: list of length P with lists Q of length 3;
                 P :- number of predicates that link to nodes with this feature
                 Q :- [seq, node_idx, seq_lengths];
-                    seq :- object array with M numpy arrays A x L;
+                    seq :- object array with M numpy arrays of length L;
                         M :- number of nodes with this feature, such that M <= N
-                        A :- number of allowed characters
-                        L :- sequence length
+                        L :- sequence length (number of tokens)
                     node_idx :- numpy vector of length M, mapping seq index to node id
                     seq_lengths :- numpy array of length M, mapping seq index to seq length
               """
@@ -61,6 +49,14 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     node_idx = dict()
     sequences = dict()
     seq_length_map = dict()
+    
+    tokenizer_config = config['tokenizer']['config']
+    tokenizer = loadFromHub(tokenizer_config)
+    if tokenizer.pad_token is None:
+        pad_token = config['tokenizer']['pad_token']
+        tokenizer.add_special_tokens({'pad_token': pad_token})
+    
+    failed = 0
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
@@ -68,20 +64,20 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
             continue
 
         try:
-            value = str(node)
-
-            sequence = preprocess(value)
-            sequence = encode(sequence)[:_MAX_CHARS]
+            sentence = str(node)
+            sequence = encode(tokenizer, sentence)
             seq_length = len(sequence)
         except:
+            failed += 1
+
             continue
 
         if seq_length <= 0:
+            failed += 1
+
             continue
 
-        a = sp.coo_matrix((np.ones(seq_length), (sequence, np.arange(seq_length))),
-                          shape=(_VOCAB_MAX_IDX, seq_length),
-                          dtype=np.float32)
+        a = np.array(sequence)[:_MAX_CHARS]
 
         for p in node_predicate_map[node]:
             if p not in sequences.keys():
@@ -97,7 +93,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
             m[p] = idx + 1
 
     msum = sum(m.values())
-    logger.debug("Generated {} unique anyURI features".format(msum))
+    logger.debug("Generated {} unique anyURI features ({} failed)".format(msum,
+                                                                          failed))
 
     if msum <= 0:
         return None
@@ -105,14 +102,5 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     return [[sequences[p][:m[p]], node_idx[p][:m[p]], seq_length_map[p][:m[p]]]
             for p in sequences.keys()]
 
-def encode(seq):
-    return [_VOCAB_MAP[char] for char in seq if char in _VOCAB]
-
-def preprocess(seq):
-    seq = seq.lower()
-    seq = sub('['+punctuation+']', '', seq).split()
-
-    return " ".join(seq)
-
-def validate(value):
-    return fullmatch(_REGEX_ANYURI, value)
+def encode(tokenizer, sentence):
+    return tokenizer.encode(sentence, add_special_tokens=True)

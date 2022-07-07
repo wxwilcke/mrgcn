@@ -11,8 +11,11 @@ import torch.nn as nn
 import torch.optim as optim
 
 from mrgcn.data.batch import FullBatch, MiniBatch
-from mrgcn.encodings.graph_features import construct_features
+from mrgcn.encodings.graph_features import (construct_features,
+                                            isDatatypeIncluded,
+                                            getDatatypeConfig)
 from mrgcn.models.mrgcn import MRGCN
+from mrgcn.models.utils import getPadSymbol
 from mrgcn.tasks.utils import optimizer_params
 
 
@@ -51,6 +54,18 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
 
+    # get pad symbol in case of language model(s)
+    pad_symbol_map = dict()
+    for datatype in ["xsd.string", "xsd.anyURI"]:
+        if isDatatypeIncluded(config, datatype):
+            feature_config = getDatatypeConfig(config, datatype)
+            if feature_config is None\
+               or 'tokenizer' not in feature_config.keys():
+                continue
+
+            pad_symbol = getPadSymbol(feature_config['tokenizer'])
+            pad_symbol_map[datatype] = pad_symbol
+
     epoch = 0
     if checkpoint is not None:
         model.to("cpu")
@@ -78,8 +93,8 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     for result in train_model(A, X, data, model, optimizer,
                               criterion, epoch, nepoch, batchsize,
                               mrr_batchsize, eval_interval, filter_ranks,
-                              l1_lambda, l2_lambda, model_device,
-                              distmult_device, term_width):
+                              l1_lambda, l2_lambda, pad_symbol_map, 
+                              model_device, distmult_device, term_width):
 
         epoch, loss, train_mrr, train_hits_at_k,\
                      valid_mrr, valid_hits_at_k = result
@@ -114,6 +129,7 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     test_data = data[test_split]
     test_batches = mkbatches(A, X, test_data, batchsize, mrr_batchsize, num_layers)
     for i, (batch, batch_data) in enumerate(test_batches):
+        batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
         batch_data = torch.from_numpy(batch_data)
@@ -147,13 +163,14 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 def train_model(A, X, data, model, optimizer, criterion,
                 epoch, nepoch, batchsize, mrr_batchsize,
                 eval_interval, filter_ranks, l1_lambda, l2_lambda,
-                model_device, distmult_device, term_width):
+                pad_symbol_map, model_device, distmult_device, term_width):
 
     # generate batches
     num_layers = model.rgcn.num_layers
     train_data = data["train"]
     train_batches = mkbatches(A, X, train_data, batchsize, mrr_batchsize, num_layers)
     for i, (batch, batch_data) in enumerate(train_batches):
+        batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
         batch_data = torch.from_numpy(batch_data)
@@ -165,6 +182,7 @@ def train_model(A, X, data, model, optimizer, criterion,
     if valid_data is not None:
         valid_batches = mkbatches(A, X, valid_data, batchsize, mrr_batchsize, num_layers)
         for i, (batch, batch_data) in enumerate(valid_batches):
+            batch.pad_(pad_symbols=pad_symbol_map)
             batch.to_dense_()
             batch.as_tensors_()
             batch_data = torch.from_numpy(batch_data)

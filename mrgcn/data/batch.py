@@ -3,7 +3,10 @@
 import numpy as np
 import torch
 
-from mrgcn.data.utils import collate_zero_padding, scipy_sparse_to_pytorch_sparse
+from mrgcn.data.utils import (collate_padding,
+                              collate_zero_padding_sparse,
+                              scipy_sparse_to_pytorch_sparse)
+from mrgcn.models.utils import getPadSymbol
 
 
 class Batch:
@@ -18,25 +21,48 @@ class Batch:
         if batch_node_idx is not None:
             self.node_index = np.copy(batch_node_idx)
 
-    def to_dense_(self, time_dim=1):
+    def pad_(self, time_dim=1, pad_symbols=dict()):
+        if self.X is None:
+            return
+
+        for i, (datatype, encoding_sets) in enumerate(self.X[1:], 1):
+            for j, (encodings, _, seq_length) in enumerate(encoding_sets):
+                if encodings.dtype != np.dtype("O"):  # object array
+                    # no padding needed
+                    continue
+
+                 # pad time_dim such that the width of
+                 # each matrix/array is as long as that
+                 # of the widest member
+                max_width = max(seq_length) 
+                if isinstance(encodings, np.ndarray):
+                    pad_symbol = 0
+                    if datatype in pad_symbols.keys():
+                        pad_symbol = pad_symbols[datatype]
+
+                    encodings_padded = collate_padding(encodings,
+                                                       pad_symbol=pad_symbol,
+                                                       min_padded_length=max_width)
+                else:
+                    # sparse matrix
+                    encodings_padded = collate_zero_padding_sparse(encodings,
+                                                                   time_dim,
+                                                                   min_padded_length=max_width)
+
+                self.X[i][1][j][0] = encodings_padded
+
+    def to_dense_(self):
         # make sparse arrays dense
         if self.X is None:
             return
 
         for i, (_, encoding_sets) in enumerate(self.X[1:], 1):
-            for j, (encodings, _, seq_length) in enumerate(encoding_sets):
-                if encodings.dtype != np.dtype("O"):  # object array
-                    continue
+            for j, (encodings, _, _) in enumerate(encoding_sets):
+                if (encodings.dtype == np.dtype("O")
+                    and not isinstance(encodings[0], np.ndarray)):  # sp matrix
+                    encodings_dense = np.array([a.todense() for a in encodings])
 
-                 # pad time_dim with zeros such that the width of
-                 # each matrix is as long as that of the widest member
-                max_width = max(seq_length)  # highest width
-                encodings_padded = collate_zero_padding(encodings,
-                                                        time_dim,
-                                                        min_padded_length=max_width)
-                encodings_dense = np.array([a.todense() for a in encodings_padded])
-
-                self.X[i][1][j][0] = encodings_dense
+                    self.X[i][1][j][0] = encodings_dense
 
     def as_tensors_(self):
         self.node_index = torch.from_numpy(self.node_index)

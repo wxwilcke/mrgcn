@@ -4,17 +4,11 @@ import logging
 import base64
 from io import BytesIO
 from PIL import Image
-from re import fullmatch
 
 import numpy as np
 from rdflib.term import Literal, URIRef
 from rdflib import Namespace
 
-
-_REGEX_BASE64 = "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
-_IMG_SIZE = 75
-_IMG_CROP = 64
-_IMG_MODE = "RGB"
 
 _KGB_NAMESPACE = Namespace(URIRef("http://kgbench.info/dt#"))
 
@@ -46,15 +40,21 @@ def generate_features(nodes_map, node_predicate_map, config):
 
 
 def generate_relationwise_features(nodes_map, node_predicate_map, config):
-    c = len([c for c in _IMG_MODE if c.isupper() or c == '1'])
-
     n = len(nodes_map)
     m = dict()
     encodings = dict()
     node_idx = dict()
-    values_min = dict()
-    values_max = dict()
 
+    im_mode = config['transform']['mode']
+    c = len(im_mode)  # assume each letter equals one channel
+
+    im_size_cropped = config['transform']['centerCrop']
+    im_size_base = im_size_cropped + 32
+    
+    mean_values = config['transform']['mean']
+    std_values = config['transform']['std']
+
+    failed = 0
     for node, i in nodes_map.items():
         if not isinstance(node, Literal):
             continue
@@ -65,32 +65,32 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
         try:
             value = str(node)
             im = b64_to_img(value)
-            im = resize(im)
-            im = centerCrop(im)
+            if im.mode != im_mode:
+                im = im.convert(im_mode)
+            im = resize(im, im_size_base)
+            im = centerCrop(im, im_size_cropped)
         except ValueError:
+            failed += 1
             continue
 
         # add to matrix structures
-        a = np.array(im, dtype=np.float32)
-        a /= 255  # all values between 0 and 1
-        if _IMG_MODE == "RGB":
-            # from WxHxC to CxHxW
-            a = a.transpose((2, 0, 1))
+        a = np.array(im, dtype=np.float32)  # HxWxC
+
+        # normalize values along channels
+        a_mu = a.mean(axis=-1)[...,None]
+        a_sigma = a.std(axis=-1)[...,None] + 1e-10  # avoid division by zero
+        a = mean_values + (a - a_mu) * (std_values / a_sigma)
+
+        if im_mode == "RGB":
+            a = a.transpose((2, 0, 1))  # change to CxHxW
 
         for p in node_predicate_map[node]:
             if p not in encodings.keys():
-                encodings[p] = np.empty(shape=(n, c, _IMG_CROP, _IMG_CROP),
+                encodings[p] = np.empty(shape=(n, c, im_size_cropped,
+                                                     im_size_cropped),
                                         dtype=np.float32)
                 node_idx[p] = np.empty(shape=(n), dtype=np.int32)
                 m[p] = 0
-                values_min[p] = [None for _ in range(c)]
-                values_max[p] = [None for _ in range(c)]
-
-            for ch in range(c):
-                if values_max[p][ch] is None or a[ch].max() > values_max[p][ch]:
-                    values_max[p][ch] = a[ch].max()
-                if values_min[p][ch] is None or a[ch].min() < values_min[p][ch]:
-                    values_min[p][ch] = a[ch].min()
 
             # add to matrix structures
             idx = m[p]
@@ -99,55 +99,37 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
             m[p] = idx + 1
 
     msum = sum(m.values())
-    logger.debug("Generated {} unique B64-encoded image encodings".format(msum))
+    logger.debug("Generated {} unique B64-encoded image encodings ({} failed)".format(msum,
+                                                                                      failed))
 
     if msum <= 0:
         return None
 
-    # normalization over channels
-    for p in encodings.keys():
-        for i in range(encodings[p].shape[0]):
-            img = encodings[p][i]
-            for ch in range(c):
-                img[ch] = (2*(img[ch]-values_min[p][ch]) /
-                           (values_max[p][ch] - values_min[p][ch])) - 1.0
-
-            encodings[p][i] = img
-
     return [[encodings[p][:m[p]], node_idx[p][:m[p]], -np.ones(m[p])]
             for p in encodings.keys()]
 
-
 def b64_to_img(b64string):
     im = Image.open(BytesIO(base64.urlsafe_b64decode(b64string.encode())))
-    if im.mode != _IMG_MODE:
-        im = im.convert(_IMG_MODE)
 
     return im
 
-
-def resize(im):
+def resize(im, size):
     w, h = im.size
-    if w == _IMG_SIZE and h == _IMG_SIZE:
+    if w == size and h == size:
         return im
     elif w == h:
-        return im.resize((_IMG_SIZE, _IMG_SIZE))
+        return im.resize((size, size))
     elif w > h:
-        return im.resize(((_IMG_SIZE * w)//h, _IMG_SIZE))
+        return im.resize(((size * w)//h, size))
     else:  # h < w
-        return im.resize((_IMG_SIZE, (h * _IMG_SIZE)//w))
+        return im.resize((size, (h * size)//w))
 
-
-def centerCrop(im):
+def centerCrop(im, size):
     w, h = im.size
 
-    left = int(w/2 - _IMG_CROP/2)
-    top = int(h/2 - _IMG_CROP/2)
-    right = left + _IMG_CROP
-    bottom = top + _IMG_CROP
+    left = int(w/2 - size/2)
+    top = int(h/2 - size/2)
+    right = left + size
+    bottom = top + size
 
     return im.crop((left, top, right, bottom))
-
-
-def validate(value):
-    return fullmatch(_REGEX_BASE64, value)
