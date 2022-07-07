@@ -34,8 +34,9 @@ class Batch:
                  # pad time_dim such that the width of
                  # each matrix/array is as long as that
                  # of the widest member
-                max_width = max(seq_length) 
-                if isinstance(encodings, np.ndarray):
+                max_width = max(seq_length)
+                sample = encodings[np.random.randint(encodings.shape[0])]
+                if isinstance(sample, np.ndarray):
                     pad_symbol = 0
                     if datatype in pad_symbols.keys():
                         pad_symbol = pad_symbols[datatype]
