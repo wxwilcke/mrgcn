@@ -35,7 +35,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = false
+include = true
 share_weights = true 
 embedding_dim = 8
 p_noise = 0.0
@@ -44,7 +44,7 @@ p_dropout = 0.0
 
 [[graph.features]]
 datatype = 'xsd.dateTime'
-include = false
+include = true
 share_weights = true 
 embedding_dim = 8
 p_dropout = 0.0

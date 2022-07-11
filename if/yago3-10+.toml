@@ -48,8 +48,14 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
 p_dropout = 0.0
-p_noise = 0.0
-noise_multiplier = 0.0
+model = [ "huggingface/pytorch-transformers",
+          "model",
+          "distilbert-base-multilingual-cased" ]
+tokenizer.config = [ "huggingface/pytorch-transformers",
+                     "tokenizer",
+                     "distilbert-base-multilingual-cased" ]
+tokenizer.pad_token = "[PAD]"
+
 
 [[graph.features]]
 datatype = 'blob.image'

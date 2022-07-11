@@ -74,9 +74,10 @@ p_dropout = 0.0
 model = [ "huggingface/pytorch-transformers",
           "model",
           "distilbert-base-multilingual-cased" ]
-tokenizer = [ "huggingface/pytorch-transformers",
-              "tokenizer",
-              "distilbert-base-multilingual-cased" ]
+tokenizer.config = [ "huggingface/pytorch-transformers",
+                     "tokenizer",
+                     "distilbert-base-multilingual-cased" ]
+tokenizer.pad_token = "[PAD]"
 
 [[graph.features]]
 datatype = 'xsd.anyURI'
@@ -90,9 +91,10 @@ p_dropout = 0.0
 model = [ "huggingface/pytorch-transformers",
           "model",
           "distilbert-base-multilingual-cased" ]
-tokenizer = [ "huggingface/pytorch-transformers",
-              "tokenizer",
-              "distilbert-base-multilingual-cased" ]
+tokenizer.config = [ "huggingface/pytorch-transformers",
+                     "tokenizer",
+                     "distilbert-base-multilingual-cased" ]
+tokenizer.pad_token = "[PAD]"
 
 [[graph.features]]
 datatype = 'blob.image'

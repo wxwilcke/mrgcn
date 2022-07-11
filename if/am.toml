@@ -25,15 +25,6 @@ p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
 
-#[[graph.features]]
-#datatype = 'xsd.gYear'
-#include = true
-#share_weights = false
-#embedding_dim = 1
-#p_dropout = 0.0
-#p_noise = 0.0
-#noise_multiplier = 0.0
-
 [[graph.features]]
 datatype = 'xsd.date'
 include = true
@@ -43,14 +34,6 @@ p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
 
-#[[graph.features]]
-#datatype = 'xsd.boolean'
-#include = true
-#share_weights = false
-#p_dropout = 0.0
-#p_noise = 0.0
-#noise_multiplier = 0.0
-
 [[graph.features]]
 datatype = 'xsd.string'
 include = true
@@ -59,8 +42,14 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
 p_dropout = 0.0
-p_noise = 0.0
-noise_multiplier = 0.0
+model = [ "huggingface/pytorch-transformers",
+          "model",
+          "distilbert-base-multilingual-cased" ]
+tokenizer.config = [ "huggingface/pytorch-transformers",
+                     "tokenizer",
+                     "distilbert-base-multilingual-cased" ]
+tokenizer.pad_token = "[PAD]"
+
 
 [[graph.features]]
 datatype = 'blob.image'
@@ -71,16 +60,14 @@ embedding_dim = 128
 p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
+model = [ "huggingface/pytorch-transformers",
+          "model",
+          "distilbert-base-multilingual-cased" ]
+tokenizer.config = [ "huggingface/pytorch-transformers",
+                     "tokenizer",
+                     "distilbert-base-multilingual-cased" ]
+tokenizer.pad_token = "[PAD]"
 
-#[[graph.features]]
-#datatype = 'ogc.wktLiteral'
-#include = true
-#num_batches = 16
-#share_weights = false
-#trim_outliers = false
-#remove_outliers = false
-#embedding_dim = 16
-#p_dropout = 0.0
 
 [task]
 type = 'node classification'

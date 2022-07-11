@@ -58,7 +58,8 @@ class MRGCN(nn.Module):
                 ncols, dim_out, dropout = args
                 module = FC(input_dim=ncols,
                             output_dim=dim_out,
-                            p_dropout=dropout)
+                            p_dropout=dropout,
+                            pre_fc=True)
                 self.module_dict["FC_temp_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:

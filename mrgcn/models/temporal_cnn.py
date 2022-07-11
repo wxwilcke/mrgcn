@@ -18,7 +18,9 @@ class TCNN(nn.Module):
 
         """
         super().__init__()
+        self.module_dict = nn.ModuleDict()
 
+        cnn_out_dim = 0
         if size == "S":
             self.minimal_length = self.LENGTH_S
             self.conv = nn.Sequential(
@@ -50,20 +52,7 @@ class TCNN(nn.Module):
                 nn.BatchNorm1d(512),
                 nn.ReLU()
             )
-
-            n_first = max(256, features_out)
-            n_second = max(128, features_out)
-            self.fc = nn.Sequential(
-                nn.Linear(512, n_first),
-                nn.ReLU(),
-                nn.Dropout(p=p_dropout),
-
-                nn.Linear(n_first, n_second),
-                nn.ReLU(),
-                nn.Dropout(p=p_dropout),
-
-                nn.Linear(n_second, features_out)
-            )
+            cnn_out_dim = 512
         elif size == "M":
             self.minimal_length = self.LENGTH_L
             self.conv = nn.Sequential(
@@ -101,20 +90,7 @@ class TCNN(nn.Module):
                 nn.BatchNorm1d(1024),
                 nn.ReLU()
             )
-
-            n_first = max(512, features_out)
-            n_second = max(128, features_out)
-            self.fc = nn.Sequential(
-                nn.Linear(1024, n_first),
-                nn.ReLU(),
-                nn.Dropout(p=p_dropout),
-
-                nn.Linear(n_first, n_second),
-                nn.ReLU(),
-                nn.Dropout(p=p_dropout),
-
-                nn.Linear(n_second, features_out)
-            )
+            cnn_out_dim = 1024
         elif size == "L":
             self.minimal_length = self.LENGTH_L
             self.conv = nn.Sequential(
@@ -160,20 +136,17 @@ class TCNN(nn.Module):
                 nn.BatchNorm1d(2048),
                 nn.ReLU()
             )
+            cnn_out_dim = 2048
+        self.module_dict['conv'] = self.conv
 
-            n_first = max(512, features_out)
-            n_second = max(128, features_out)
-            self.fc = nn.Sequential(
-                nn.Linear(2048, n_first),
-                nn.ReLU(),
-                nn.Dropout(p=p_dropout),
+        self.fc = nn.Sequential(
+            nn.Linear(cnn_out_dim, cnn_out_dim),
+            nn.ReLU(),
+            nn.Dropout(p=p_dropout),
 
-                nn.Linear(n_first, n_second),
-                nn.ReLU(),
-                nn.Dropout(p=p_dropout),
-
-                nn.Linear(n_second, features_out)
-            )
+            nn.Linear(cnn_out_dim, features_out)
+        )
+        self.module_dict['fc'] = self.fc
 
     def forward(self, X):
         X = self.conv(X)

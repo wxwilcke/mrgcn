@@ -58,8 +58,13 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
 p_dropout = 0.0
-p_noise = 0.0
-noise_multiplier = 0.0
+model = [ "huggingface/pytorch-transformers",
+          "model",
+          "distilbert-base-multilingual-cased" ]
+tokenizer.config = [ "huggingface/pytorch-transformers",
+                     "tokenizer",
+                     "distilbert-base-multilingual-cased" ]
+tokenizer.pad_token = "[PAD]"
 
 [[graph.features]]
 datatype = 'blob.image'
@@ -70,6 +75,13 @@ embedding_dim = 128
 p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
+model = [ "pytorch/vision:v0.10.0",
+          "mobilenet_v2",
+          "pretrained=True" ]
+transform.mode = "RGB"
+transform.centerCrop = 224
+transform.mean = [0.485, 0.456, 0.406]
+transform.std = [0.229, 0.224, 0.225]
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'

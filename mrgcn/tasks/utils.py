@@ -8,7 +8,10 @@ def optimizer_params(model, optim_config):
     opt_params = list()
     for module_name_numbered, module in model.module_dict.items():
         module_name = module_name_numbered.split('_')[0]
-        module_params = {'params': module.parameters()}
+
+        # filter parameters of frozen layers
+        params = [param for param in module.parameters() if param.requires_grad]
+        module_params = {'params': params}
 
         if module_name == 'RGCN':
             # use default lr
@@ -21,7 +24,7 @@ def optimizer_params(model, optim_config):
             elif datatype in ['xsd.date', 'xsd.dateTime', 'xsd.gYear']:
                 mod_name = 'FC'
             elif datatype in ['xsd.string', 'xsd.anyURI']:
-                mod_name = 'CharCNN'
+                mod_name = 'Transformer'
             elif datatype in ['ogc.wktLiteral']:
                 mod_name = 'GeomCNN'
             elif datatype in ['blob.image']:

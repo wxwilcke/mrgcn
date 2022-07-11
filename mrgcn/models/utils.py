@@ -12,7 +12,7 @@ def freeze_(model, layer='', _grad=False):
     """
     for name, param in model.named_parameters():
         if layer in name:  # '' matches all
-            param.requires_grad = _grad
+            param.requires_grad_(_grad)
 
 def unfreeze_(model, layer=''):
     freeze_(model, layer, _grad=True)

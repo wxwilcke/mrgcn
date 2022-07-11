@@ -1,24 +1,42 @@
 #!/usr/bin/env python
 
 import torch.nn as nn
-import torch.nn.functional as f
 
 
 class FC(nn.Module):
     def __init__(self,
                  input_dim,
                  output_dim,
-                 p_dropout=0.0):
+                 pre_fc=False,
+                 p_dropout=0.0,
+                 bias=True):
         """
         Single-layer Linear Neural Network
 
         """
         super().__init__()
+        self.module_dict = nn.ModuleDict()
 
-        self.p_dropout = p_dropout
-        self.fc = nn.Linear(input_dim, output_dim)
+        self.fc = nn.Linear(input_dim, output_dim, bias=bias)
+        self.module_dict['fc'] = self.fc
+
+        self.pre_fc = None
+        self.dropout = None
+        if pre_fc:
+            self.pre_fc = nn.Linear(input_dim, input_dim, bias=bias)
+            self.module_dict['pre_fc'] = self.pre_fc
+        
+            if p_dropout > 0:
+                self.dropout = nn.Dropout(p=p_dropout)
+                self.module_dict['dropout'] = self.dropout
 
     def forward(self, X):
-        X = self.fc(X)
+        output = X
+        if self.pre_fc is not None:
+            output = self.pre_fc(output)
+            output = nn.ReLU()(output)
 
-        return f.dropout(X, p=self.p_dropout)
+            if self.dropout is not None:
+                output = self.dropout(output)
+
+        return self.fc(output)

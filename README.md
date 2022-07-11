@@ -4,6 +4,8 @@ PyTorch implementation of a multimodal relational graph convolutional network (M
 
 By directly reading N-Triples, a common serialization format for knowledge graphs, the MR-GCN can perform node classification and link prediction on any arbitrary knowledge graph that makes use of the RDF data model. To facilitate multimodal learning, the MR-GCN supports 33 different datatypes encompassing six different modalities, including images, natural language, and spatial information, all of which are automatically inferred from the datatype annotations in the graph and processed accordingly.
 
+**This branch uses pretrained models for textual and visual information**
+
 ## Getting Started
 
 1) To install, clone the repository and run:
