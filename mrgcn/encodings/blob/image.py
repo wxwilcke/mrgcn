@@ -49,10 +49,12 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     c = len(im_mode)  # assume each letter equals one channel
 
     im_size_cropped = config['transform']['centerCrop']
-    im_size_base = im_size_cropped + 32
+    im_size_base = config['transform']['resizeSize']
+    im_size_interpolation_mode = getattr(Image, config['transform']['interpolationMode'])
     
-    mean_values = config['transform']['mean']
-    std_values = config['transform']['std']
+    # multiply by 255 to translate floats in [0,1] to pixels in [0,255]
+    mean_values = np.array(config['transform']['mean']) * 255
+    std_values = np.array(config['transform']['std']) * 255
 
     failed = 0
     for node, i in nodes_map.items():
@@ -67,7 +69,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
             im = b64_to_img(value)
             if im.mode != im_mode:
                 im = im.convert(im_mode)
-            im = resize(im, im_size_base)
+            im = resize(im, im_size_base, im_size_interpolation_mode)
             im = centerCrop(im, im_size_cropped)
         except ValueError:
             failed += 1
@@ -76,13 +78,11 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
         # add to matrix structures
         a = np.array(im, dtype=np.float32)  # HxWxC
 
-        # normalize values along channels
-        a_mu = a.mean(axis=-1)[...,None]
-        a_sigma = a.std(axis=-1)[...,None] + 1e-10  # avoid division by zero
-        a = mean_values + (a - a_mu) * (std_values / a_sigma)
-
         if im_mode == "RGB":
             a = a.transpose((2, 0, 1))  # change to CxHxW
+
+        # normalize values along channels
+        a = (a - mean_values[:, None, None]) / std_values[:, None, None]
 
         for p in node_predicate_map[node]:
             if p not in encodings.keys():
@@ -113,16 +113,16 @@ def b64_to_img(b64string):
 
     return im
 
-def resize(im, size):
+def resize(im, size, interpolate_mode):
     w, h = im.size
     if w == size and h == size:
         return im
     elif w == h:
-        return im.resize((size, size))
+        return im.resize((size, size), interpolate_mode)
     elif w > h:
-        return im.resize(((size * w)//h, size))
+        return im.resize(((size * w)//h, size), interpolate_mode)
     else:  # h < w
-        return im.resize((size, (h * size)//w))
+        return im.resize((size, (h * size)//w), interpolate_mode)
 
 def centerCrop(im, size):
     w, h = im.size

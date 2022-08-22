@@ -93,12 +93,13 @@ p_noise = 0.0
 noise_multiplier = 0.0
 model = [ "pytorch/vision:v0.10.0",
           "mobilenet_v2",
-          "pretrained=True" ]
+          "MobileNet_V2_Weights.IMAGENET1K_V1" ]
 transform.mode = "RGB"
+transform.interpolationMode = "BILINEAR"
+transform.resizeSize = 232
 transform.centerCrop = 224
 transform.mean = [0.485, 0.456, 0.406]
 transform.std = [0.229, 0.224, 0.225]
-
 
 #[[graph.features]]
 #datatype = 'ogc.wktLiteral'

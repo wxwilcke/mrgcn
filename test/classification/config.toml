@@ -17,7 +17,7 @@ multiprocessing = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = true
+include = false
 share_weights = true
 embedding_dim = 2
 p_dropout = 0.0
@@ -26,7 +26,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = true
+include = false
 share_weights = true
 embedding_dim = 4
 p_dropout = 0.0
@@ -35,7 +35,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = true
+include = false
 share_weights = true 
 embedding_dim = 8
 p_noise = 0.0
@@ -44,7 +44,7 @@ p_dropout = 0.0
 
 [[graph.features]]
 datatype = 'xsd.dateTime'
-include = true
+include = false
 share_weights = true 
 embedding_dim = 8
 p_dropout = 0.0
@@ -59,7 +59,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = true
+include = false
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -75,7 +75,7 @@ tokenizer.pad_token = "[PAD]"
 
 [[graph.features]]
 datatype = 'xsd.anyURI'
-include = true
+include = false
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -95,14 +95,16 @@ include = true
 share_weights = true
 trim_outliers = false
 remove_outliers = false
-embedding_dim = 32
+embedding_dim = 256
 p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
 model = [ "pytorch/vision:v0.10.0",
           "mobilenet_v2",
-          "pretrained=True" ]
+          "MobileNet_V2_Weights.IMAGENET1K_V1" ]
 transform.mode = "RGB"
+transform.interpolationMode = "BILINEAR"
+transform.resizeSize = 232
 transform.centerCrop = 224
 transform.mean = [0.485, 0.456, 0.406]
 transform.std = [0.229, 0.224, 0.225]
