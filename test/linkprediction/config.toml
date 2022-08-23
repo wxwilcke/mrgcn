@@ -74,7 +74,7 @@ tokenizer.pad_token = "[PAD]"
 
 [[graph.features]]
 datatype = 'xsd.anyURI'
-include = false
+include = true
 share_weights = true
 trim_outliers = false
 remove_outliers = false
