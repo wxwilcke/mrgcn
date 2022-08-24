@@ -128,6 +128,8 @@ eval_interval = 10
 filter_ranks = true
 mrr_batchsize = 500
 batchsize = 32  # < 0 for full batch
+early_stopping.patience = -1
+early_stopping.tolerance = 0.01
 
 [model]
 epoch = 50

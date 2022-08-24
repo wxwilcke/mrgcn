@@ -15,7 +15,7 @@ from mrgcn.encodings.graph_features import (construct_features,
                                             getDatatypeConfig)
 from mrgcn.models.mrgcn import MRGCN
 from mrgcn.models.utils import getPadSymbol
-from mrgcn.tasks.utils import optimizer_params
+from mrgcn.tasks.utils import EarlyStop, optimizer_params
 
 
 logger = logging.getLogger()
@@ -41,6 +41,11 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     batchsize = config['task']['batchsize']
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
+    
+    # early stopping
+    patience = config['task']['early_stopping']['patience']
+    tolerance = config['task']['early_stopping']['tolerance']
+    early_stop = EarlyStop(patience, tolerance) if patience > 0 else None
 
     # get pad symbol in case of language model(s)
     pad_symbol_map = dict()
@@ -70,7 +75,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     t0 = time()
     for result in train_model(A, model, optimizer, criterion, X, Y, epoch,
                              nepoch, test_split, batchsize, l1_lambda,
-                             l2_lambda, pad_symbol_map, device):
+                             l2_lambda, pad_symbol_map, early_stop, device):
         # log metrics
         tsv_writer.writerow([str(result[0]),
                              str(result[1]),
@@ -94,7 +99,8 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     return (model, optimizer, epoch+nepoch, loss, acc, labels, targets)
 
 def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
-                test_split, batchsize, l1_lambda, l2_lambda, pad_symbol_map, device):
+                test_split, batchsize, l1_lambda, l2_lambda, pad_symbol_map,
+                early_stop, device):
     Y_train = Y['train']
     Y_valid = Y['valid']
     if test_split == "test":
@@ -122,10 +128,16 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
             batch.pad_(pad_symbols=pad_symbol_map)
             batch.to_dense_()
             batch.as_tensors_()
-    num_batches_valid = len(valid_batches)
 
     logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(epoch+1, nepoch+epoch+1):
+        if early_stop is not None and early_stop.stop:
+            logging.info("Stopping early after %d epoch" % (epoch-1))
+            model.load_state_dict(early_stop.best_weights)
+            optimizer.load_state_dict(early_stop.best_optim)
+
+            break
+
         model.train()
 
         loss_lst = list()
@@ -184,40 +196,17 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
         val_loss = -1
         val_acc = -1
         if Y_valid is not None:
-            model.eval()
-
-            loss_lst = list()
-            acc_lst = list()
-
-            for batch_id, batch in enumerate(valid_batches, 1):
-                batch_str = " [VALID] - batch %2.d / %d" % (batch_id, num_batches_valid)
-                print(batch_str, end='\b'*len(batch_str), flush=True)
-
-                batch_node_idx = batch.node_index
-                batch_dev = batch.to(device)
-                with torch.no_grad():
-                    Y_batch_hat = model(batch_dev, device=device).to('cpu')
-                    Y_batch_valid = Y_valid[batch_node_idx]
-
-                    batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_valid, criterion)
-                    batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_valid)[0]
-
-                batch = batch_dev.to('cpu')
-
-                batch_loss = float(batch_loss)
-                batch_acc = float(batch_acc)
-            
-                loss_lst.append(batch_loss)
-                acc_lst.append(batch_acc)
-        
-            val_loss = np.mean(loss_lst)
-            val_acc = np.mean(acc_lst)
+            val_loss, val_acc = eval_model(model, valid_batches, Y_valid,
+                                           criterion, device)
 
             logging.info("{:04d} ".format(epoch) \
                          + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
                                                                       train_acc)
                          + "| val loss {:.4f} / acc {:.4f}".format(val_loss,
                                                                    val_acc))
+
+            if early_stop is not None:
+                early_stop.record(val_loss, model, optimizer)
         else:
             logging.info("{:04d} ".format(epoch) \
                          + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
@@ -227,6 +216,38 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                train_loss, train_acc,
                val_loss, val_acc)
 
+def eval_model(model, valid_batches, Y_valid, criterion, device):
+    model.eval()
+
+    loss_lst = list()
+    acc_lst = list()
+    num_batches_valid = len(valid_batches)
+    for batch_id, batch in enumerate(valid_batches, 1):
+        batch_str = " [VALID] - batch %2.d / %d" % (batch_id, num_batches_valid)
+        print(batch_str, end='\b'*len(batch_str), flush=True)
+
+        batch_node_idx = batch.node_index
+        batch_dev = batch.to(device)
+        with torch.no_grad():
+            Y_batch_hat = model(batch_dev, device=device).to('cpu')
+            Y_batch_valid = Y_valid[batch_node_idx]
+
+            batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_valid, criterion)
+            batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_valid)[0]
+
+        batch = batch_dev.to('cpu')
+
+        batch_loss = float(batch_loss)
+        batch_acc = float(batch_acc)
+    
+        loss_lst.append(batch_loss)
+        acc_lst.append(batch_acc)
+
+    val_loss = np.mean(loss_lst)
+    val_acc = np.mean(acc_lst)
+
+    return (val_loss, val_acc)
+ 
 def test_model(A, model, criterion, X, Y, test_split, batchsize,
                pad_symbol_map, device):
     model.eval()

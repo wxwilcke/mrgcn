@@ -87,6 +87,8 @@ weight_decay = 0.0
 l1_lambda = 0.0
 l2_lambda = 0.0
 bias = false
+early_stopping.patience = -1
+early_stopping.tolerance = 0.01
 
 [[model.layers]]
 type = 'mrgcn'

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from copy import deepcopy
 import logging
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,44 @@ def optimizer_params(model, optim_config):
         opt_params.append(module_params)
 
     return opt_params
+
+class EarlyStop:
+    stop = None
+    tolerance = -1
+    patience = -1
+    _patience_default = -1
+    best_score = -1
+    best_weights = None
+    best_optim = None
+
+    def __init__(self, patience=7, tolerance=0.01):
+        self.tolerance = tolerance
+        self._patience_default = patience
+
+        self.reset_counter()
+
+    def record(self, score, weights, optim):
+        if self.best_score < 0:
+            self._update(score, weights, optim)
+
+            return
+
+        self.patience -= 1
+        if (score + self.tolerance) < self.best_score:
+            self._update(score, weights, optim)
+            self.reset_counter()
+
+        if self.patience <= 0:
+            self.stop = True
+
+    def _update(self, score, weights, optim):
+        self.best_score = score
+        self.best_weights = deepcopy(weights.state_dict())
+        self.best_optim = deepcopy(optim.state_dict())
+
+    def reset_counter(self):
+        self.patience = self._patience_default
+        self.stop = False
 
 #def mkbatches(mat, node_idx, num_batches=1):
 #    """ split N x * array in batches

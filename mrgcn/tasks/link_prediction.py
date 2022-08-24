@@ -16,7 +16,7 @@ from mrgcn.encodings.graph_features import (construct_features,
                                             getDatatypeConfig)
 from mrgcn.models.mrgcn import MRGCN
 from mrgcn.models.utils import getPadSymbol
-from mrgcn.tasks.utils import optimizer_params
+from mrgcn.tasks.utils import EarlyStop, optimizer_params
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,11 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     filter_ranks = config['task']['filter_ranks']
     l1_lambda = config['model']['l1_lambda']
     l2_lambda = config['model']['l2_lambda']
+
+    # early stopping
+    patience = config['task']['early_stopping']['patience']
+    tolerance = config['task']['early_stopping']['tolerance']
+    early_stop = EarlyStop(patience, tolerance) if patience > 0 else None
 
     # get pad symbol in case of language model(s)
     pad_symbol_map = dict()
@@ -93,7 +98,7 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     for result in train_model(A, X, data, model, optimizer,
                               criterion, epoch, nepoch, batchsize,
                               mrr_batchsize, eval_interval, filter_ranks,
-                              l1_lambda, l2_lambda, pad_symbol_map, 
+                              l1_lambda, l2_lambda, pad_symbol_map, early_stop,
                               model_device, distmult_device, term_width):
 
         epoch, loss, train_mrr, train_hits_at_k,\
@@ -163,7 +168,8 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 def train_model(A, X, data, model, optimizer, criterion,
                 epoch, nepoch, batchsize, mrr_batchsize,
                 eval_interval, filter_ranks, l1_lambda, l2_lambda,
-                pad_symbol_map, model_device, distmult_device, term_width):
+                pad_symbol_map, early_stop, model_device,
+                distmult_device, term_width):
 
     # generate batches
     num_layers = model.rgcn.num_layers
@@ -190,6 +196,13 @@ def train_model(A, X, data, model, optimizer, criterion,
 
     logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(epoch+1, nepoch+epoch+1):
+        if early_stop is not None and early_stop.stop:
+            logging.info("Stopping early after %d epoch" % (epoch-1))
+            model.load_state_dict(early_stop.best_weights)
+            optimizer.load_state_dict(early_stop.best_optim)
+
+            break
+
         model.train()
         
         loss_lst = list()
@@ -323,6 +336,10 @@ def train_model(A, X, data, model, optimizer, criterion,
                 results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) "
                 if filter_ranks:
                     results_str += f" / flt {valid_mrr['flt']:.4f} (filtered)"
+           
+                if early_stop is not None:
+                    early_stop.record(1.0 - valid_mrr['raw'],
+                                      model, optimizer)
         else:
             width_remain = term_width - len(results_str)
             results_str += " " * (width_remain//2)  # ensure overwrite of batch message
