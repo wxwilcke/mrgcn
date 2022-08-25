@@ -3,6 +3,7 @@
 from functools import reduce
 from importlib import import_module
 import logging
+from typing import Sequence
 
 import numpy as np
 import scipy.sparse as sp
@@ -552,7 +553,7 @@ def trim_outliers_dense(sequences, node_idx, seq_length_map, feature_dim=0):
                                        sequence[-1]])
 
         sequences_trimmed[i] = sequence
-        seq_length_map_trimmed[i] = sequence.shape[1-feature_dim]
+        seq_length_map_trimmed[i] = sequence.shape[0]
 
     m = len(sequences_trimmed)
     d = len(sequences) - m
