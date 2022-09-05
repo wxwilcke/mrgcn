@@ -351,7 +351,7 @@ def merge_discrete_encoding_sets(encoding_sets):
                                                     seq_length[i])
 
     for i in range(node_idx_mult.shape[0]):
-        # majority vote per column
+        # majority vote per column, else pick first
         idx = node_idx_mult[i]
         merged_idx = merged_idx_map[idx]
         encodings = merged_idx_multvalue_map[merged_idx]
@@ -365,7 +365,7 @@ def merge_discrete_encoding_sets(encoding_sets):
         
         merged_enc = list()
         for j in range(longest_enc_length):
-            values, counts = np.unique(a[a[:,j]>=0], return_counts=True)
+            values, counts = np.unique(a[a[:,j]>=0, j], return_counts=True)
             merged_enc.append(values[np.argmax(counts)])
 
         encodings_merged[merged_idx] = np.array(merged_enc)
