@@ -48,25 +48,26 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config,
                                    time_dim):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    n = len(nodes_map)
     m = dict()
     node_idx = dict()
     data = dict()
     vec_length_map = dict()
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(_OGC_NAMESPACE.wktLiteral):
-            continue
+    
+    features = list(getFeature(nodes_map, _OGC_NAMESPACE.wktLiteral))
+    n = len(features)
 
+    failed = 0
+    for node, i in features:
         try:
             value = str(node)
             vec = gv.vectorize_wkt(value)[:_MAX_POINTS,:]
         except:
+            failed += 1
             continue
 
         vec_length = vec.shape[0]
         if vec_length <= 0:
+            failed += 1
             continue
 
         # add means of X,Y to vector 
@@ -99,7 +100,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config,
 
 
     msum = sum(m.values())
-    logger.debug("Generated {} unique wktLiteral features".format(msum))
+    logger.debug("Generated {} unique wktLiteral features ({} failed)".format(msum,
+                                                                              failed))
 
     if msum <= 0:
         return None
@@ -115,10 +117,17 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config,
     return [[data[p], node_idx[p][:m[p]], vec_length_map[p][:m[p]]]
             for p in data.keys()]
 
-
 def validate(value):
     return fullmatch(_REGEX_WKTLITERAL, value)
 
+def getFeature(nodes_map, datatype):
+    for node, i in nodes_map.items():
+        if not isinstance(node, Literal):
+            continue
+        if node.datatype is None or node.datatype.neq(datatype):
+            continue
+
+        yield (node, i)
 
 ### add sparse matrix support for geoscaler ###
 

@@ -17,7 +17,7 @@ multiprocessing = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = false
+include = true
 share_weights = true
 embedding_dim = 2
 p_dropout = 0.0
@@ -26,7 +26,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = false
+include = true
 share_weights = true
 embedding_dim = 4
 p_dropout = 0.0
@@ -35,7 +35,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = false
+include = true
 share_weights = true 
 embedding_dim = 8
 p_noise = 0.0
@@ -44,7 +44,7 @@ p_dropout = 0.0
 
 [[graph.features]]
 datatype = 'xsd.dateTime'
-include = false
+include = true
 share_weights = true 
 embedding_dim = 8
 p_dropout = 0.0
@@ -53,7 +53,7 @@ noise_multiplier = 0.0
 
 #[[graph.features]]
 #datatype = 'xsd.boolean'
-#include = false
+#include = true
 #share_weights = true 
 #p_dropout = 0.0
 
@@ -75,7 +75,7 @@ tokenizer.pad_token = "[PAD]"
 
 [[graph.features]]
 datatype = 'xsd.anyURI'
-include = false
+include = true
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -91,7 +91,7 @@ tokenizer.pad_token = "[PAD]"
 
 [[graph.features]]
 datatype = 'blob.image'
-include = false
+include = true
 share_weights = true
 trim_outliers = false
 remove_outliers = false
@@ -111,7 +111,7 @@ transform.std = [0.229, 0.224, 0.225]
 
 [[graph.features]]
 datatype = 'ogc.wktLiteral'
-include = false
+include = true
 share_weights = true
 trim_outliers = false
 remove_outliers = false

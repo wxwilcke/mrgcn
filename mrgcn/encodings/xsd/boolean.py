@@ -39,17 +39,15 @@ def generate_features(nodes_map, node_predicate_map, config):
                                           config)
 
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
-    n = len(nodes_map)
     m = dict()
     encodings = dict()
     node_idx = dict()
 
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(XSD.boolean):
-            continue
+    features = list(getFeature(nodes_map, XSD.boolean))
+    n = len(features)
 
+    failed = 0
+    for node, i in features:
         try:
             value = str(node)
             if value.isalpha():
@@ -62,6 +60,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
                 except:
                     raise Exception()
         except:
+            failed += 1
             continue
 
         for p in node_predicate_map[node]:
@@ -77,7 +76,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             m[p] = idx + 1
 
     msum = sum(m.values())
-    logger.debug("Generated {} unique boolean encodings".format(msum))
+    logger.debug("Generated {} unique boolean encodings ({} failed)".format(msum,
+                                                                            failed))
 
     if msum <= 0:
         return None
@@ -87,3 +87,12 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
 
 def validate(value):
     return match(_REGEX_BOOLEAN, value)
+
+def getFeature(nodes_map, datatype):
+    for node, i in nodes_map.items():
+        if not isinstance(node, Literal):
+            continue
+        if node.datatype is None or node.datatype.neq(datatype):
+            continue
+
+        yield (node, i)

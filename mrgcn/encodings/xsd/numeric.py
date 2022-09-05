@@ -101,21 +101,21 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
                                    datatype):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    n = len(node_map)
     m = dict()
     encodings = dict()
     node_idx = dict()
     values_min = dict()
     values_max = dict()
-    for node, i in node_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype not in datatype:
-            continue
-
+    
+    features = list(getFeature(node_map, datatype))
+    n = len(features)
+    
+    failed = 0
+    for node, i in features:
         try:
             value = float(str(node))
         except:
+            failed += 1
             continue
 
         for p in node_predicate_map[node]:
@@ -138,9 +138,10 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
             m[p] = idx + 1
 
     msum = sum(m.values())
-    logger.debug("Generated {} unique {} encodings".format(
+    logger.debug("Generated {} unique {} encodings ({} failed)".format(
         msum,
-        config['datatype']))
+        config['datatype'],
+        failed))
 
     if msum <= 0:
         return None
@@ -160,3 +161,13 @@ def generate_relationwise_features(node_map, node_predicate_map, C, config,
 
 def validate(value):
     return match(_REGEX_NUMERIC, value)
+
+def getFeature(nodes_map, datatypes):
+    for node, i in nodes_map.items():
+        if not isinstance(node, Literal):
+            continue
+        if node.datatype is None or node.datatype not in datatypes:
+            continue
+
+        yield (node, i)
+

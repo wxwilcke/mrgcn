@@ -9,7 +9,7 @@ from rdflib.term import Literal
 from rdflib.namespace import XSD
 
 
-_REGEX_YEAR_FRAG = "(?P<sign>-?)(?P<year>\d{4})"  # only consider years from -9999 to 9999
+_REGEX_YEAR_FRAG = "(?P<sign>-?)(?P<year>\d{1,4})"  # only consider years from -9999 to 9999
 _REGEX_TIMEZONE_FRAG = "(?P<timezone>Z|(?:\+|-)(?:(?:0\d|1[0-3]):[0-5]\d|14:00))?"
 
 _YEAR_DECADE_RAD = 2*pi/10
@@ -67,18 +67,17 @@ def generate_features(nodes_map, node_predicate_map, config):
 def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    n = len(nodes_map)
     m = dict()
     encodings = dict()
     node_idx = dict()
     values_min = dict()
     values_max = dict()
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(XSD.gYear):
-            continue
+    
+    features = list(getFeature(nodes_map, XSD.gYear))
+    n = len(features)
 
+    failed = 0
+    for node, i in features:
         try:
             value = validate(str(node))
 
@@ -98,6 +97,7 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             year = int(separated.group('year'))
             y1, y2 = point(year, _YEAR_DECADE_RAD)
         except:
+            failed += 1
             continue
 
         for p in node_predicate_map[node]:
@@ -120,7 +120,8 @@ def generate_relationwise_features(nodes_map, node_predicate_map, C, config):
             m[p] = idx + 1
 
     msum = sum(m.values())
-    logger.debug("Generated {} unique gYear encodings".format(msum))
+    logger.debug("Generated {} unique gYear encodings ({} failed)".format(msum,
+                                                                          failed))
 
     if msum <= 0:
         return None
@@ -143,10 +144,19 @@ def point(m, rad):
     return (sin(m*rad), cos(m*rad))
 
 def separate(year):
-    regex = "(?P<century>\d\d)(?P<decade>\d)(?P<year>\d)"
+    regex = "^(?P<century>\d{0,2}?)(?P<decade>\d?)(?P<year>\d)$"
     return match(regex, year)
 
 def validate(value):
     return match("{}{}".format(_REGEX_YEAR_FRAG,
                                _REGEX_TIMEZONE_FRAG),
                  value)
+
+def getFeature(nodes_map, datatype):
+    for node, i in nodes_map.items():
+        if not isinstance(node, Literal):
+            continue
+        if node.datatype is None or node.datatype.neq(datatype):
+            continue
+
+        yield (node, i)

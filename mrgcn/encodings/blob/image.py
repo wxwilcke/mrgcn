@@ -40,7 +40,6 @@ def generate_features(nodes_map, node_predicate_map, config):
 
 
 def generate_relationwise_features(nodes_map, node_predicate_map, config):
-    n = len(nodes_map)
     m = dict()
     encodings = dict()
     node_idx = dict()
@@ -56,13 +55,11 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     mean_values = np.array(config['transform']['mean']) * 255
     std_values = np.array(config['transform']['std']) * 255
 
-    failed = 0
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(_KGB_NAMESPACE.base64Image):
-            continue
+    features = list(getFeature(nodes_map, _KGB_NAMESPACE.base64Image))
+    n = len(features)
 
+    failed = 0
+    for node, i in features:
         im = None
         try:
             value = str(node)
@@ -133,3 +130,13 @@ def centerCrop(im, size):
     bottom = top + size
 
     return im.crop((left, top, right, bottom))
+
+def getFeature(nodes_map, datatype):
+    for node, i in nodes_map.items():
+        if not isinstance(node, Literal):
+            continue
+        if node.datatype is None or node.datatype.neq(datatype):
+            continue
+
+        yield (node, i)
+

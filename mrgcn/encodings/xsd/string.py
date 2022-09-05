@@ -41,7 +41,6 @@ def generate_features(nodes_map, node_predicate_map, config):
 def generate_relationwise_features(nodes_map, node_predicate_map, config):
     """ Stack vectors row-wise per relation and column stack relations
     """
-    n = len(nodes_map)
     m = dict()
     node_idx = dict()
     sequences = dict()
@@ -53,13 +52,12 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
         pad_token = config['tokenizer']['pad_token']
         tokenizer.add_special_tokens({'pad_token': pad_token})
     
-    failed = 0
-    for node, i in nodes_map.items():
-        if not isinstance(node, Literal):
-            continue
-        if node.datatype is None or node.datatype.neq(XSD.string):
-            continue
+    features = list(getFeature(nodes_map, XSD.string))
+    n = len(features)
 
+    failed = 0
+    for node, i in features:
+        sequence = None
         try:
             sentence = str(node)
             sequence = encode(tokenizer, sentence)
@@ -101,3 +99,14 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
 
 def encode(tokenizer, sentence):
     return tokenizer.encode(sentence, add_special_tokens=True)
+
+def getFeature(nodes_map, datatype):
+    for node, i in nodes_map.items():
+        if not isinstance(node, Literal):
+            continue
+        if (node.datatype is not None and node.datatype.neq(datatype))\
+            or (node.datatype is None and node.language is None):
+            continue
+
+        yield (node, i)
+
