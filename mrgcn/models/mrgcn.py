@@ -142,6 +142,9 @@ class MRGCN(nn.Module):
         self.rgcn.to(device)
         A_dev = A.to(device)
 
+        if X_dev is not None:
+            X_dev = X_dev.float()
+
         # Forward pass through graph convolution layers
         X_dev = self.rgcn(X_dev, A_dev)
 
@@ -171,6 +174,9 @@ class MRGCN(nn.Module):
 
         self.rgcn.to(device)
         A_dev = A.to(device)  # in place transfer
+
+        if X_dev is not None:
+            X_dev = X_dev.float()
 
         # Forward pass through graph convolution layers
         X_dev = self.rgcn(X_dev, A_dev)

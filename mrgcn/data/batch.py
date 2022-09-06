@@ -72,10 +72,10 @@ class Batch:
             # if X[0] is a tensor, then so are its other members
             return
 
-        self.X[0] = torch.from_numpy(self.X[0]).float()
+        self.X[0] = torch.from_numpy(self.X[0])
         for i, (_, encoding_sets) in enumerate(self.X[1:], 1):
             for j, (encodings, node_idx, seq_lengths) in enumerate(encoding_sets):
-                self.X[i][1][j][0] = torch.from_numpy(encodings).float()
+                self.X[i][1][j][0] = torch.from_numpy(encodings)
                 self.X[i][1][j][1] = torch.from_numpy(node_idx)
                 self.X[i][1][j][2] = torch.from_numpy(seq_lengths)
     
