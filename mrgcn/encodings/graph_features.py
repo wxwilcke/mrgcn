@@ -341,7 +341,7 @@ def merge_discrete_encoding_sets(encoding_sets):
             enc = encodings[i]
             if idx in node_idx_mult:
                 merged_idx_multvalue_map[merged_idx].append(enc)
-                merged_idx_multlength_map[merged_idx].append(seq_length)
+                merged_idx_multlength_map[merged_idx].append(seq_length[i])
             else:
                 encodings_merged[merged_idx] = enc
 
