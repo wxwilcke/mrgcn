@@ -6,6 +6,7 @@ from io import BytesIO
 from PIL import Image
 
 import numpy as np
+import torch
 from rdflib.term import Literal, URIRef
 from rdflib import Namespace
 
@@ -51,10 +52,6 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
     im_size_base = config['transform']['resizeSize']
     im_size_interpolation_mode = getattr(Image, config['transform']['interpolationMode'])
     
-    # multiply by 255 to translate floats in [0,1] to pixels in [0,255]
-    mean_values = np.array(config['transform']['mean']) * 255
-    std_values = np.array(config['transform']['std']) * 255
-
     features = list(getFeature(nodes_map, _KGB_NAMESPACE.base64Image))
     n = len(features)
 
@@ -78,14 +75,13 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
         if im_mode == "RGB":
             a = a.transpose((2, 0, 1))  # change to CxHxW
 
-        # normalize values along channels
-        a = (a - mean_values[:, None, None]) / std_values[:, None, None]
+        # defer normalization to runtime to reduce memory use
 
         for p in node_predicate_map[node]:
             if p not in encodings.keys():
                 encodings[p] = np.empty(shape=(n, c, im_size_cropped,
                                                      im_size_cropped),
-                                        dtype=np.float32)
+                                        dtype=np.uint8)
                 node_idx[p] = np.empty(shape=(n), dtype=np.int32)
                 m[p] = 0
 
@@ -140,3 +136,31 @@ def getFeature(nodes_map, datatype):
 
         yield (node, i)
 
+class Normalizer:
+    mean_values = None
+    std_values = None
+
+    def __init__(self, mean_values, std_values, convert_float_to_pixel=True):
+        self.mean_values = np.array(mean_values)
+        self.std_values = np.array(std_values)
+
+        if convert_float_to_pixel:
+            self.float_to_pixel()
+
+    def float_to_pixel(self):
+        self.mean_values *= 255
+        self.std_values *= 255
+
+    def normalize_(self, im):
+        if len(im.shape) > 3:
+            out = torch.empty(im.shape, dtype=torch.float32)
+            for i in range(len(im)):
+                out[i] = self._normalize(im[i])
+
+            return out
+        else:  # single image
+            return self._normalize(im)
+
+    def _normalize(self, im):
+        # normalize values along channels
+        return ((im - self.mean_values[:, None, None]) / self.std_values[:, None, None]).float()

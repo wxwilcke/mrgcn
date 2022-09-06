@@ -189,7 +189,9 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             elif datatype in ["blob.image"]:
                 # stored as tensor (num_images x num_channels x width x height)
                 model_config = feature_config['model']
+                transform_config = feature_config['transform']
                 modules_config.append((datatype, (model_config,
+                                                  transform_config,
                                                   embedding_dim,
                                                   dropout)))
             else:

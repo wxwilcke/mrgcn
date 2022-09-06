@@ -2,15 +2,16 @@
 
 import logging
 from operator import itemgetter
-from mrgcn.models.imagecnn import ImageCNN
-from mrgcn.models.transformer import Transformer
 
 import numpy as np
 import torch
 import torch.nn as nn
 
+from mrgcn.encodings.blob.image import Normalizer as IMNORM
 from mrgcn.models.fully_connected import FC
 from mrgcn.models.temporal_cnn import TCNN
+from mrgcn.models.imagecnn import ImageCNN
+from mrgcn.models.transformer import Transformer
 from mrgcn.models.rgcn import RGCN
 from mrgcn.models.utils import loadFromHub
 from mrgcn.data.batch import MiniBatch
@@ -36,6 +37,8 @@ class MRGCN(nn.Module):
 
         language_model = None
         image_model = None
+
+        self.im_norm = None
 
         # add embedding layers
         self.modality_modules = dict()
@@ -74,7 +77,7 @@ class MRGCN(nn.Module):
                 self.module_dict["Transformer_"+str(i)] = module
                 i += 1
             if datatype == "blob.image":
-                model_config, dim_out, dropout = args
+                model_config, transform_config, dim_out, dropout = args
                 if image_model is None:
                     image_model = loadFromHub(model_config)
 
@@ -84,6 +87,11 @@ class MRGCN(nn.Module):
 
                 self.module_dict["ImageCNN_"+str(j)] = module
                 j += 1
+
+                if 'mean' in transform_config.keys()\
+                    and 'std' in transform_config.keys():
+                        self.im_norm = IMNORM(transform_config['mean'],
+                                              transform_config['std'])
             if datatype == "ogc.wktLiteral":
                 nrows, dim_out, model_size, dropout = args
                 module = TCNN(features_in=nrows,
@@ -199,7 +207,10 @@ class MRGCN(nn.Module):
 
                 # forward pass and store on correct position in output tensor
                 if modality in ["xsd.string", "xsd.anyURI"]:
-                    data = encodings[F_batch_mask].long()
+                    data = encodings[F_batch_mask].int()
+                elif modality == "blob.image":
+                    data_raw = encodings[F_batch_mask]
+                    data = self.im_norm.normalize_(data_raw)
                 else:
                     data = encodings[F_batch_mask].float()
 
