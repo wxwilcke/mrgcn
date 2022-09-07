@@ -10,4 +10,4 @@ First, generate the input files:
 
 Next, run the MR-GCN with the generated files as input:
 
-    python mrgcn/run.py -c test/classification/config.toml -i test/classification/MOCK_<timestamp>.tar -v --dry_run
+    python mrgcn/run.py -c test/classification/config.toml -i test/classification/CLTEST_<timestamp>.tar -v --dry_run

@@ -10,4 +10,4 @@ First, generate the input files:
 
 Next, run the MR-GCN with the generated files as input:
 
-    python mrgcn/run.py -c test/linkprediction/config.toml -i test/linkprediction/MOCK_<timestamp>.tar -v --dry_run
+    python mrgcn/run.py -c test/linkprediction/config.toml -i test/linkprediction/LPTEST_<timestamp>.tar -v --dry_run

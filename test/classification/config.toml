@@ -1,7 +1,7 @@
 # Dataset configuration context
 
 # name of the dataset
-name = "MOCK"
+name = "CLTEST"
 
 [graph]
 context = "./test/classification/context.nt.gz"
