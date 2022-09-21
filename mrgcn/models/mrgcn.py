@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 
 from mrgcn.encodings.blob.image import Normalizer as IMNORM
-from mrgcn.models.fully_connected import FC
+from mrgcn.models.perceptron import MLP
 from mrgcn.models.temporal_cnn import TCNN
 from mrgcn.models.imagecnn import ImageCNN
 from mrgcn.models.transformer import Transformer
@@ -52,17 +52,18 @@ class MRGCN(nn.Module):
 
             if datatype in ["xsd.boolean", "xsd.numeric"]:
                 ncols, dim_out, dropout = args
-                module = FC(input_dim=ncols,
+                module = MLP(input_dim=ncols,
                             output_dim=dim_out,
+                            num_layers=1,
                             p_dropout=dropout)
                 self.module_dict["FC_num_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 ncols, dim_out, dropout = args
-                module = FC(input_dim=ncols,
+                module = MLP(input_dim=ncols,
                             output_dim=dim_out,
-                            p_dropout=dropout,
-                            pre_fc=True)
+                            num_layers=2,
+                            p_dropout=dropout)
                 self.module_dict["FC_temp_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:

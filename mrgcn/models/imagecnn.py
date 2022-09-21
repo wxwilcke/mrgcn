@@ -37,7 +37,7 @@ class ImageCNN(nn.Module):
         output = torch.flatten(output, 1)
 
         output = self.pre_fc(output)
-        output = nn.ReLU()(output)
+        output = nn.PReLU()(output)
         if self.dropout is not None:
             output = self.dropout(output)
 

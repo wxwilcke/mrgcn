@@ -33,7 +33,7 @@ class Transformer(nn.Module):
         hidden_state = self.base_model(X)[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
         pooled_output = self.pre_fc(pooled_output)
-        pooled_output = nn.ReLU()(pooled_output)
+        pooled_output = nn.PReLU()(pooled_output)
 
         if self.dropout is not None:
             pooled_output = self.dropout(pooled_output)
