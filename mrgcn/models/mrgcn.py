@@ -140,7 +140,7 @@ class MRGCN(nn.Module):
 
         A = batch.A  # A := sparse tensor
 
-        self.rgcn.to(device)
+        self.rgcn = self.rgcn.to(device)
         A_dev = A.to(device)
 
         if X_dev is not None:
@@ -173,7 +173,7 @@ class MRGCN(nn.Module):
 
         A = batch.A  # A := object of MiniBatch class
 
-        self.rgcn.to(device)
+        self.rgcn = self.rgcn.to(device)
         A_dev = A.to(device)  # in place transfer
 
         if X_dev is not None:

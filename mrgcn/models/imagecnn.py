@@ -22,10 +22,13 @@ class ImageCNN(nn.Module):
         inter_dim = inferOutputDim(self.base_model)
         self.pre_fc = nn.Linear(inter_dim, inter_dim, bias=bias)
         self.fc = nn.Linear(inter_dim, output_dim, bias=bias)
+        self.f_activation = nn.PReLU()
         self.module_dict['pre_fc'] = self.pre_fc
         self.module_dict['fc'] = self.fc
+        self.module_dict['activation'] = self.f_activation
 
         self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.module_dict['pool'] = self.avgpool
         self.dropout = None
         if p_dropout > 0:
             self.dropout = nn.Dropout(p=p_dropout)
@@ -37,7 +40,7 @@ class ImageCNN(nn.Module):
         output = torch.flatten(output, 1)
 
         output = self.pre_fc(output)
-        output = nn.PReLU()(output)
+        output = self.f_activation(output)
         if self.dropout is not None:
             output = self.dropout(output)
 

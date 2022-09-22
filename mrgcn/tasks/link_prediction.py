@@ -73,8 +73,6 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 
     epoch = 0
     if checkpoint is not None:
-        model.to("cpu")
-
         print("[LOAD] Loading model state", end='')
         checkpoint = torch.load(checkpoint)
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -162,6 +160,8 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
                        str(test_hits_at_k['flt'][1]),
                        str(test_hits_at_k['flt'][2])])
     tsv_writer.writerow(result_str)
+
+    model = model.to('cpu')
 
     return (model, optimizer, epoch+nepoch, loss, test_mrr, test_hits_at_k, test_ranks)
 

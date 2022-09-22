@@ -61,8 +61,6 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
     epoch = 0
     if checkpoint is not None:
-        model.to("cpu")
-
         print("[LOAD] Loading model state", end='')
         checkpoint = torch.load(checkpoint)
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -94,7 +92,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(loss), str(acc)])
         
-    model.to("cpu")
+    model = model.to('cpu')
 
     return (model, optimizer, epoch+nepoch, loss, acc, labels, targets)
 
