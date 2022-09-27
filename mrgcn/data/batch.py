@@ -203,7 +203,11 @@ def getNeighboursSparse(A, idx):
     Assume A is a scypi CSR tensor
     """
     num_nodes = A.shape[0]
-    neighbours_rel = [np.where(A[i].todense() == 1)[1] for i in idx]
+
+    # this operation is inefficient
+    #neighbours_rel = [np.where(A[i].todense() == 1)[1] for i in idx]
+
+    neighbours_rel = [A.indices[A.indptr[i]:A.indptr[i+1]] for i in idx]
     neighbours_global = {i%num_nodes for i in np.concatenate(neighbours_rel)}
 
     return np.array(sorted(list(neighbours_global)))
