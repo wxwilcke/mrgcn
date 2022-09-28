@@ -99,7 +99,7 @@ class SparseDataset(Dataset):
 
 def collate_zero_padding_sparse(batch, time_dim, max_batch_length=999,
                                 min_padded_length=5):
-    """ batch := an object array with sparse coo matrices
+    """ batch := an object array with sparse csr matrices
 
         time_dim should be 0 for RNN and 1 for temporal CNN
         min_padded_length >= 5 to allow smallest CNN to support it
@@ -118,8 +118,8 @@ def collate_zero_padding_sparse(batch, time_dim, max_batch_length=999,
         shape = (seq.shape[0], padded_length) if time_dim == 1\
                 else (padded_length, seq.shape[1])
 
-        a = sp.coo_matrix((seq.data, (seq.row, seq.col)),
-                          shape=shape, dtype=np.float32)
+        a = sp.csr_matrix((seq.data, seq.indices, seq.indptr),
+                          shape=shape, dtype=seq.dtype)
         batch_padded[i] = a
 
     return batch_padded
@@ -178,14 +178,10 @@ def setup_features(F, num_nodes, featureless, config):
 
     return (X, X_width, modules_config, optimizer_config)
 
-def scipy_sparse_list_to_pytorch_sparse(sp_inputs):
-    return torch.stack([scipy_sparse_to_pytorch_sparse(sp) for sp in sp_inputs],
-                       dim = 0)
-
-def scipy_sparse_to_pytorch_sparse(sp_input):
+def scipy_sparse_to_pytorch_sparse(sp_input, dtype):
     indices = np.array(sp_input.nonzero())
     return torch.sparse_coo_tensor(torch.LongTensor(indices),
                                    torch.Tensor(sp_input.data),
                                    sp_input.shape,
-                                   dtype=torch.float32)
+                                   dtype=dtype)
 

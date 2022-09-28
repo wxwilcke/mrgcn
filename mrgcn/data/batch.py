@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+import scipy.sparse as sp
 import torch
 
 from mrgcn.data.utils import (collate_padding,
@@ -35,8 +36,8 @@ class Batch:
                  # each matrix/array is as long as that
                  # of the widest member
                 max_width = max(seq_length)
-                sample = encodings[np.random.randint(encodings.shape[0])]
-                if isinstance(sample, np.ndarray):
+                sample = encodings[0]  # assume all members are of same type
+                if isinstance(sample, np.ndarray):  # tokens
                     pad_symbol = 0
                     if datatype in pad_symbols.keys():
                         pad_symbol = pad_symbols[datatype]
@@ -53,14 +54,17 @@ class Batch:
                 self.X[i][1][j][0] = encodings_padded
 
     def to_dense_(self):
-        # make sparse arrays dense
+        # make sparse CSR arrays dense
         if self.X is None:
             return
 
         for i, (_, encoding_sets) in enumerate(self.X[1:], 1):
             for j, (encodings, _, _) in enumerate(encoding_sets):
-                if (encodings.dtype == np.dtype("O")
-                    and not isinstance(encodings[0], np.ndarray)):  # sp matrix
+                if encodings.dtype == np.dtype("O"):
+                    if not isinstance(encodings[0], sp.csr_matrix):
+                        # assume members are of same type
+                        continue
+
                     encodings_dense = np.array([a.todense() for a in encodings])
 
                     self.X[i][1][j][0] = encodings_dense
@@ -116,7 +120,10 @@ class FullBatch(Batch):
 
     def as_tensors_(self):
         super().as_tensors_()
-        self.A = scipy_sparse_to_pytorch_sparse(self.A)
+
+        # this converts the sp CSR matrix to a COO tensor
+        self.A = scipy_sparse_to_pytorch_sparse(self.A,
+                                                dtype=torch.int8)
     
     def to(self, device):
         copy = super().to(device)
@@ -193,7 +200,7 @@ class A_Batch:
         
     def as_tensors_(self):
         self.node_index = torch.from_numpy(self.node_index)
-        self.row = [scipy_sparse_to_pytorch_sparse(a) for a in self.row]
+        self.row = [scipy_sparse_to_pytorch_sparse(a, dtype=torch.int8) for a in self.row]
         self.neighbours = [torch.from_numpy(a) for a in self.neighbours]
 
 def getNeighboursSparse(A, idx):
@@ -202,11 +209,12 @@ def getNeighboursSparse(A, idx):
     of relation.
     Assume A is a scypi CSR tensor
     """
-    num_nodes = A.shape[0]
+    assert isinstance(A, sp.csr_matrix)
 
     # this operation is inefficient
     #neighbours_rel = [np.where(A[i].todense() == 1)[1] for i in idx]
 
+    num_nodes = A.shape[0]
     neighbours_rel = [A.indices[A.indptr[i]:A.indptr[i+1]] for i in idx]
     neighbours_global = {i%num_nodes for i in np.concatenate(neighbours_rel)}
 
@@ -220,6 +228,7 @@ def getAdjacencyNodeColumnIdx(idx, num_nodes, num_relations):
                              for r in range(num_relations) for i in idx])
 
 def sliceSparseCOO(t, idx):
+    assert isinstance(t, torch.sparse.CharTensor)
     row, col = t._indices()[:, torch.where(torch.isin(t._indices()[1],
                                                       idx))[0]]
 

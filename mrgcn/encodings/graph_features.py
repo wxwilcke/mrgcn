@@ -251,7 +251,7 @@ def features_included(config):
 def merge_sparse_encoding_sets(encoding_sets):
     """ Merge sparse encoding sets into a single set; aka share weights
 
-        Expects 2D sparse matrices as encodings.
+        Expects 2D sparse CSR matrices as encodings.
 
         Encodings sets contain the encoded feature matrices of the same
         datatype but connected by different predicates. If literals with the
@@ -303,7 +303,7 @@ def merge_sparse_encoding_sets(encoding_sets):
         a /= len(encodings)
 
         merged_idx = merged_idx_map[idx]
-        encodings_merged[merged_idx] = sp.coo_matrix(a)
+        encodings_merged[merged_idx] = sp.csr_matrix(a)
         seq_length_merged[merged_idx] = enc_length
 
     return [[encodings_merged, node_idx_merged, seq_length_merged]]
@@ -581,8 +581,8 @@ def trim_outliers_sparse(sequences, node_idx, seq_length_map, feature_dim=0):
         sequence = sequences[i]
         threshold = int(q75 + cut_off)
         if seq_length > threshold:
-            sequence = sequence.tolil()[:, :threshold].tocoo() if feature_dim == 0\
-                else sequence.tolil()[:threshold, :].tocoo()
+            sequence = sequence[:, :threshold] if feature_dim == 0\
+                else sequence[:threshold, :]
 
         sequences_trimmed[i] = sequence
         seq_length_map_trimmed[i] = sequence.shape[1-feature_dim]

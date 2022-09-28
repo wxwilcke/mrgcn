@@ -75,15 +75,10 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config,
         mean_y = np.mean(vec[:,1])
         vec = np.hstack([np.vstack([[mean_x, mean_y]]*vec_length), vec])
 
-        sp_rows, sp_cols = np.where(vec > 0.0)
         if time_dim == 0:
-            a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_rows, sp_cols)),
-                              shape=(vec_length, _GEOVECTORIZER_VEC_LENGTH+2),
-                              dtype=np.float64)
+            a = sp.csr_matrix(vec)
         else:  # time_dim == 1
-            a = sp.csr_matrix((vec[(sp_rows, sp_cols)], (sp_cols, sp_rows)),
-                              shape=(_GEOVECTORIZER_VEC_LENGTH+2, vec_length),
-                              dtype=np.float64)
+            a = sp.csr_matrix(vec.T)
 
         for p in node_predicate_map[node]:
             if p not in data.keys():
@@ -160,7 +155,7 @@ class GeomScalerSparse:
         localized = np.empty(shape=n, dtype=object)
         for index, geometry in enumerate(geometry_vectors):
             stop_index = self.get_full_stop_index(geometry) + 1
-            geometry_copy = geometry.copy().tolil()
+            geometry_copy = geometry.copy()
             if self.time_dim == 0:
                 geometry_copy[:stop_index, 2:4] -= means[index]
                 geometry_copy[:stop_index, 2:4] /= self.scale_factor
@@ -168,7 +163,7 @@ class GeomScalerSparse:
                 geometry_copy[2:4, :stop_index] -= means[index]
                 geometry_copy[2:4, :stop_index] /= self.scale_factor
 
-            localized[index] = geometry_copy.tocoo()
+            localized[index] = geometry_copy
 
         return localized
 
@@ -191,7 +186,12 @@ class GeomScalerSparse:
 
     def localized_mean(self, geometry_vector):
         full_stop_point_index = self.get_full_stop_index(geometry_vector)
-        geom_mean = geometry_vector[:full_stop_point_index, 2:4].mean(axis=0)\
-                if self.time_dim == 0 else geometry_vector[2:4, :full_stop_point_index].mean(axis=1)
+        geom_mean = [0, 0]
+        if self.time_dim == 0:
+            geom_mean = geometry_vector[:full_stop_point_index, 2:4].mean(axis=0)
+        elif self.time_dim == 1:
+            geom_mean = geometry_vector[2:4, :full_stop_point_index].mean(axis=1)
+        else:
+            raise ValueError("Invallid time dimension")
 
         return geom_mean

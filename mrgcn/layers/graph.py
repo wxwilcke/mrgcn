@@ -72,7 +72,7 @@ class GraphConvolution(nn.Module):
                 W_I = W_I.view(self.num_relations*self.num_nodes, self.outdim)
 
             # AIW_I = AW_I
-            AIW_I = torch.mm(A, W_I)
+            AIW_I = torch.mm(A.float(), W_I)
 
             if self.featureless:
                 if self.bias:
@@ -92,7 +92,7 @@ class GraphConvolution(nn.Module):
 
         FW_F = torch.einsum('ij,bjk->bik', X, W_F)
         FW_F = torch.reshape(FW_F, (self.num_relations*num_nodes, self.outdim))
-        AFW_F = torch.mm(A, FW_F)
+        AFW_F = torch.mm(A.float(), FW_F)
 
         AXW = torch.add(AIW_I, AFW_F) if self.input_layer else AFW_F
 
