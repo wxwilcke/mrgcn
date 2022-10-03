@@ -49,14 +49,21 @@ class EarlyStop:
     best_score = -1
     best_weights = None
     best_optim = None
+    delay = -1
 
-    def __init__(self, patience=7, tolerance=0.01):
+    def __init__(self, patience=7, tolerance=0.01, delay=10):
         self.tolerance = tolerance
+        self.delay = delay
         self._patience_default = patience
 
         self.reset_counter()
 
     def record(self, score, weights, optim):
+        if self.delay > 0:
+            self.delay -= 1
+
+            return
+
         if self.best_score < 0:
             self._update(score, weights, optim)
 
