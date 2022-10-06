@@ -64,6 +64,5 @@ def getPadSymbol(tokenizer_cfg):
 
     return tokenizer.encode(pad_token, add_special_tokens=False)[0]
 
-
-
-
+def torch_intersect1d(ta, tb):
+    return ta[(ta.view(1, -1) == tb.view(-1, 1)).any(dim=0)]

@@ -13,7 +13,7 @@ from mrgcn.models.temporal_cnn import TCNN
 from mrgcn.models.imagecnn import ImageCNN
 from mrgcn.models.transformer import Transformer
 from mrgcn.models.rgcn import RGCN
-from mrgcn.models.utils import loadFromHub
+from mrgcn.models.utils import loadFromHub, torch_intersect1d
 from mrgcn.data.batch import MiniBatch
 
 
@@ -131,7 +131,7 @@ class MRGCN(nn.Module):
         X_dev = None
         if self.compute_modality_embeddings:
             # expects a natural ordering of nodes; same as X
-            batch_idx = np.arange(self.num_nodes)  # full batch
+            batch_idx = torch.arange(self.num_nodes)  # full batch
 
             XF = self._compute_modality_embeddings(F, batch_idx)
             X = torch.cat([X,XF], dim=1)
@@ -198,15 +198,15 @@ class MRGCN(nn.Module):
                 module, _, out_dim = self.modality_modules[modality][i]
 
                 encodings, node_idx, _ = encoding_set
-                common_nodes = np.intersect1d(node_idx, batch_idx)
+                common_nodes = torch_intersect1d(node_idx, batch_idx)
                 if len(common_nodes) <= 0:
                     # no nodes in this batch have this modality
                     offset += out_dim
                     continue
 
                 # find indices for common nodes
-                F_batch_mask = np.in1d(node_idx, common_nodes)
-                X_batch_mask = np.in1d(batch_idx, common_nodes)
+                F_batch_mask = torch.isin(node_idx, common_nodes)
+                X_batch_mask = torch.isin(batch_idx, common_nodes)
 
                 logger.debug(" {} (set {} / {})".format(modality,
                                                         i+1,
