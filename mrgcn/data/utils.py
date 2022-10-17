@@ -13,11 +13,20 @@ from torch.utils.data import Dataset
 import torch.nn.functional as f
 import scipy.sparse as sp
 
-from mrgcn.encodings.graph_features import (construct_feature_matrix,
-                                            features_included)
-
 
 logger = logging.getLogger(__name__)
+
+def getConfParam(config, name, default=None):
+    """ Access nested dict by dot-separated key strings
+    """
+    names = name.split('.')
+    for name in names:
+        if not isinstance(config, dict) or name not in config.keys():
+            return default
+
+        config = config[name]
+
+    return config
 
 def is_readable(filename):
     path = split(filename)[0]
@@ -152,31 +161,6 @@ def zero_pad(t, min_seq_length, time_dim):
     padding[dim] = min_seq_length - t.shape[time_dim]
 
     return f.pad(t, padding)
-
-def setup_features(F, num_nodes, featureless, config):
-    X_width = 0  # number of columns in X
-    X = [np.empty((num_nodes, X_width), dtype=float)]  # dummy
-
-    modules_config = list()
-    optimizer_config = list()
-    if not featureless:
-        features_enabled = features_included(config)
-        logging.debug("Features included: {}".format(", ".join(features_enabled)))
-        for datatype in features_enabled:
-            if datatype in F.keys():
-                logger.debug("Found {} encoding set(s) for datatype {}".format(
-                    len(F[datatype]),
-                    datatype))
-
-        # create batched  representations for neural encodings
-        feature_configs = config['graph']['features']
-        features, modules_config, optimizer_config, feat_width = construct_feature_matrix(F,
-                                                                                          features_enabled,
-                                                                                          feature_configs)
-        X_width += feat_width
-        X.extend(features)
-
-    return (X, X_width, modules_config, optimizer_config)
 
 def scipy_sparse_to_pytorch_sparse(sp_input, dtype):
     indices = np.array(sp_input.nonzero())

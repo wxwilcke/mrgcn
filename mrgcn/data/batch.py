@@ -26,7 +26,7 @@ class Batch:
         if self.X is None:
             return
 
-        for i, (datatype, encoding_sets) in enumerate(self.X[1:], 1):
+        for i, (datatype, encoding_sets, _) in enumerate(self.X[1:], 1):
             for j, (encodings, _, seq_length) in enumerate(encoding_sets):
                 if encodings.dtype != np.dtype("O"):  # object array
                     # no padding needed
@@ -58,7 +58,7 @@ class Batch:
         if self.X is None:
             return
 
-        for i, (_, encoding_sets) in enumerate(self.X[1:], 1):
+        for i, (_, encoding_sets, _) in enumerate(self.X[1:], 1):
             for j, (encodings, _, _) in enumerate(encoding_sets):
                 if encodings.dtype == np.dtype("O"):
                     if not isinstance(encodings[0], sp.csr_matrix):
@@ -77,37 +77,60 @@ class Batch:
             return
 
         self.X[0] = torch.from_numpy(self.X[0])
-        for i, (_, encoding_sets) in enumerate(self.X[1:], 1):
+        for i, (_, encoding_sets, _) in enumerate(self.X[1:], 1):
             for j, (encodings, node_idx, seq_lengths) in enumerate(encoding_sets):
                 self.X[i][1][j][0] = torch.from_numpy(encodings)
                 self.X[i][1][j][1] = torch.from_numpy(node_idx)
                 self.X[i][1][j][2] = torch.from_numpy(seq_lengths)
     
-    def to(self, device):
-        device = torch.device(device) if type(device) is str else device
+    #def to(self, device):
+    #    device = torch.device(device) if type(device) is str else device
 
-        copy = self
-        if self.device is not device:
-            copy = type(self)()
-            copy.device = device
+    #    copy = self
+    #    if self.device is not device:
+    #        copy = type(self)()
+    #        copy.device = device
 
-            copy.node_index = self.node_index.to(device)
+    #        copy.node_index = self.node_index.to(device)
 
-            if self.X is None:
-                return copy
+    #        if self.X is None:
+    #            return copy
 
-            copy.X = list()
-            copy.X.append(self.X[0].to(device))
-            for modality, encoding_sets in self.X[1:]:
-                copied_encoding_sets = list()
-                for encodings, node_idx, seq_lengths in encoding_sets:
-                    copied_encoding_sets.append([encodings.to(device),
-                                                 node_idx.to(device),
-                                                 seq_lengths.to(device)])
+    #        copy.X = list()
+    #        copy.X.append(self.X[0].to(device))
+    #        for datatype, encoding_sets, gpu_acceleration in self.X[1:]:
+    #            copied_encoding_sets = list()
+    #            for encodings, node_idx, seq_lengths in encoding_sets:
+    #                copied_encoding_sets.append([encodings.to(device),
+    #                                             node_idx.to(device),
+    #                                             seq_lengths.to(device)])
 
-                copy.X.append([modality, copied_encoding_sets])
-    
-        return copy
+    #            copy.X.append([datatype, copied_encoding_sets])
+    #
+    #    copy.A = self.A.to(device)
+
+    #    return copy
+
+    def to_(self, devices):
+        for i, (datatype, encoding_sets, _) in enumerate(self.X[1:], 1):
+            device = devices[datatype]
+            for j, (encodings, node_idx, seq_lengths) in enumerate(encoding_sets):
+                self.X[i][1][j][0] = encodings.to(device)
+                self.X[i][1][j][1] = node_idx.to(device)
+                self.X[i][1][j][2] = seq_lengths.to(device)
+
+        gcn_device = devices["relational"]
+        self.A.to_(gcn_device)
+
+        device = "ambigious"
+        devices = np.unique(devices)
+        if len(devices) == 1:
+            device = devices[0]
+
+        self.device = device
+
+        return self
+
 
 class FullBatch(Batch):
     def __init__(self, A=None, X=None, batch_node_idx=None):
@@ -125,11 +148,6 @@ class FullBatch(Batch):
         self.A = scipy_sparse_to_pytorch_sparse(self.A,
                                                 dtype=torch.int8)
     
-    def to(self, device):
-        copy = super().to(device)
-        copy.A = self.A.to(device)
-
-        return copy
 
 class MiniBatch(Batch):
     def __init__(self, A=None, X=None, batch_node_idx=None, num_layers=None):
@@ -146,11 +164,6 @@ class MiniBatch(Batch):
         super().as_tensors_()
         self.A.as_tensors_()
     
-    def to(self, device):
-        copy = super().to(device)
-        copy.A = self.A.to(device)
-
-        return copy
 
 class A_Batch:
     node_index = None  # nodes to compute embeddings for
@@ -183,20 +196,29 @@ class A_Batch:
                 
             sample_idx = neighbours_idx
 
-    def to(self, device):
-        device = torch.device(device) if type(device) is str else device
+    def to_(self, device):
+        self.node_index = self.node_index.to(device)
+        self.neighbours = [t.to(device) for t in self.neighbours]
+        self.row = [t.to(device) for t in self.row]
 
-        copy = self
-        if self.device is not device:
-            copy = A_Batch()
+        self.device = device
 
-            copy.node_index = self.node_index.to(device)
-            copy.neighbours = [t.to(device) for t in self.neighbours]
-            copy.row = [t.to(device) for t in self.row]
+        return self
 
-            copy.device = device
+    #def to(self, device):
+    #    device = torch.device(device) if type(device) is str else device
 
-        return copy
+    #    copy = self
+    #    if self.device is not device:
+    #        copy = A_Batch()
+
+    #        copy.node_index = self.node_index.to(device)
+    #        copy.neighbours = [t.to(device) for t in self.neighbours]
+    #        copy.row = [t.to(device) for t in self.row]
+
+    #        copy.device = device
+
+    #    return copy
         
     def as_tensors_(self):
         self.node_index = torch.from_numpy(self.node_index)
@@ -249,7 +271,7 @@ def mksubset(X, sample_idx):
     X, F = X[0], X[1:]
 
     X_sample = [X[sample_idx]]
-    for modality, F_set in F:
+    for modality, F_set, gpu_acceleration in F:
         # TODO: skip if modality not asked for (optimization)
         F_set_sample = list()
         for encodings, nodes_idx, seq_lengths in F_set:
@@ -288,6 +310,6 @@ def mksubset(X, sample_idx):
                                  nodes_idx_sample,
                                  seq_length_sample])
 
-        X_sample.append([modality, F_set_sample])
+        X_sample.append([modality, F_set_sample, gpu_acceleration])
 
     return X_sample

@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from mrgcn.data.batch import FullBatch, MiniBatch
+from mrgcn.data.utils import getConfParam
 from mrgcn.encodings.graph_features import (construct_features,
                                             isDatatypeIncluded,
                                             getDatatypeConfig)
@@ -21,7 +22,7 @@ from mrgcn.tasks.utils import EarlyStop, optimizer_params
 logger = logging.getLogger()
 
 
-def run(A, X, Y, X_width, tsv_writer, device, config,
+def run(A, X, Y, X_width, tsv_writer, config,
         modules_config, optimizer_config, featureless,
         test_split, checkpoint):
     tsv_writer.writerow(["epoch", "training_loss", "training_accurary",
@@ -73,7 +74,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     t0 = time()
     for result in train_model(A, model, optimizer, criterion, X, Y, epoch,
                              nepoch, test_split, batchsize, l1_lambda,
-                             l2_lambda, pad_symbol_map, early_stop, device):
+                             l2_lambda, pad_symbol_map, early_stop):
         # log metrics
         tsv_writer.writerow([str(result[0]),
                              str(result[1]),
@@ -87,7 +88,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
     # test model
     loss, acc, labels, targets = test_model(A, model, criterion, X, Y, 
                                            test_split, batchsize,
-                                           pad_symbol_map, device)
+                                           pad_symbol_map)
     # log metrics
     tsv_writer.writerow(["-1", "-1", "-1", "-1", "-1",
                          str(loss), str(acc)])
@@ -98,7 +99,7 @@ def run(A, X, Y, X_width, tsv_writer, device, config,
 
 def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                 test_split, batchsize, l1_lambda, l2_lambda, pad_symbol_map,
-                early_stop, device):
+                early_stop):
     Y_train = Y['train']
     Y_valid = Y['valid']
     if test_split == "test":
@@ -117,6 +118,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
+        batch.to_(model.devices)
     num_batches_train = len(train_batches)
 
     valid_batches = list()
@@ -126,6 +128,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
             batch.pad_(pad_symbols=pad_symbol_map)
             batch.to_dense_()
             batch.as_tensors_()
+            batch.to_(model.devices)
 
     logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(epoch+1, nepoch+epoch+1):
@@ -146,13 +149,10 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
             print(batch_str, end='\b'*len(batch_str), flush=True)
 
             batch_node_idx = batch.node_index
-            batch_dev = batch.to(device)
 
             # Training scores
-            Y_batch_hat = model(batch_dev, device=device).to('cpu')
+            Y_batch_hat = model(batch).to('cpu')
             Y_batch_train = Y_train[batch_node_idx]
-
-            batch = batch_dev.to('cpu')
 
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_train, criterion)
             batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_train)[0]
@@ -195,7 +195,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
         val_acc = -1
         if Y_valid is not None:
             val_loss, val_acc = eval_model(model, valid_batches, Y_valid,
-                                           criterion, device)
+                                           criterion)
 
             logging.info("{:04d} ".format(epoch) \
                          + "| train loss {:.4f} / acc {:.4f} ".format(train_loss,
@@ -214,7 +214,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
                train_loss, train_acc,
                val_loss, val_acc)
 
-def eval_model(model, valid_batches, Y_valid, criterion, device):
+def eval_model(model, valid_batches, Y_valid, criterion):
     model.eval()
 
     loss_lst = list()
@@ -225,15 +225,12 @@ def eval_model(model, valid_batches, Y_valid, criterion, device):
         print(batch_str, end='\b'*len(batch_str), flush=True)
 
         batch_node_idx = batch.node_index
-        batch_dev = batch.to(device)
         with torch.no_grad():
-            Y_batch_hat = model(batch_dev, device=device).to('cpu')
+            Y_batch_hat = model(batch).to('cpu')
             Y_batch_valid = Y_valid[batch_node_idx]
 
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_valid, criterion)
             batch_acc = categorical_accuracy(Y_batch_hat, Y_batch_valid)[0]
-
-        batch = batch_dev.to('cpu')
 
         batch_loss = float(batch_loss)
         batch_acc = float(batch_acc)
@@ -247,7 +244,7 @@ def eval_model(model, valid_batches, Y_valid, criterion, device):
     return (val_loss, val_acc)
  
 def test_model(A, model, criterion, X, Y, test_split, batchsize,
-               pad_symbol_map, device):
+               pad_symbol_map):
     model.eval()
     Y_test = Y[test_split]
 
@@ -263,6 +260,7 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize,
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
+        batch.to_(model.devices)
     num_batches_test = len(test_batches)
 
     for batch_id, batch in enumerate(test_batches, 1):
@@ -272,15 +270,12 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize,
         print(batch_str, end='\b'*len(batch_str), flush=True)
 
         node_idx = batch.node_index
-        batch_dev = batch.to(device)
         with torch.no_grad():
-            Y_batch_hat = model(batch_dev, device=device).to('cpu')
+            Y_batch_hat = model(batch).to('cpu')
             Y_batch_test = Y_test[node_idx]
     
             batch_loss = categorical_crossentropy(Y_batch_hat, Y_batch_test, criterion)
             batch_acc, batch_labels, batch_targets = categorical_accuracy(Y_batch_hat, Y_batch_test)
-
-        batch = batch_dev.to('cpu')
 
         batch_loss = float(batch_loss)
         batch_acc = float(batch_acc)
@@ -380,6 +375,10 @@ def build_model(X_width, Y, A, modules_config, config, featureless):
     assert len(layers) >= 2
     logger.debug("Starting model build")
 
+    gcn_gpu_acceleration = getConfParam(config,
+                                        "task.gcn_gpu_acceleration",
+                                        False)
+
     # get sizes from dataset
     num_nodes, Y_dim = Y['train'].shape
     num_relations = int(A.shape[1]/num_nodes)
@@ -411,7 +410,8 @@ def build_model(X_width, Y, A, modules_config, config, featureless):
                   num_bases=config['model']['num_bases'],
                   p_dropout=config['model']['p_dropout'],
                   featureless=featureless,
-                  bias=config['model']['bias'])
+                  bias=config['model']['bias'],
+                  gcn_gpu_acceleration=gcn_gpu_acceleration)
 
     logger.debug("Completed model build")
 

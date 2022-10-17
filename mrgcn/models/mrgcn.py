@@ -2,6 +2,7 @@
 
 import logging
 from operator import itemgetter
+import warnings
 
 import numpy as np
 import torch
@@ -17,12 +18,14 @@ from mrgcn.models.utils import loadFromHub, torch_intersect1d
 from mrgcn.data.batch import MiniBatch
 
 
+CUDA = torch.device("cuda")
+
 logger = logging.getLogger(__name__)
 
 class MRGCN(nn.Module):
     def __init__(self, modules, embedding_modules, num_relations,
                  num_nodes, num_bases=-1, p_dropout=0.0, featureless=False,
-                 bias=False, link_prediction=False):
+                 bias=False, link_prediction=False, gcn_gpu_acceleration=False):
         """
         Multimodal Relational Graph Convolutional Network
         Mini Batch support
@@ -40,12 +43,14 @@ class MRGCN(nn.Module):
 
         self.im_norm = None
 
+        self.devices = dict()
+
         # add embedding layers
         self.modality_modules = dict()
         self.modality_out_dim = 0
         self.compute_modality_embeddings = False
         h, i, j, k = 0, 0, 0, 0
-        for datatype, args in embedding_modules:
+        for datatype, args, gpu_acceleration in embedding_modules:
             module = None
             dim_out = -1
             seq_length = -1
@@ -56,6 +61,7 @@ class MRGCN(nn.Module):
                             output_dim=dim_out,
                             num_layers=1,
                             p_dropout=dropout)
+
                 self.module_dict["FC_num_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
@@ -64,6 +70,7 @@ class MRGCN(nn.Module):
                             output_dim=dim_out,
                             num_layers=2,
                             p_dropout=dropout)
+
                 self.module_dict["FC_temp_"+str(i)] = module
                 h += 1
             if datatype in ["xsd.string", "xsd.anyURI"]:
@@ -100,6 +107,7 @@ class MRGCN(nn.Module):
                               p_dropout=dropout,
                               size=model_size)
                 seq_length = module.minimal_length
+                
                 self.module_dict["GeomCNN_"+str(k)] = module
                 k += 1
 
@@ -108,6 +116,17 @@ class MRGCN(nn.Module):
             self.modality_modules[datatype].append((module, seq_length, dim_out))
             self.modality_out_dim += dim_out
             self.compute_modality_embeddings = True
+
+            device = torch.device("cpu")
+            if gpu_acceleration:
+                if torch.cuda.is_available():
+                    device = torch.device("cuda")
+                else:
+                    warnings.warn("CUDA Resource not available", ResourceWarning)
+
+            # record which device the module is on
+            self.devices[datatype] = device
+            module.to(device)
 
             if seq_length > 0:
                 logger.debug(f"Setting sequence length to {seq_length} for datatype {datatype}")
@@ -118,14 +137,33 @@ class MRGCN(nn.Module):
                           link_prediction)
         self.module_dict["RGCN"] = self.rgcn
 
-    def forward(self, batch, device=None):
+        # record all devices used by the modules
+        device = torch.device("cpu")
+        if gcn_gpu_acceleration:
+            if torch.cuda.is_available():
+                device = torch.device("cuda")
+            else:
+                warnings.warn("CUDA Resource not available", ResourceWarning)
+
+        self.devices["relational"] = device
+        self.rgcn.to(device)
+        
+        # place X on the GPU if every module is on the GPU
+        # else default to cpu
+        self.X_device = torch.device("cuda")
+        for dev in self.devices.values():
+            if dev is not device:
+                self.X_device = torch.device("cpu")
+                break
+
+    def forward(self, batch):
         if isinstance(batch, MiniBatch):
-            return self._forward_mini_batch(batch, device)
+            return self._forward_mini_batch(batch)
 
         # full batch
-        return self._forward_full_batch(batch, device)
+        return self._forward_full_batch(batch)
 
-    def _forward_full_batch(self, batch, device=None):
+    def _forward_full_batch(self, batch):
         X, F = batch.X[0], batch.X[1:]
 
         X_dev = None
@@ -134,24 +172,25 @@ class MRGCN(nn.Module):
             batch_idx = torch.arange(self.num_nodes)  # full batch
 
             XF = self._compute_modality_embeddings(F, batch_idx)
+
+            X = X.to(self.X_device)
             X = torch.cat([X,XF], dim=1)
 
-            X_dev = X.to(device)
-
-        A = batch.A  # A := sparse tensor
-
-        self.rgcn = self.rgcn.to(device)
-        A_dev = A.to(device)
+            # move to same device as rgcn
+            rgcn_device = self.devices["relational"]
+            X_dev = X.to(rgcn_device)
 
         if X_dev is not None:
             X_dev = X_dev.float()
+
+        A_dev = batch.A  # A := sparse tensor
 
         # Forward pass through graph convolution layers
         X_dev = self.rgcn(X_dev, A_dev)
 
         return X_dev
 
-    def _forward_mini_batch(self, batch, device):
+    def _forward_mini_batch(self, batch):
         """ Mini batch MR-GCN.
         """
 
@@ -167,17 +206,18 @@ class MRGCN(nn.Module):
             batch_idx = batch.A.neighbours[-1]
 
             XF = self._compute_modality_embeddings(F, batch_idx)
+            
+            X = X.to(self.X_device)
             X = torch.cat([X,XF], dim=1)
 
-            X_dev = X.to(device)
-
-        A = batch.A  # A := object of MiniBatch class
-
-        self.rgcn = self.rgcn.to(device)
-        A_dev = A.to(device)  # in place transfer
+            # move to same device as rgcn
+            rgcn_device = self.devices["relational"]
+            X_dev = X.to(rgcn_device)
 
         if X_dev is not None:
             X_dev = X_dev.float()
+
+        A_dev = batch.A  # A := object of MiniBatch class
 
         # Forward pass through graph convolution layers
         X_dev = self.rgcn(X_dev, A_dev)
@@ -187,20 +227,20 @@ class MRGCN(nn.Module):
     def _compute_modality_embeddings(self, F, batch_idx):
         batch_num_nodes = len(batch_idx)
         X = torch.zeros((batch_num_nodes, self.modality_out_dim),
-                        dtype=torch.float32)
+                        dtype=torch.float32, device=self.X_device)
         offset = 0
-        for modality, encoding_sets in F:
-            if modality not in self.modality_modules.keys():
+        for datatype, encoding_sets, _ in F:
+            if datatype not in self.modality_modules.keys():
                 continue
 
             num_sets = len(encoding_sets)
             for i, encoding_set in enumerate(encoding_sets):
-                module, _, out_dim = self.modality_modules[modality][i]
+                module, _, out_dim = self.modality_modules[datatype][i]
 
                 encodings, node_idx, _ = encoding_set
                 common_nodes = torch_intersect1d(node_idx, batch_idx)
                 if len(common_nodes) <= 0:
-                    # no nodes in this batch have this modality
+                    # no nodes in this batch have this datatype
                     offset += out_dim
                     continue
 
@@ -208,20 +248,25 @@ class MRGCN(nn.Module):
                 F_batch_mask = torch.isin(node_idx, common_nodes)
                 X_batch_mask = torch.isin(batch_idx, common_nodes)
 
-                logger.debug(" {} (set {} / {})".format(modality,
+                logger.debug(" {} (set {} / {})".format(datatype,
                                                         i+1,
                                                         num_sets))
 
                 # forward pass and store on correct position in output tensor
-                if modality in ["xsd.string", "xsd.anyURI"]:
+                if datatype in ["xsd.string", "xsd.anyURI"]:
                     data = encodings[F_batch_mask].int()
-                elif modality == "blob.image":
+                elif datatype == "blob.image":
                     data_raw = encodings[F_batch_mask]
                     data = self.im_norm.normalize_(data_raw)
                 else:
                     data = encodings[F_batch_mask].float()
 
-                X[X_batch_mask, offset:offset+out_dim] = module(data)
+                out = module(data)
+                if self.X_device is not torch.device("cuda"):
+                    # X is on cpu
+                    out = out.to(torch.device("cpu"))
+
+                X[X_batch_mask, offset:offset+out_dim] = out
 
                 offset += out_dim
 

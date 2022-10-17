@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 import logging
-from math import ceil
 from shutil import get_terminal_size
 from time import time
+import warnings
 
 import numpy as np
 import torch
@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from mrgcn.data.batch import FullBatch, MiniBatch
+from mrgcn.data.utils import getConfParam
 from mrgcn.encodings.graph_features import (construct_features,
                                             isDatatypeIncluded,
                                             getDatatypeConfig)
@@ -22,7 +23,7 @@ from mrgcn.tasks.utils import EarlyStop, optimizer_params
 logger = logging.getLogger(__name__)
 
 
-def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
+def run(A, X, X_width, data, tsv_writer, 
         config, modules_config, optimizer_config, featureless, test_split,
         checkpoint):
     header = ["epoch", "loss"]
@@ -35,6 +36,17 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
     # used for clearing a line
     term_width = get_terminal_size().columns
 
+    lp_gpu_acceleration = getConfParam(config,
+                                        "task.lprank_gpu_acceleration",
+                                        False)
+    lp_device = torch.device("cpu")
+    if lp_gpu_acceleration:
+        if torch.cuda.is_available():
+            lp_device = torch.device("cuda")
+        else:
+            warnings.warn("CUDA Resource not available", ResourceWarning)
+
+    # get sizes from dataset
     # compile model
     model = build_model(X_width, A, modules_config, config, featureless)
     opt_params = optimizer_params(model, optimizer_config)
@@ -97,7 +109,7 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
                               criterion, epoch, nepoch, batchsize,
                               mrr_batchsize, eval_interval, filter_ranks,
                               l1_lambda, l2_lambda, pad_symbol_map, early_stop,
-                              model_device, distmult_device, term_width):
+                              lp_device, term_width):
 
         epoch, loss, train_mrr, train_hits_at_k,\
                      valid_mrr, valid_hits_at_k = result
@@ -135,14 +147,14 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
+        batch.to_(model.devices)
         batch_data = torch.from_numpy(batch_data)
         test_batches[i] = (batch, batch_data)
 
     test_mrr, test_hits_at_k, test_ranks = test_model(test_batches,
                                                       model,
                                                       filter_ranks,
-                                                      model_device,
-                                                      distmult_device,
+                                                      lp_device,
                                                       term_width)
 
     t1_str = "Testing time: {:.2f}s".format(time()-t0)
@@ -168,8 +180,8 @@ def run(A, X, X_width, data, tsv_writer, model_device, distmult_device,
 def train_model(A, X, data, model, optimizer, criterion,
                 epoch, nepoch, batchsize, mrr_batchsize,
                 eval_interval, filter_ranks, l1_lambda, l2_lambda,
-                pad_symbol_map, early_stop, model_device,
-                distmult_device, term_width):
+                pad_symbol_map, early_stop,
+                lp_device, term_width):
 
     # generate batches
     num_layers = model.rgcn.num_layers
@@ -179,6 +191,7 @@ def train_model(A, X, data, model, optimizer, criterion,
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
+        batch.to_(model.devices)
         batch_data = torch.from_numpy(batch_data)
         train_batches[i] = (batch, batch_data)
     num_batches_train = len(train_batches)
@@ -191,6 +204,7 @@ def train_model(A, X, data, model, optimizer, criterion,
             batch.pad_(pad_symbols=pad_symbol_map)
             batch.to_dense_()
             batch.as_tensors_()
+            batch.to_(model.devices)
             batch_data = torch.from_numpy(batch_data)
             valid_batches[i] = (batch, batch_data)
 
@@ -242,18 +256,14 @@ def train_model(A, X, data, model, optimizer, criterion,
             Y[-ncorrupt:] = 0
 
             # compute necessary embeddings
-            batch_dev = batch.to(model_device)
-
-            node_embeddings = model(batch_dev, device=model_device).to(distmult_device)
-            edge_embeddings = model.rgcn.relations.to(distmult_device)
+            node_embeddings = model(batch).to(lp_device)
+            edge_embeddings = model.rgcn.relations.to(lp_device)
             
-            batch = batch_dev.to('cpu')  # free gpu memory
-
             # compute scores
             Y_hat = torch.empty((batch_num_samples+ncorrupt), dtype=torch.float32)
 
             batch_data_dev = torch.as_tensor(batch_data,
-                                             device=distmult_device).long()
+                                             device=lp_device).long()
             Y_hat[:batch_num_samples] = score_distmult_bc((batch_data_dev[:, 0],
                                                            batch_data_dev[:, 1],
                                                            batch_data_dev[:, 2]),
@@ -261,7 +271,7 @@ def train_model(A, X, data, model, optimizer, criterion,
                                                           edge_embeddings).to('cpu')
 
             corrupted_data_dev = torch.as_tensor(corrupted_data,
-                                                 device=distmult_device).long()
+                                                 device=lp_device).long()
             Y_hat[-ncorrupt:] = score_distmult_bc((corrupted_data_dev[:, 0],
                                                    corrupted_data_dev[:, 1],
                                                    corrupted_data_dev[:, 2]),
@@ -315,8 +325,7 @@ def train_model(A, X, data, model, optimizer, criterion,
             train_mrr, train_hits_at_k, _  = test_model(train_batches,
                                                         model,
                                                         filter_ranks,
-                                                        model_device,
-                                                        distmult_device,
+                                                        lp_device,
                                                         term_width)
 
             results_str += f" | train MRR {train_mrr['raw']:.4f} (raw)"
@@ -329,8 +338,7 @@ def train_model(A, X, data, model, optimizer, criterion,
                 valid_mrr, valid_hits_at_k, _ = test_model(valid_batches,
                                                            model,
                                                            filter_ranks,
-                                                           model_device,
-                                                           distmult_device,
+                                                           lp_device,
                                                            term_width)
 
                 results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) "
@@ -350,7 +358,7 @@ def train_model(A, X, data, model, optimizer, criterion,
                train_mrr, train_hits_at_k,
                valid_mrr, valid_hits_at_k)
 
-def test_model(batches, model, filter_ranks, model_device, distmult_device,
+def test_model(batches, model, filter_ranks, lp_device,
                term_width):
     model.eval()
     
@@ -367,8 +375,8 @@ def test_model(batches, model, filter_ranks, model_device, distmult_device,
             batch_str += " " * (width_remain//2)  # ensure overwrite of batch message
             print(batch_str, end='\b'*len(batch_str), flush=True)
 
-            node_embeddings = model(batch, device=model_device).to(distmult_device)
-            edge_embeddings = model.rgcn.relations.to(distmult_device)
+            node_embeddings = model(batch).to(lp_device)
+            edge_embeddings = model.rgcn.relations.to(lp_device)
             for filtered in [False, True]:
                 rank_type = "flt" if filtered else "raw"
                 if filtered is True and not filter_ranks:

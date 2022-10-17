@@ -8,6 +8,7 @@ from typing import Sequence
 import numpy as np
 import scipy.sparse as sp
 
+from mrgcn.data.utils import getConfParam
 from mrgcn.encodings.xsd.xsd_hierarchy import XSDHierarchy
 from mrgcn.models.temporal_cnn import TCNN
 
@@ -58,6 +59,31 @@ def construct_features(nodes_map, knowledge_graph, feature_configs,
             features[feature_name] = feature_encoding
 
     return features
+
+def setup_features(F, num_nodes, featureless, config):
+    X_width = 0  # number of columns in X
+    X = [np.empty((num_nodes, X_width), dtype=float)]  # dummy
+
+    modules_config = list()
+    optimizer_config = list()
+    if not featureless:
+        features_enabled = features_included(config)
+        logging.debug("Features included: {}".format(", ".join(features_enabled)))
+        for datatype in features_enabled:
+            if datatype in F.keys():
+                logger.debug("Found {} encoding set(s) for datatype {}".format(
+                    len(F[datatype]),
+                    datatype))
+
+        # create batched  representations for neural encodings
+        feature_configs = config['graph']['features']
+        features, modules_config, optimizer_config, feat_width = construct_feature_matrix(F,
+                                                                                          features_enabled,
+                                                                                          feature_configs)
+        X_width += feat_width
+        X.extend(features)
+
+    return (X, X_width, modules_config, optimizer_config)
 
 def feature_module(hierarchy, feature_name):
     for feature in AVAILABLE_FEATURES:
@@ -110,8 +136,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
         # as separate arrays for each predicate they are connected with.
         # Here we merge these arrays such that the result is a single array
         # per modality that is agnistic to the predicates.
-        weight_sharing = False if 'share_weights' not in feature_config.keys()\
-                         else feature_config['share_weights']
+        weight_sharing = getConfParam(feature_config, 'share_weights', False)
         if weight_sharing:
             logger.debug("weight sharing enabled for {}".format(datatype))
             if datatype in ["blob.image"]:
@@ -128,10 +153,8 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
 
         # add a bit of noise to reduce the chance of overfitting, eg
         # when one neural encoder converges faster than others.
-        noise_mp = -1 if 'noise_multiplier' not in feature_config.keys()\
-                   else feature_config['noise_multiplier']
-        p_noise = -1 if 'p_noise' not in feature_config.keys()\
-                  else feature_config['p_noise']
+        noise_mp = getConfParam(feature_config, 'noise_multiplier', -1)
+        p_noise = getConfParam(feature_config, 'p_noise', -1)
         if p_noise > 0:
             logger.debug("adding noise to {}".format(datatype))
             if datatype in ["ogc.wktLiteral"]:
@@ -142,6 +165,8 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
+        gpu_acceleration = getConfParam(feature_config, 'gpu_acceleration', False)
+
         # generate modality-specific configurations to pass to
         # the MR-GCN to tell is what encoders to prepare.
         num_encoding_sets = len(encoding_sets)
@@ -151,19 +176,22 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 feature_size = encodings.shape[feature_dim]
                 modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
-                                                  dropout)))
+                                                  dropout),
+                                       gpu_acceleration))
             elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 feature_dim = 1
                 feature_size = encodings.shape[feature_dim]
                 modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
-                                                  dropout)))
+                                                  dropout),
+                                       gpu_acceleration))
             elif datatype in ["xsd.string", "xsd.anyURI"]:
                 # stored as vstacked arrays of tokens of variable length
                 model_config = feature_config['model']
                 modules_config.append((datatype, (model_config,
                                                   embedding_dim,
-                                                  dropout)))
+                                                  dropout),
+                                       gpu_acceleration))
             elif datatype in ["ogc.wktLiteral"]:
                 # stored as array of arrays (point_repr x num_points)
                 # determine average vector length
@@ -185,7 +213,8 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 modules_config.append((datatype, (feature_size,
                                                   embedding_dim,
                                                   model_size,
-                                                  dropout)))
+                                                  dropout),
+                                       gpu_acceleration))
             elif datatype in ["blob.image"]:
                 # stored as tensor (num_images x num_channels x width x height)
                 model_config = feature_config['model']
@@ -193,21 +222,24 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 modules_config.append((datatype, (model_config,
                                                   transform_config,
                                                   embedding_dim,
-                                                  dropout)))
+                                                  dropout),
+                                       gpu_acceleration))
             else:
                 logger.warning("Unsupported datatype %s" % datatype)
 
             embeddings_width += embedding_dim
 
         # deal with outliers
-        if 'remove_outliers' in feature_config.keys() and feature_config['remove_outliers']:
+        rm_outliers = getConfParam(feature_config, 'remove_outliers', False)
+        if rm_outliers:
             if datatype in ["ogc.wktLiteral", "xsd.string", "xsd.anyURI"]:
                 encoding_sets = [remove_outliers(*f) for f in encoding_sets]
             else:
                 raise Warning("Outlier removal not supported for datatype %s" %
                               datatype)
 
-        if 'trim_outliers' in feature_config.keys() and feature_config['trim_outliers']:
+        tr_outliers = getConfParam(feature_config, 'trim_outliers', False)
+        if tr_outliers:
             if datatype in ["ogc.wktLiteral"]:
                 feature_dim = 0  # set to 1 for RNN
                 encoding_sets = [trim_outliers_sparse(*f, feature_dim) for f in encoding_sets]
@@ -219,7 +251,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
                 raise Warning("Outlier trimming not supported for datatype %s" %
                               datatype)
 
-        embeddings.append([datatype, encoding_sets])
+        embeddings.append([datatype, encoding_sets, gpu_acceleration])
 
     return (embeddings, modules_config, optimizer_config, embeddings_width)
 

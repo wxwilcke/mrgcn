@@ -13,21 +13,21 @@ from mrgcn.data.io.tarball import Tarball
 from mrgcn.data.io.tsv import TSV
 from mrgcn.data.utils import (is_readable,
                               is_writable,
-                              set_seed,
-                              setup_features)
+                              set_seed)
+from mrgcn.encodings.graph_features import setup_features
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
 
-def run(A, X, Y, X_width, data, acc_writer, model_device,
-        distmult_device, config, modules_config, optimizer_config,
+def run(A, X, Y, X_width, data, acc_writer,
+        config, modules_config, optimizer_config,
         featureless, test_split, checkpoint):
     task = config['task']['type']
     logging.info("Starting {} task".format(task))
     if task == "node classification":
         model, optimizer, epoch, loss,\
               acc, labels, targets = node_classification.run(A, X, Y, X_width, acc_writer,
-                                                             model_device, config,
+                                                             config,
                                                              modules_config,
                                                              optimizer_config,
                                                              featureless,
@@ -38,8 +38,8 @@ def run(A, X, Y, X_width, data, acc_writer, model_device,
     elif task == "link prediction":
         model, optimizer, epoch, loss,\
             mrr, hits_at_k, ranks, = link_prediction.run(A, X, X_width, data,
-                                                         acc_writer, model_device,
-                                                         distmult_device, config,
+                                                         acc_writer,
+                                                         config,
                                                          modules_config,
                                                          optimizer_config,
                                                          featureless, test_split,
@@ -55,21 +55,6 @@ def main(args, acc_writer, baseFilename, config):
     if 'features' in config['graph'].keys() and\
        True in [feature['include'] for feature in config['graph']['features']]:
         featureless = False
-
-    model_device = torch.device("cpu")
-    distmult_device = torch.device("cpu")
-    if config['task']['model_on_gpu'] or ('distmult_on_gpu' in config['task'].keys()
-                                          and config['task']['distmult_on_gpu']):
-        if torch.cuda.is_available():
-            if config['task']['model_on_gpu']:
-                model_device = torch.device("cuda")
-            if ('distmult_on_gpu' in config['task'].keys()\
-                and config['task']['distmult_on_gpu']):
-                distmult_device = torch.device("cuda")
-            device_name = torch.cuda.get_device_name(torch.cuda.current_device())
-            logging.debug("Running on GPU (%s) " % device_name)
-        else:
-            raise Exception("GPU asked but not available")
 
     assert is_readable(args.input)
     logging.debug("Importing tarball")
@@ -91,8 +76,8 @@ def main(args, acc_writer, baseFilename, config):
     modules_config.sort(key=lambda t: t[0]) 
 
     task = config['task']['type']
-    out = run(A, X, Y, X_width, data, acc_writer, model_device,
-              distmult_device, config, modules_config, optimizer_config,
+    out = run(A, X, Y, X_width, data, acc_writer,
+              config, modules_config, optimizer_config,
               featureless, test_split, args.load_checkpoint)
 
     model, optimizer = None, None

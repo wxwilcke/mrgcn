@@ -20,6 +20,7 @@ include = true
 share_weights = true
 embedding_dim = 2
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -29,6 +30,7 @@ include = true
 share_weights = true
 embedding_dim = 4
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -38,6 +40,7 @@ include = true
 share_weights = true 
 embedding_dim = 8
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -47,6 +50,7 @@ include = true
 share_weights = true 
 embedding_dim = 8
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -64,6 +68,7 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 32
 p_dropout = 0.0
+gpu_acceleration = false
 model = [ "huggingface/pytorch-transformers",
           "model",
           "distilbert-base-multilingual-cased" ]
@@ -80,6 +85,7 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 32
 p_dropout = 0.0
+gpu_acceleration = false
 model = [ "huggingface/pytorch-transformers",
           "model",
           "distilbert-base-multilingual-cased" ]
@@ -96,6 +102,7 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 32
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 model = [ "pytorch/vision:v0.10.0",
@@ -116,14 +123,15 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 32
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
 [task]
 type = 'link prediction'
 seed = -1  # use < 0 for random
-model_on_gpu = false
-distmult_on_gpu = false
+gcn_gpu_acceleration = false
+lprank_gpu_acceleration = false
 eval_interval = 10
 filter_ranks = true
 mrr_batchsize = 500
