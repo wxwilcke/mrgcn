@@ -120,7 +120,7 @@ class Batch:
                 self.X[i][1][j][2] = seq_lengths.to(device)
 
         gcn_device = devices["relational"]
-        self.A.to_(gcn_device)
+        self.A.to(gcn_device)
 
         device = "ambigious"
         devices = np.unique(devices)
