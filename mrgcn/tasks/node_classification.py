@@ -118,7 +118,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
-        batch.to_(model.devices)
+        batch.to(model.devices)
     num_batches_train = len(train_batches)
 
     valid_batches = list()
@@ -128,7 +128,7 @@ def train_model(A, model, optimizer, criterion, X, Y, epoch, nepoch,
             batch.pad_(pad_symbols=pad_symbol_map)
             batch.to_dense_()
             batch.as_tensors_()
-            batch.to_(model.devices)
+            batch.to(model.devices)
 
     logging.info("Training for {} epoch".format(nepoch))
     for epoch in range(epoch+1, nepoch+epoch+1):
@@ -260,7 +260,7 @@ def test_model(A, model, criterion, X, Y, test_split, batchsize,
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
-        batch.to_(model.devices)
+        batch.to(model.devices)
     num_batches_test = len(test_batches)
 
     for batch_id, batch in enumerate(test_batches, 1):

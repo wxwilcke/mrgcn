@@ -69,7 +69,8 @@ distmult_on_gpu = false
 eval_interval = 10
 filter_ranks = true
 mrr_batch_size = 5e1
-batchsize = -1  # < 0 for full batch
+test_batchsize = 500
+gcn_batchsize = 32  # < 0 for full batch
 early_stopping.patience = -1
 early_stopping.tolerance = 0.01
 

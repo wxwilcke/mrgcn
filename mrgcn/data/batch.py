@@ -111,7 +111,7 @@ class Batch:
 
     #    return copy
 
-    def to_(self, devices):
+    def to(self, devices):
         for i, (datatype, encoding_sets, _) in enumerate(self.X[1:], 1):
             device = devices[datatype]
             for j, (encodings, node_idx, seq_lengths) in enumerate(encoding_sets):
@@ -196,7 +196,7 @@ class A_Batch:
                 
             sample_idx = neighbours_idx
 
-    def to_(self, device):
+    def to(self, device):
         self.node_index = self.node_index.to(device)
         self.neighbours = [t.to(device) for t in self.neighbours]
         self.row = [t.to(device) for t in self.row]

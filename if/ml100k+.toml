@@ -21,6 +21,7 @@ include = true
 share_weights = true
 embedding_dim = 4
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -45,6 +46,7 @@ include = true
 share_weights = true
 embedding_dim = 3
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -56,6 +58,7 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
 p_dropout = 0.0
+gpu_acceleration = false
 model = [ "huggingface/pytorch-transformers",
           "model",
           "distilbert-base-multilingual-cased" ]
@@ -73,6 +76,7 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
 p_dropout = 0.0
+gpu_acceleration = false
 model = [ "huggingface/pytorch-transformers",
           "model",
           "distilbert-base-multilingual-cased" ]
@@ -90,6 +94,7 @@ remove_outliers = false
 embedding_dim = 128
 p_dropout = 0.0
 p_noise = 0.0
+gpu_acceleration = false
 noise_multiplier = 0.0
 model = [ "pytorch/vision:v0.10.0",
           "mobilenet_v2",
@@ -114,12 +119,13 @@ transform.std = [0.229, 0.224, 0.225]
 [task]
 type = 'link prediction'
 seed = -1  # use < 0 for random
-model_on_gpu = false
-distmult_on_gpu = false
 eval_interval = 10
+gcn_gpu_acceleration = false
+lprank_gpu_acceleration = false
 filter_ranks = true
-mrr_batch_size = 5e1
-batchsize = -1  # < 0 for full batch
+test_batchsize = 500
+mrr_batchsize = 50
+gcn_batchsize = 32  # < 0 for full batch
 
 [model]
 epoch = 20

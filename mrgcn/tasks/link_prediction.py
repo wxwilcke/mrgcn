@@ -56,8 +56,9 @@ def run(A, X, X_width, data, tsv_writer,
     criterion = nn.BCEWithLogitsLoss()
 
     # mini batching
+    test_batchsize = int(config['task']['test_batchsize'])
     mrr_batchsize = int(config['task']['mrr_batchsize'])
-    batchsize = config['task']['batchsize']
+    gcn_batchsize = int(config['task']['gcn_batchsize'])
 
     # train model
     nepoch = config['model']['epoch']
@@ -106,9 +107,10 @@ def run(A, X, X_width, data, tsv_writer,
     t0 = time()
     loss = 0.0
     for result in train_model(A, X, data, model, optimizer,
-                              criterion, epoch, nepoch, batchsize,
-                              mrr_batchsize, eval_interval, filter_ranks,
-                              l1_lambda, l2_lambda, pad_symbol_map, early_stop,
+                              criterion, epoch, nepoch, gcn_batchsize,
+                              test_batchsize, mrr_batchsize, eval_interval,
+                              filter_ranks, l1_lambda, l2_lambda,
+                              pad_symbol_map, early_stop,
                               lp_device, term_width):
 
         epoch, loss, train_mrr, train_hits_at_k,\
@@ -142,7 +144,7 @@ def run(A, X, X_width, data, tsv_writer,
     # generate batches
     num_layers = model.rgcn.num_layers
     test_data = data[test_split]
-    test_batches = mkbatches(A, X, test_data, batchsize, mrr_batchsize, num_layers)
+    test_batches = mkbatches(A, X, test_data, gcn_batchsize, test_batchsize, num_layers)
     for i, (batch, batch_data) in enumerate(test_batches):
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
@@ -155,6 +157,7 @@ def run(A, X, X_width, data, tsv_writer,
                                                       model,
                                                       filter_ranks,
                                                       lp_device,
+                                                      mrr_batchsize,
                                                       term_width)
 
     t1_str = "Testing time: {:.2f}s".format(time()-t0)
@@ -178,7 +181,8 @@ def run(A, X, X_width, data, tsv_writer,
     return (model, optimizer, epoch+nepoch, loss, test_mrr, test_hits_at_k, test_ranks)
 
 def train_model(A, X, data, model, optimizer, criterion,
-                epoch, nepoch, batchsize, mrr_batchsize,
+                epoch, nepoch, gcn_batchsize, test_batchsize,
+                mrr_batchsize,
                 eval_interval, filter_ranks, l1_lambda, l2_lambda,
                 pad_symbol_map, early_stop,
                 lp_device, term_width):
@@ -186,12 +190,12 @@ def train_model(A, X, data, model, optimizer, criterion,
     # generate batches
     num_layers = model.rgcn.num_layers
     train_data = data["train"]
-    train_batches = mkbatches(A, X, train_data, batchsize, mrr_batchsize, num_layers)
+    train_batches = mkbatches(A, X, train_data, gcn_batchsize, test_batchsize, num_layers)
     for i, (batch, batch_data) in enumerate(train_batches):
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
-        batch.to_(model.devices)
+        batch.to(model.devices)
         batch_data = torch.from_numpy(batch_data)
         train_batches[i] = (batch, batch_data)
     num_batches_train = len(train_batches)
@@ -199,12 +203,12 @@ def train_model(A, X, data, model, optimizer, criterion,
     valid_batches = list()
     valid_data = data["valid"]
     if valid_data is not None:
-        valid_batches = mkbatches(A, X, valid_data, batchsize, mrr_batchsize, num_layers)
+        valid_batches = mkbatches(A, X, valid_data, gcn_batchsize, test_batchsize, num_layers)
         for i, (batch, batch_data) in enumerate(valid_batches):
             batch.pad_(pad_symbols=pad_symbol_map)
             batch.to_dense_()
             batch.as_tensors_()
-            batch.to_(model.devices)
+            batch.to(model.devices)
             batch_data = torch.from_numpy(batch_data)
             valid_batches[i] = (batch, batch_data)
 
@@ -313,7 +317,8 @@ def train_model(A, X, data, model, optimizer, criterion,
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            loss_lst.append(float(loss))
+            loss = float(loss)
+            loss_lst.append(loss)
         
         loss = np.mean(loss_lst)
         results_str = f"{epoch:04d} | loss {loss:.4f}"
@@ -321,11 +326,11 @@ def train_model(A, X, data, model, optimizer, criterion,
         train_mrr, train_hits_at_k = None, None
         valid_mrr, valid_hits_at_k = None, None
         if epoch % eval_interval == 0 or epoch == nepoch:
-            # the highest seen batchsize during training
             train_mrr, train_hits_at_k, _  = test_model(train_batches,
                                                         model,
                                                         filter_ranks,
                                                         lp_device,
+                                                        mrr_batchsize,
                                                         term_width)
 
             results_str += f" | train MRR {train_mrr['raw']:.4f} (raw)"
@@ -339,6 +344,7 @@ def train_model(A, X, data, model, optimizer, criterion,
                                                            model,
                                                            filter_ranks,
                                                            lp_device,
+                                                           mrr_batchsize,
                                                            term_width)
 
                 results_str += f" | valid MRR {valid_mrr['raw']:.4f} (raw) "
@@ -359,7 +365,7 @@ def train_model(A, X, data, model, optimizer, criterion,
                valid_mrr, valid_hits_at_k)
 
 def test_model(batches, model, filter_ranks, lp_device,
-               term_width):
+               mrr_batchsize, term_width):
     model.eval()
     
     K = [1, 3, 10]
@@ -390,6 +396,7 @@ def test_model(batches, model, filter_ranks, lp_device,
                 ranks = compute_ranks_fast(batch_data,
                                            node_embeddings,
                                            edge_embeddings,
+                                           mrr_batchsize,
                                            filtered)
 
                 mrr[rank_type].append(torch.mean(1.0 / ranks.float()).item())
@@ -575,7 +582,8 @@ def truedicts(facts):
 
     return heads, tails
 
-def compute_ranks_fast(data, node_embeddings, edge_embeddings, filtered=True):
+def compute_ranks_fast(data, node_embeddings, edge_embeddings, mrr_batchsize,
+                       filtered=True):
     true_heads, true_tails = truedicts(data) if filtered else (None, None)
 
     num_facts = data.shape[0]
@@ -596,11 +604,17 @@ def compute_ranks_fast(data, node_embeddings, edge_embeddings, filtered=True):
                                                                     num_nodes, 1)
         candidates = torch.cat([ar, bexp] if head else [bexp, ar], dim=2)
 
-        scores = score_distmult_bc((candidates[:, :, 0],
-                                    candidates[:, :, 1],
-                                    candidates[:, :, 2]),
-                                   node_embeddings,
-                                   edge_embeddings).to('cpu')
+        scores = torch.zeros(candidates.shape[:2],
+                             device=torch.device("cpu"))
+
+        batches = [slice(begin, min(begin+mrr_batchsize, num_nodes))
+                   for begin in range(0, num_nodes, mrr_batchsize)]
+        for batch in batches:
+            scores[batch] = score_distmult_bc((candidates[batch, :, 0],
+                                               candidates[batch, :, 1],
+                                               candidates[batch, :, 2]),
+                                              node_embeddings,
+                                              edge_embeddings).to('cpu')
 
         # filter out the true triples that aren't the target
         if filtered:

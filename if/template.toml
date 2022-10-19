@@ -22,6 +22,7 @@ include = true
 share_weights = false
 embedding_dim = 4
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -30,6 +31,7 @@ datatype = 'xsd.boolean'
 include = true
 share_weights = false
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -38,6 +40,7 @@ datatype = 'xsd.gYear'
 include = true
 share_weights = false
 embedding_dim = 1
+gpu_acceleration = false
 p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
@@ -47,6 +50,7 @@ datatype = 'xsd.date'
 include = true
 share_weights = false
 embedding_dim = 3
+gpu_acceleration = false
 p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
@@ -56,6 +60,7 @@ datatype = 'xsd.dateTime'
 include = true
 share_weights = false
 embedding_dim = 3
+gpu_acceleration = false
 p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
@@ -70,6 +75,7 @@ embedding_dim = 16
 optim_lr = 0.001
 optim_momentum = 0.1
 p_dropout = 0.0
+gpu_acceleration = false
 
 model = [ "huggingface/pytorch-transformers",
           "model",
@@ -86,6 +92,7 @@ share_weights = true
 trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
+gpu_acceleration = false
 p_dropout = 0.0
 
 model = [ "huggingface/pytorch-transformers",
@@ -104,6 +111,7 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 128
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 model = [ "pytorch/vision:v0.10.0",
@@ -123,6 +131,7 @@ share_weights = false
 remove_outliers = false
 embedding_dim = 16
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -134,14 +143,15 @@ target_property_inv = '<URI>'
 
 # link prediction
 type = 'link prediction'
-distmult_on_gpu = false
 eval_interval = 10
+lprank_gpu_acceleration = false
 filter_ranks = true
-mrr_batch_size = 5e1
+test_batchsize = 500
+mrr_batchsize = 50
 
 seed = -1  # use < 0 for random
-model_on_gpu = false
-batchsize = -1  # < 0 for full batch
+gcn_batchsize = 32  # < 0 for full batch
+gcn_gpu_acceleration = false
 early_stopping.patience = -1
 early_stopping.tolerance = 0.01
 

@@ -22,6 +22,7 @@ include = true
 share_weights = true
 embedding_dim = 4
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -31,6 +32,7 @@ include = true
 share_weights = true
 embedding_dim = 3
 p_dropout = 0.0
+gpu_acceleration = false
 p_noise = 0.0
 noise_multiplier = 0.0
 
@@ -42,6 +44,7 @@ trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
 p_dropout = 0.0
+gpu_acceleration = false
 model = [ "huggingface/pytorch-transformers",
           "model",
           "distilbert-base-multilingual-cased" ]
@@ -58,6 +61,7 @@ share_weights = true
 trim_outliers = false
 remove_outliers = false
 embedding_dim = 16
+gpu_acceleration = false
 p_dropout = 0.0
 p_noise = 0.0
 noise_multiplier = 0.0
@@ -67,7 +71,7 @@ type = "node classification"
 target_property = 'http://data.bgs.ac.uk/ref/Lexicon/hasLithogenesis'
 target_property_inv = ''
 seed = -1  # use < 0 for random
-model_on_gpu = false
+gcn_gpu_acceleration = false
 batchsize = -1  # < 0 for full batch
 early_stopping.patience = -1
 early_stopping.tolerance = 0.01
