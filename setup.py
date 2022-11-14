@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup
+from setuptools import find_namespace_packages, setup
 
 
 def readme():
@@ -26,5 +26,5 @@ setup(
         'toml',
         'deep_geometry'
     ],
-    packages=['mrgcn'],
+    packages=find_namespace_packages(include=['mrgcn.*']),
 )

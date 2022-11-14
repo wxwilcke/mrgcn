@@ -11,10 +11,10 @@ By directly reading N-Triples, a common serialization format for knowledge graph
 1) To install, clone the repository and run:
 
 ```
-pip install .
+cd mrgcn/ && pip install .
 ```
 
-Once installed, we must first prepare a dataset by calling `mkdataset` with a configuration file `<dataset>.toml` as argument. For the datasets used in our paper, the configuration files are available in the `./if/` directory. To create a configuration file for a different dataset, simply copy and edit `template.toml`. Note that node classification and link prediction require different options.
+Once installed, we must first prepare a dataset by calling `mkdataset` with a configuration file `<dataset>.toml` as argument. For the datasets used in our paper, the configuration files are available in the `./if/` directory. To create a configuration file for a different dataset, simply copy and edit `template.toml`. Please look at the examples in `test/` for a basic working use case on node classification and link prediction.
 
 2) To prepare a dataset, run
 
