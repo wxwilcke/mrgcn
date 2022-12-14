@@ -5,7 +5,6 @@ import logging
 import numpy as np
 from rdflib.term import Literal
 from rdflib.namespace import XSD
-import scipy.sparse as sp
 
 from models.utils import loadFromHub
 
