@@ -428,6 +428,5 @@ def categorical_crossentropy(Y_hat, Y, criterion):
     idx, targets = Y.nonzero()
     targets = torch.as_tensor(targets, dtype=torch.long)
     predictions = Y_hat[idx]
-    print(targets)
 
     return criterion(predictions, targets)

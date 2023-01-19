@@ -2,7 +2,7 @@
 
 import logging
 import argparse
-from os import getpid
+from os import name, getpid
 from time import time
 
 import numpy as np
@@ -46,7 +46,7 @@ def run(A, X, Y, X_width, data, acc_writer,
                                                          checkpoint)
         return (model, optimizer, epoch, loss, mrr, hits_at_k, ranks)
 
-def main(args, acc_writer, baseFilename, config):
+def main(args, acc_writer, baseFilename, sep, config):
     set_seed(config['task']['seed'])
 
     test_split = 'test' if args.test else 'valid'  # use test split?
@@ -58,7 +58,7 @@ def main(args, acc_writer, baseFilename, config):
 
     assert is_readable(args.input)
     logging.debug("Importing tarball")
-    with Tarball(args.input, 'r') as tb:
+    with Tarball(args.input, 'r', separator=sep) as tb:
         A = tb.get('A')
         F = tb.get('F')
         Y = tb.get('Y')  # empty if doing link prediction
@@ -179,10 +179,13 @@ if __name__ == "__main__":
     assert is_readable(args.config)
     config = toml.load(args.config)
 
+    # adjust separator based on OS
+    sep = '\\' if name == 'nt' else '/'  # posix
+
     # set output base filename
     baseFilename = "{}{}{}_{}".format(args.output, config['name'], timestamp,\
                                       getpid()) if args.output.endswith("/") \
-                    else "{}/{}{}_{}".format(args.output, config['name'],\
+                    else "{}{}{}{}_{}".format(args.output, sep, config['name'],\
                                              timestamp, getpid())
     assert is_writable(baseFilename)
 
@@ -197,7 +200,7 @@ if __name__ == "__main__":
         "\n".join(["\t{}: {}".format(k,v) for k,v in config.items()])))
 
     # run training
-    model, optimizer, loss, epoch = main(args, acc_writer, baseFilename, config)
+    model, optimizer, loss, epoch = main(args, acc_writer, baseFilename, sep, config)
 
     if args.save_checkpoint:
         f_state = baseFilename + "_model_state_%d.pkl" % epoch

@@ -2,6 +2,7 @@
 
 import logging
 import argparse
+import os
 from time import time
 
 import toml
@@ -99,9 +100,12 @@ if __name__ == "__main__":
     assert is_readable(args.config)
     config = toml.load(args.config)
 
+    # adjust separator based on OS
+    sep = '\\' if os.name == 'nt' else '/'  # posix
+
     # set output base filename
     baseFilename = "{}{}{}".format(args.output, config['name'], timestamp) if args.output.endswith("/") \
-                    else "{}/{}{}".format(args.output, config['name'], timestamp)
+                    else "{}{}{}{}".format(args.output, sep, config['name'], timestamp)
     assert is_writable(baseFilename)
 
     init_logger(baseFilename+'.log', args.dry_run, args.verbose)
@@ -114,7 +118,7 @@ if __name__ == "__main__":
 
     out = run(args, config)
     if not args.dry_run:
-        with Tarball(baseFilename+'.tar', 'w') as tb:
+        with Tarball(baseFilename+'.tar', 'w', separator=sep) as tb:
             tb.store(out, names=['A', 'F', 'Y', 'data', 'sample_map', 'class_map'])
 
         logging.info('Dataset saved as {}'.format(baseFilename+'.tar'))

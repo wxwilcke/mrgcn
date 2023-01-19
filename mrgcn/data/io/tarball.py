@@ -19,13 +19,14 @@ class Tarball:
     tar = None
     _content = {}
 
-    def __init__(self, path=None, mode='r'):
+    def __init__(self, path=None, mode='r', separator='/'):
         self.logger = logging.getLogger(__name__)
         self.logger.debug("Initiating Tarball")
 
         if path is None:
             raise ValueError("::No path supplied")
 
+        self.separator = separator
         self.tar = tarfile.open(path, mode)
 
         if 'r' in mode:
@@ -39,11 +40,11 @@ class Tarball:
         members = set(self.tar.getnames())
 
         # check for structures
-        paths = {member for member in members if '/' in member}
+        paths = {member for member in members if self.separator in member}
         for path in paths:
-            root = path.split('/')[0]
+            root = path.split(self.separator)[0]
             if root == "dict" or root == "list":
-                root = path.split('/')[1]
+                root = path.split(self.separator)[1]
 
             names.add(root)
 
@@ -61,33 +62,33 @@ class Tarball:
         members = set(self.tar.getnames())
 
         # check for structures
-        paths = {member for member in members if '/' in member}
+        paths = {member for member in members if self.separator in member}
         if len(paths) > 0:
-            dicts = {path for path in paths if path.split('/')[0] == 'dict' }
-            lists = {path for path in paths if path.split('/')[0] == 'list' }
-            other = {path for path in paths if path.split('/')[0] != 'dict'
-                                           and path.split('/')[0] != 'list' }
+            dicts = {path for path in paths if path.split(self.separator)[0] == 'dict' }
+            lists = {path for path in paths if path.split(self.separator)[0] == 'list' }
+            other = {path for path in paths if path.split(self.separator)[0] != 'dict'
+                                           and path.split(self.separator)[0] != 'list' }
 
-            top_levels = {path.split('/')[1] for path in dicts}
+            top_levels = {path.split(self.separator)[1] for path in dicts}
             for top_level in top_levels:
-                d_full = [path for path in dicts if path.split('/')[1] == top_level]
+                d_full = [path for path in dicts if path.split(self.separator)[1] == top_level]
                 d_base = [path[len('dict/'):] for path in d_full]
                 content.append(self._read_dict(d_full, d_base))
                 names.append(top_level)
 
-            top_levels = {path.split('/')[1] for path in lists}
+            top_levels = {path.split(self.separator)[1] for path in lists}
             for top_level in top_levels:
-                l_full = [path for path in lists if path.split('/')[1] == top_level]
+                l_full = [path for path in lists if path.split(self.separator)[1] == top_level]
                 l_full.sort()  # maintain list order
                 l_base = [path[len('list/'):] for path in l_full]
                 content.append(self._read_list(l_full, l_base))
                 names.append(top_level)
 
             if len(other) > 0:
-                items = {path.split('/')[0] for path in other}
+                items = {path.split(self.separator)[0] for path in other}
                 for item in items:
-                    top_levels = {path.split('/')[1] for path in other if
-                                  path.split('/')[0] == item}
+                    top_levels = {path.split(self.separator)[1] for path in other if
+                                  path.split(self.separator)[0] == item}
                     if top_levels == {'indices.pt', 'values.pt', 'size.pt'}:
                         # assume pytorch.sparse tensor
                         content.append(self._read_ptsp(item))
@@ -180,7 +181,7 @@ class Tarball:
     def _read_list(self, names, paths):
         l = []
         for name, path in zip(names, paths):
-            l.append(self._read_sublist(name, path.split('/')[1:]))
+            l.append(self._read_sublist(name, path.split(self.separator)[1:]))
 
         return l
 
@@ -205,7 +206,7 @@ class Tarball:
                 # empty
                 continue
 
-            self._read_subdict(name, path.split('/')[1:], d)
+            self._read_subdict(name, path.split(self.separator)[1:], d)
 
         return d
 
