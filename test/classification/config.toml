@@ -17,7 +17,7 @@ multiprocessing = false
 
 [[graph.features]]
 datatype = 'xsd.numeric'
-include = true
+include = false
 share_weights = true
 embedding_dim = 2
 p_dropout = 0.0
@@ -27,7 +27,7 @@ gpu_acceleration = false
 
 [[graph.features]]
 datatype = 'xsd.gYear'
-include = true
+include = false
 share_weights = true
 embedding_dim = 4
 p_dropout = 0.0
@@ -37,7 +37,7 @@ gpu_acceleration = false
 
 [[graph.features]]
 datatype = 'xsd.date'
-include = true
+include = false
 share_weights = true 
 embedding_dim = 8
 p_noise = 0.0
@@ -47,7 +47,7 @@ gpu_acceleration = false
 
 [[graph.features]]
 datatype = 'xsd.dateTime'
-include = true
+include = false
 share_weights = true 
 embedding_dim = 8
 p_dropout = 0.0
@@ -63,7 +63,7 @@ gpu_acceleration = false
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 share_weights = true
 trim_outliers = false
 remove_outliers = false

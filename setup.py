@@ -24,7 +24,14 @@ setup(
         'scipy',
         'pillow',
         'toml',
-        'deep_geometry'
+        'deep_geometry',
+        'huggingface_hub',
+        'transformers',
+        'sentencepiece',
+        'sacremoses', 
+        'importlib_metadata',
+        'tqdm',
+        'packaging'
     ],
     packages=find_namespace_packages(include=['mrgcn.*']),
 )

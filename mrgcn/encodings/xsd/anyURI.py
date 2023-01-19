@@ -63,18 +63,18 @@ def generate_relationwise_features(nodes_map, node_predicate_map, config):
         try:
             sentence = str(node)
             sequence = encode(tokenizer, sentence)
-            seq_length = len(sequence)
         except:
             failed += 1
 
             continue
 
-        if seq_length <= 0:
+        if len(sequence) <= 0:
             failed += 1
 
             continue
 
         a = np.array(sequence)[:_MAX_CHARS]
+        seq_length = len(a)
 
         for p in node_predicate_map[node]:
             if p not in sequences.keys():
