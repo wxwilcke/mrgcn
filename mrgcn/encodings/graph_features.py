@@ -572,6 +572,7 @@ def trim_outliers_dense(sequences, node_idx, seq_length_map, feature_dim=0):
     q75 = np.quantile(seq_length_map, 0.75)
     IQR = q75 - q25
     cut_off = IQR * 1.5
+    threshold = int(q75 + cut_off)
 
     if IQR <= 0.0:  # no length difference
         return [sequences, node_idx, seq_length_map]
@@ -579,15 +580,13 @@ def trim_outliers_dense(sequences, node_idx, seq_length_map, feature_dim=0):
     n = len(sequences)
     sequences_trimmed = np.empty(n, dtype=object)
     seq_length_map_trimmed = np.zeros(n, dtype=int)
-    for i, seq_length in enumerate(seq_length_map):
-        sequence = sequences[i]
-        threshold = int(q75 + cut_off)
-        if seq_length > threshold:
+    for i, sequence in enumerate(sequences):
+        if sequence.shape[-1] > threshold:
             sequence = np.concatenate([sequence[:threshold-1],
-                                       sequence[-1]])
+                                       [sequence[-1]]])
 
         sequences_trimmed[i] = sequence
-        seq_length_map_trimmed[i] = sequence.shape[0]
+        seq_length_map_trimmed[i] = sequence.shape[-1]
 
     m = len(sequences_trimmed)
     d = len(sequences) - m
@@ -602,6 +601,7 @@ def trim_outliers_sparse(sequences, node_idx, seq_length_map, feature_dim=0):
     q75 = np.quantile(seq_length_map, 0.75)
     IQR = q75 - q25
     cut_off = IQR * 1.5
+    threshold = int(q75 + cut_off)
 
     if IQR <= 0.0:  # no length difference
         return [sequences, node_idx, seq_length_map]
@@ -611,7 +611,6 @@ def trim_outliers_sparse(sequences, node_idx, seq_length_map, feature_dim=0):
     seq_length_map_trimmed = np.zeros(n, dtype=int)
     for i, seq_length in enumerate(seq_length_map):
         sequence = sequences[i]
-        threshold = int(q75 + cut_off)
         if seq_length > threshold:
             sequence = sequence[:, :threshold] if feature_dim == 0\
                 else sequence[:threshold, :]
