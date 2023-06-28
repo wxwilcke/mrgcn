@@ -6,7 +6,7 @@ import numpy as np
 from rdflib.term import Literal
 from rdflib.namespace import XSD
 
-from models.utils import loadFromHub
+from mrgcn.models.utils import loadFromHub
 
 
 _MAX_CHARS = 512 

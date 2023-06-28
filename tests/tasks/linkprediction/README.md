@@ -6,8 +6,8 @@ This repository contains a small artificial and multimodal dataset to test the f
 
 First, generate the input files:
 
-    python mrgcn/mkdataset.py -c test/linkprediction/config.toml -o test/linkprediction/ -v
+    python mrgcn/mkdataset.py -c tests/tasks/linkprediction/config.toml -o tests/tasks/linkprediction/ -v
 
 Next, run the MR-GCN with the generated files as input:
 
-    python mrgcn/run.py -c test/linkprediction/config.toml -i test/linkprediction/LPTEST_<timestamp>.tar -v --dry_run
+    python mrgcn/run.py -c tests/tasks/linkprediction/config.toml -i tests/tasks/linkprediction/LPTEST_<timestamp>.tar -v --dry_run

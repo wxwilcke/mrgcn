@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mrgcn"
+version = "2.1"
+authors = [
+  { name="Xander Wilcke", email="w.x.wilcke@vu.nl" },
+]
+description = "Multimodal Relational Graph Convolutional Network (MR-GCN)"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GLP3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    'torch',
+    'numpy',
+    'rdflib',
+    'scipy',
+    'pillow',
+    'deep_geometry',
+    'huggingface_hub',
+    'transformers',
+    'sentencepiece',
+    'sacremoses', 
+    'importlib_metadata',
+    'tqdm',
+    'packaging'
+  ]
+keywords = ["rdf", "knowledge graphs", "message-passing network", "multimodal", "graph convolution network"]
+
+[project.urls]
+"Homepage" = "https://gitlab.com/wxwilcke/mrgcn"
+"Bug Tracker" = "https://gitlab.com/wxwilcke/mrgcn/-/issues"

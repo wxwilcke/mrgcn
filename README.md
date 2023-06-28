@@ -14,12 +14,12 @@ By directly reading N-Triples, a common serialization format for knowledge graph
 cd mrgcn/ && pip install .
 ```
 
-Once installed, we must first prepare a dataset by calling `mkdataset` with a configuration file `<dataset>.toml` as argument. For the datasets used in our paper, the configuration files are available in the `./if/` directory. To create a configuration file for a different dataset, simply copy and edit `template.toml`. Please look at the examples in `test/` for a basic working use case on node classification and link prediction.
+Once installed, we must first prepare a dataset by calling `mkdataset` with a configuration file `<dataset>.toml` as argument. For the datasets used in our paper, the configuration files are available in the `./configs/` directory. To create a configuration file for a different dataset, simply copy and edit `template.toml`. Please look at the examples in `tests/tasks/` for a basic working use case on node classification and link prediction.
 
 2) To prepare a dataset, run
 
 ```
-python mrgcn/mkdataset.py --config ./if/<dataset>.toml --output ./data/ -vv
+python mrgcn/mkdataset.py --config ./configs/<dataset>.toml --output ./data/ -vv
 ```
 
 This will create a tar file (`<DATASET[unix_time]>.tar`) with all data necessary to run subsequent experiments. To include all supported modalities in the dataset, ensure that `include` is set to `true` in the configuration file for all modalities (we can include/exclude these during training as long as they are included here). The original graph is now no longer needed. Note that we must here choose between letting literal values with the same value become one node (`separate_literals = false`) or keep them as many nodes as there are unique literals (`separate_literals = true`). .
@@ -27,7 +27,7 @@ This will create a tar file (`<DATASET[unix_time]>.tar`) with all data necessary
 3) Run the MR-GCN on the prepared dataset by running:
 
 ```
-python mrgcn/run.py --input ./data/<DATASET[unix_date]>.tar --config ./if/<dataset>.toml -vv
+python mrgcn/run.py --input ./data/<DATASET[unix_date]>.tar --config ./configs/<dataset>.toml -vv
 ```
 
 This will report the CE loss and accuracy on the validation set for node classification, and the MRR and hits@k for link prediction. Use the `--test` flag to report that of the test set.

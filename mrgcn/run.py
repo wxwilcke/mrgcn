@@ -6,7 +6,7 @@ from os import name, getpid
 from time import time
 
 import numpy as np
-import toml
+import tomllib
 import torch
 
 from mrgcn.data.io.tarball import Tarball
@@ -18,6 +18,8 @@ from mrgcn.encodings.graph_features import setup_features
 import mrgcn.tasks.node_classification as node_classification
 import mrgcn.tasks.link_prediction as link_prediction
 
+
+PYPROJECTS_PATH = "./pyproject.toml"
 
 def run(A, X, Y, X_width, data, acc_writer,
         config, modules_config, optimizer_config,
@@ -155,10 +157,30 @@ def init_logger(filename, dry_run, verbose=0):
 
         logging.getLogger().addHandler(stream_handler)
 
+def read_version(filename:str) -> str:
+    """ Parse the project's version
+
+    :param filename: path to 'pyproject.toml'
+    :type filename: str
+    :rtype: str
+    :returns: the project's version as a string
+    """
+    with open(filename, 'rb') as f:
+        metadata = tomllib.load(f)
+    try:
+        version = metadata["project"]["version"]
+    except:
+        version = "unknown"
+
+    return version
+
 if __name__ == "__main__":
     timestamp = int(time())
 
-    parser = argparse.ArgumentParser()
+    # infer version from meta data
+    version = read_version(PYPROJECTS_PATH)
+
+    parser = argparse.ArgumentParser(prog="MR-GCN")
     parser.add_argument("-c", "--config", help="Configuration file (toml)", required=True, default=None)
     parser.add_argument("-i", "--input", help="Optional prepared input file (tar)", default=None)
     parser.add_argument("-o", "--output", help="Output directory", default="/tmp/")
@@ -173,11 +195,14 @@ if __name__ == "__main__":
                         action="store_true")
     parser.add_argument("--test", help="Report accuracy on test set rather than on validation set",
                         action='store_true')
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version}")
     args = parser.parse_args()
 
     # load configuration
     assert is_readable(args.config)
-    config = toml.load(args.config)
+    with open(args.conf, 'rb') as f_conf:
+        config = tomllib.load(f_conf)
+
 
     # adjust separator based on OS
     sep = '\\' if name == 'nt' else '/'  # posix
