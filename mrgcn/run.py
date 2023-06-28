@@ -200,7 +200,7 @@ if __name__ == "__main__":
 
     # load configuration
     assert is_readable(args.config)
-    with open(args.conf, 'rb') as f_conf:
+    with open(args.config, 'rb') as f_conf:
         config = tomllib.load(f_conf)
 
 
