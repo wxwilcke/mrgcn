@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 class MRGCN(nn.Module):
     def __init__(self, modules, embedding_modules, num_relations,
                  num_nodes, num_bases=-1, p_dropout=0.0, featureless=False,
-                 bias=False, link_prediction=False, gcn_gpu_acceleration=False):
+                 bias=False, link_prediction=False, gcn_gpu_acceleration=False,
+                 gated=True):
         """
         Multimodal Relational Graph Convolutional Network
         Mini Batch support
@@ -45,11 +46,13 @@ class MRGCN(nn.Module):
 
         self.devices = dict()
 
+        i_gate = 0  # index of weight in gates vector
+
         # add embedding layers
         self.modality_modules = dict()
         self.modality_out_dim = 0
         self.compute_modality_embeddings = False
-        h, i, j, k = 0, 0, 0, 0
+        i_num, i_temp, i_llm, i_img, i_geo = 0, 0, 0, 0, 0
         for datatype, args, gpu_acceleration in embedding_modules:
             module = None
             dim_out = -1
@@ -62,18 +65,18 @@ class MRGCN(nn.Module):
                             num_layers=1,
                             p_dropout=dropout)
 
-                self.module_dict["FC_num_"+str(i)] = module
-                h += 1
-            if datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
+                self.module_dict["FC_num_"+str(i_num)] = module
+                i_num += 1
+            elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 ncols, dim_out, dropout = args
                 module = MLP(input_dim=ncols,
                             output_dim=dim_out,
                             num_layers=2,
                             p_dropout=dropout)
 
-                self.module_dict["FC_temp_"+str(i)] = module
-                h += 1
-            if datatype in ["xsd.string", "xsd.anyURI"]:
+                self.module_dict["FC_temp_"+str(i_temp)] = module
+                i_temp += 1
+            elif datatype in ["xsd.string", "xsd.anyURI"]:
                 model_config, dim_out, dropout = args
                 if language_model is None:
                     language_model = loadFromHub(model_config)
@@ -82,9 +85,9 @@ class MRGCN(nn.Module):
                                      output_dim=dim_out,
                                      p_dropout=dropout)
 
-                self.module_dict["Transformer_"+str(i)] = module
-                i += 1
-            if datatype == "blob.image":
+                self.module_dict["Transformer_"+str(i_llm)] = module
+                i_llm += 1
+            elif datatype == "blob.image":
                 model_config, transform_config, dim_out, dropout = args
                 if image_model is None:
                     image_model = loadFromHub(model_config)
@@ -93,14 +96,14 @@ class MRGCN(nn.Module):
                                   output_dim=dim_out,
                                   p_dropout=dropout)
 
-                self.module_dict["ImageCNN_"+str(j)] = module
-                j += 1
+                self.module_dict["ImageCNN_"+str(i_img)] = module
+                i_img += 1
 
                 if 'mean' in transform_config.keys()\
                     and 'std' in transform_config.keys():
                         self.im_norm = IMNORM(transform_config['mean'],
                                               transform_config['std'])
-            if datatype == "ogc.wktLiteral":
+            elif datatype == "ogc.wktLiteral":
                 nrows, dim_out, model_size, dropout = args
                 module = TCNN(features_in=nrows,
                               features_out=dim_out,
@@ -108,14 +111,19 @@ class MRGCN(nn.Module):
                               size=model_size)
                 seq_length = module.minimal_length
                 
-                self.module_dict["GeomCNN_"+str(k)] = module
-                k += 1
+                self.module_dict["GeomCNN_"+str(i_geo)] = module
+                i_geo += 1
+            else:
+                raise Exception("Datatype not supported: " + datatype)
 
             if datatype not in self.modality_modules.keys():
                 self.modality_modules[datatype] = list()
-            self.modality_modules[datatype].append((module, seq_length, dim_out))
+            self.modality_modules[datatype].append((module, seq_length,
+                                                    dim_out_, i_gate))
             self.modality_out_dim += dim_out
             self.compute_modality_embeddings = True
+
+            i_gate += 1
 
             device = torch.device("cpu")
             if gpu_acceleration:
@@ -130,6 +138,12 @@ class MRGCN(nn.Module):
 
             if seq_length > 0:
                 logger.debug(f"Setting sequence length to {seq_length} for datatype {datatype}")
+
+        num_gates = i_gate + 1
+        self.gates = None
+        if gated:
+            # start with the signal of all encoders heavily reduced
+            self.gates = nn.Parameter(torch.ones(num_gates) * 0.1)
 
         # add graph convolution layers
         self.rgcn = RGCN(modules, num_relations, num_nodes,
@@ -235,7 +249,14 @@ class MRGCN(nn.Module):
 
             num_sets = len(encoding_sets)
             for i, encoding_set in enumerate(encoding_sets):
-                module, _, out_dim = self.modality_modules[datatype][i]
+                module, _, out_dim, i_gate = self.modality_modules[datatype][i]
+
+                if self.gates is not None\
+                        and torch.isclose(self.gates[i_gate], 0):
+                    # skip computation if gate weight is zero
+                    offset += out_dim
+
+                    continue
 
                 encodings, node_idx, _ = encoding_set
                 common_nodes = torch_intersect1d(node_idx, batch_idx)
@@ -262,6 +283,10 @@ class MRGCN(nn.Module):
                     data = encodings[F_batch_mask].float()
 
                 out = module(data)
+                if self.gates is not None:
+                    # multiply with weight
+                    out *= self.gates[i_gate]
+
                 if self.X_device is not torch.device("cuda"):
                     # X is on cpu
                     out = out.to(torch.device("cpu"))
