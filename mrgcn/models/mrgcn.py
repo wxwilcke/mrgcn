@@ -119,7 +119,7 @@ class MRGCN(nn.Module):
             if datatype not in self.modality_modules.keys():
                 self.modality_modules[datatype] = list()
             self.modality_modules[datatype].append((module, seq_length,
-                                                    dim_out_, i_gate))
+                                                    dim_out, i_gate))
             self.modality_out_dim += dim_out
             self.compute_modality_embeddings = True
 
@@ -285,7 +285,7 @@ class MRGCN(nn.Module):
                 out = module(data)
                 if self.gates is not None:
                     # multiply with weight
-                    out *= self.gates[i_gate]
+                    out = torch.mul(out, self.gates[i_gate])
 
                 if self.X_device is not torch.device("cuda"):
                     # X is on cpu
