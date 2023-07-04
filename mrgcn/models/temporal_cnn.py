@@ -141,7 +141,7 @@ class TCNN(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Linear(cnn_out_dim, cnn_out_dim),
-            nn.PReLU(),
+            nn.ReLU(),
             nn.Dropout(p=p_dropout),
 
             nn.Linear(cnn_out_dim, features_out)

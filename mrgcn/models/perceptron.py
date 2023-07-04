@@ -29,7 +29,7 @@ class MLP(nn.Module):
         for hidden_dim in hidden_dims:
             mlp.extend([nn.Linear(layer_indim, hidden_dim, bias),
                         nn.Dropout(p=self.p_dropout, inplace=True),
-                        nn.PReLU()])
+                        nn.ReLU()])
 
             layer_indim = hidden_dim
 

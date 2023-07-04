@@ -21,7 +21,7 @@ class Transformer(nn.Module):
         inter_dim = inferOutputDim(model)
         self.pre_fc = nn.Linear(inter_dim, inter_dim, bias=bias)
         self.fc = nn.Linear(inter_dim, output_dim, bias=bias)
-        self.f_activation = nn.PReLU()
+        self.f_activation = nn.ReLU()
         self.module_dict['pre_fc'] = self.pre_fc
         self.module_dict['fc'] = self.fc
         self.module_dict['activation'] = self.f_activation
