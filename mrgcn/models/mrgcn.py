@@ -252,7 +252,7 @@ class MRGCN(nn.Module):
                 module, _, out_dim, i_gate = self.modality_modules[datatype][i]
 
                 if self.gates is not None\
-                        and torch.isclose(self.gates[i_gate], 0):
+                        and torch.isclose(self.gates[i_gate], torch.tensor(0.)):
                     # skip computation if gate weight is zero
                     offset += out_dim
 
