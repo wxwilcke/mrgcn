@@ -483,7 +483,7 @@ def merge_img_encoding_sets(encoding_sets):
     c, W, H = encoding_sets[0][0].shape[1:]  # assume same image size on all
 
     encodings_merged = np.zeros(shape=(N, c, W, H), dtype=np.float32)
-    node_idx_merged = node_idx
+    node_idx_merged = node_idx_unique
 
     merged_idx_map = {v:i for i,v in enumerate(node_idx_merged)}
     merged_idx_multvalue_map = {merged_idx_map[v]:None for v in node_idx_mult}
