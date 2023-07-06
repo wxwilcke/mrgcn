@@ -6,38 +6,43 @@ import logging
 logger = logging.getLogger(__name__)
 
 def optimizer_params(model, optim_config):
-    opt_params = list()
-    for module_name_numbered, module in model.module_dict.items():
-        module_name = module_name_numbered.split('_')[0]
+    opt_params = [{"params": list()}, {"params": list()}]
+    opt_params_index = {"default": 0, "gates": 1}
 
-        # filter parameters of frozen layers
-        params = [param for param in module.parameters() if param.requires_grad]
-        module_params = {'params': params}
-
-        if module_name == 'RGCN':
-            # use default lr
-            opt_params.append(module_params)
+    optim_config = {k:v for k,v in optim_config}
+    for param_name, param in model.named_parameters(recurse=True):
+        if not param.requires_grad:
+            # filter parameters of frozen layers
             continue
 
-        for datatype, params in optim_config:
-            if datatype in ['xsd.boolean', 'xsd.numeric']:
-                mod_name = 'FC'
-            elif datatype in ['xsd.date', 'xsd.dateTime', 'xsd.gYear']:
-                mod_name = 'FC'
-            elif datatype in ['xsd.string', 'xsd.anyURI']:
-                mod_name = 'Transformer'
-            elif datatype in ['ogc.wktLiteral']:
-                mod_name = 'GeomCNN'
-            elif datatype in ['blob.image']:
-                mod_name = 'ImageCNN'
+        param_name_lst = param_name.split('.')
+        if param_name_lst[0] != 'module_dict':
+            # use default settings
+            if param_name_lst[0] == "gate_weights":
+                # change differently fron default optimizer
+                opt_params[opt_params_index["gates"]]["params"].append(param)
             else:
-                raise Exception('Unsupported datatype: %s' % datatype)
+                opt_params[opt_params_index["default"]]["params"].append(param)
+            continue
 
-            if module_name == mod_name:
-                module_params.update(params)
-                break
+        module_name = param_name_lst[1]
+        datatype = '.'.join(module_name.split('_')[:2])
+        if datatype not in opt_params_index.keys():
+            i = len(opt_params)
+            opt_params_index[datatype] = i
+            opt_params.append({"params": list()})
 
-        opt_params.append(module_params)
+        i = opt_params_index[datatype]
+        opt_params[i]["params"].append(param)
+
+        if datatype in optim_config.keys()\
+                and len(optim_config[datatype]) > 0:
+            opt_params[i].update(optim_config[datatype])
+        else:  # add to default set
+            del opt_params[i]
+            del opt_params_index[datatype]
+
+            opt_params[opt_params_index["default"]]["params"].append(param)
 
     return opt_params
 

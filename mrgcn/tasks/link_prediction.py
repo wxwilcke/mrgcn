@@ -55,6 +55,10 @@ def run(A, X, X_width, data, tsv_writer,
                            weight_decay=config['model']['weight_decay'])
     criterion = nn.BCEWithLogitsLoss()
 
+    logger.debug("Initial gate weights set to\n"
+                 + "\n".join([f" {name}: {model.gate_weights[gate]:.3f}" for
+                              name, gate in model.gate_map.items()]))
+
     # mini batching
     test_batchsize = int(config['task']['test_batchsize'])
     mrr_batchsize = int(config['task']['mrr_batchsize'])
@@ -138,6 +142,10 @@ def run(A, X, X_width, data, tsv_writer,
     width_remain = term_width - len(t1_str)
     logging.info(t1_str + " " * (width_remain//2))          
 
+    logger.debug("Initial gate weights set to\n"
+                 + "\n".join([f" {name}: {model.gate_weights[gate]:.3f}" for
+                              name, gate in model.gate_map.items()]))
+
     # Log wall-clock time
     t0 = time()
 
@@ -149,7 +157,7 @@ def run(A, X, X_width, data, tsv_writer,
         batch.pad_(pad_symbols=pad_symbol_map)
         batch.to_dense_()
         batch.as_tensors_()
-        batch.to_(model.devices)
+        batch.to(model.devices)
         batch_data = torch.from_numpy(batch_data)
         test_batches[i] = (batch, batch_data)
 

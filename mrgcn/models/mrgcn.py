@@ -47,6 +47,7 @@ class MRGCN(nn.Module):
         self.devices = dict()
 
         i_gate = 0  # index of weight in gates vector
+        self.gate_map = dict()
 
         # add embedding layers
         self.modality_modules = dict()
@@ -55,6 +56,7 @@ class MRGCN(nn.Module):
         i_num, i_temp, i_llm, i_img, i_geo = 0, 0, 0, 0, 0
         for datatype, args, gpu_acceleration in embedding_modules:
             module = None
+            mod_name = ""
             dim_out = -1
             seq_length = -1
 
@@ -65,7 +67,8 @@ class MRGCN(nn.Module):
                             num_layers=1,
                             p_dropout=dropout)
 
-                self.module_dict["FC_num_"+str(i_num)] = module
+                mod_name = datatype.replace('.', '_') + "_" + str(i_num)
+                self.module_dict[mod_name] = module
                 i_num += 1
             elif datatype in ["xsd.date", "xsd.dateTime", "xsd.gYear"]:
                 ncols, dim_out, dropout = args
@@ -74,7 +77,8 @@ class MRGCN(nn.Module):
                             num_layers=2,
                             p_dropout=dropout)
 
-                self.module_dict["FC_temp_"+str(i_temp)] = module
+                mod_name = datatype.replace('.', '_') + "_" + str(i_temp)
+                self.module_dict[mod_name] = module
                 i_temp += 1
             elif datatype in ["xsd.string", "xsd.anyURI"]:
                 model_config, dim_out, dropout = args
@@ -85,7 +89,8 @@ class MRGCN(nn.Module):
                                      output_dim=dim_out,
                                      p_dropout=dropout)
 
-                self.module_dict["Transformer_"+str(i_llm)] = module
+                mod_name = datatype.replace('.', '_') + "_" + str(i_llm)
+                self.module_dict[mod_name] = module
                 i_llm += 1
             elif datatype == "blob.image":
                 model_config, transform_config, dim_out, dropout = args
@@ -96,7 +101,8 @@ class MRGCN(nn.Module):
                                   output_dim=dim_out,
                                   p_dropout=dropout)
 
-                self.module_dict["ImageCNN_"+str(i_img)] = module
+                mod_name = datatype.replace('.', '_') + "_" + str(i_img)
+                self.module_dict[mod_name] = module
                 i_img += 1
 
                 if 'mean' in transform_config.keys()\
@@ -110,8 +116,9 @@ class MRGCN(nn.Module):
                               p_dropout=dropout,
                               size=model_size)
                 seq_length = module.minimal_length
-                
-                self.module_dict["GeomCNN_"+str(i_geo)] = module
+               
+                mod_name = datatype.replace('.', '_') + "_" + str(i_geo)
+                self.module_dict[mod_name] = module
                 i_geo += 1
             else:
                 raise Exception("Datatype not supported: " + datatype)
@@ -123,6 +130,7 @@ class MRGCN(nn.Module):
             self.modality_out_dim += dim_out
             self.compute_modality_embeddings = True
 
+            self.gate_map[mod_name] = i_gate
             i_gate += 1
 
             device = torch.device("cpu")
@@ -139,17 +147,18 @@ class MRGCN(nn.Module):
             if seq_length > 0:
                 logger.debug(f"Setting sequence length to {seq_length} for datatype {datatype}")
 
-        num_gates = i_gate + 1
-        self.gates = None
+        num_gates = i_gate
+        self.gate_weights = torch.ones(num_gates)
         if gated:
             # start with the signal of all encoders heavily reduced
-            self.gates = nn.Parameter(torch.ones(num_gates) * 0.1)
+            self.gate_weights = nn.Parameter(torch.mul(self.gate_weights, 0.1))
+        else:
+            self.gate_weights.requires_grad = False
 
         # add graph convolution layers
         self.rgcn = RGCN(modules, num_relations, num_nodes,
                           num_bases, p_dropout, featureless, bias,
                           link_prediction)
-        self.module_dict["RGCN"] = self.rgcn
 
         # record all devices used by the modules
         device = torch.device("cpu")
@@ -251,8 +260,8 @@ class MRGCN(nn.Module):
             for i, encoding_set in enumerate(encoding_sets):
                 module, _, out_dim, i_gate = self.modality_modules[datatype][i]
 
-                if self.gates is not None\
-                        and torch.isclose(self.gates[i_gate], torch.tensor(0.)):
+                if torch.isclose(self.gate_weights[i_gate],
+                                          torch.tensor(0.)):
                     # skip computation if gate weight is zero
                     offset += out_dim
 
@@ -283,9 +292,7 @@ class MRGCN(nn.Module):
                     data = encodings[F_batch_mask].float()
 
                 out = module(data)
-                if self.gates is not None:
-                    # multiply with weight
-                    out = torch.mul(out, self.gates[i_gate])
+                out = torch.mul(out, self.gate_weights[i_gate])
 
                 if self.X_device is not torch.device("cuda"):
                     # X is on cpu

@@ -37,6 +37,15 @@ def run(A, X, Y, X_width, tsv_writer, config,
                            weight_decay=config['model']['weight_decay'])
     criterion = nn.CrossEntropyLoss()
 
+    logger.debug("Initial gate weights set to\n"
+                 + "\n".join([f" {name}: {model.gate_weights[gate]:.3f}" for
+                              name, gate in model.gate_map.items()]))
+   
+    #for name, param in model.named_parameters(recurse=True):
+    #    print(f"{name}: {param.shape} - grad: {param.requires_grad}")
+    #for name, module in model.named_modules(remove_duplicate=True):
+    #    print(f"{name}: {module}")
+
     # train model
     nepoch = config['model']['epoch']
     batchsize = config['task']['batchsize']
@@ -84,6 +93,9 @@ def run(A, X, Y, X_width, tsv_writer, config,
                              "-1", "-1"])
 
     logging.info("Training time: {:.2f}s".format(time()-t0))
+    logger.debug("Final gate weights set to\n"
+                 + "\n".join([f" {name}: {model.gate_weights[gate]:.3f}" for
+                              name, gate in model.gate_map.items()]))
 
     # test model
     loss, acc, labels, targets = test_model(A, model, criterion, X, Y, 

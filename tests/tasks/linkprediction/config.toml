@@ -62,7 +62,7 @@ noise_multiplier = 0.0
 
 [[graph.features]]
 datatype = 'xsd.string'
-include = false
+include = true
 share_weights = true
 trim_outliers = false
 remove_outliers = false

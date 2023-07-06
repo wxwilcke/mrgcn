@@ -17,22 +17,16 @@ class ImageCNN(nn.Module):
         self.base_model = stripClassifier(model)
         if self.finetune:
             freeze_(self.base_model)
-        self.module_dict['pretrained_head'] = self.base_model
         
         inter_dim = inferOutputDim(self.base_model)
         self.pre_fc = nn.Linear(inter_dim, inter_dim, bias=bias)
         self.fc = nn.Linear(inter_dim, output_dim, bias=bias)
         self.f_activation = nn.ReLU()
-        self.module_dict['pre_fc'] = self.pre_fc
-        self.module_dict['fc'] = self.fc
-        self.module_dict['activation'] = self.f_activation
 
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.module_dict['pool'] = self.avgpool
         self.dropout = None
         if p_dropout > 0:
             self.dropout = nn.Dropout(p=p_dropout)
-            self.module_dict['dropout'] = self.dropout
 
     def forward(self, X):
         output = self.base_model(X)
