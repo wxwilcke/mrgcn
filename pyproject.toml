@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mrgcn"
-version = "2.1"
+version = "3.0.0"
 authors = [
   { name="Xander Wilcke", email="w.x.wilcke@vu.nl" },
 ]
