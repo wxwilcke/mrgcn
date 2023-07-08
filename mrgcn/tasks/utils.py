@@ -34,15 +34,7 @@ def optimizer_params(model, optim_config):
 
         i = opt_params_index[datatype]
         opt_params[i]["params"].append(param)
-
-        if datatype in optim_config.keys()\
-                and len(optim_config[datatype]) > 0:
-            opt_params[i].update(optim_config[datatype])
-        else:  # add to default set
-            del opt_params[i]
-            del opt_params_index[datatype]
-
-            opt_params[opt_params_index["default"]]["params"].append(param)
+        opt_params[i].update(optim_config[datatype])
 
     return opt_params
 

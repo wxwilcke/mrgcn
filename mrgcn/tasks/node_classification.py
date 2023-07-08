@@ -35,6 +35,7 @@ def run(A, X, Y, X_width, tsv_writer, config,
     optimizer = optim.Adam(opt_params,
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['weight_decay'])
+    print(optimizer)
     criterion = nn.CrossEntropyLoss()
 
     logger.debug("Initial gate weights set to\n"
