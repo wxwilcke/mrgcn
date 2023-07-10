@@ -142,13 +142,14 @@ early_stopping.tolerance = 0.01
 
 [model]
 epoch = 50
-learning_rate = 0.01
+learning_rate = 0.001
 num_bases = 0
 p_dropout = 0
 weight_decay = 0.0
 l1_lambda = 0.0
 l2_lambda = 0.0
 bias = false
+gates_lr = 0.01
 
 [[model.layers]]
 type = 'mrgcn'

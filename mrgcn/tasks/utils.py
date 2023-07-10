@@ -9,7 +9,6 @@ def optimizer_params(model, optim_config):
     opt_params = [{"params": list()}, {"params": list()}]
     opt_params_index = {"default": 0, "gates": 1}
 
-    optim_config = {k:v for k,v in optim_config}
     for param_name, param in model.named_parameters(recurse=True):
         if not param.requires_grad:
             # filter parameters of frozen layers
@@ -21,6 +20,9 @@ def optimizer_params(model, optim_config):
             if param_name_lst[0] == "gate_weights":
                 # change differently fron default optimizer
                 opt_params[opt_params_index["gates"]]["params"].append(param)
+
+                gate_weights = optim_config['gate_weights']
+                opt_params[opt_params_index["gates"]].update(gate_weights)
             else:
                 opt_params[opt_params_index["default"]]["params"].append(param)
             continue

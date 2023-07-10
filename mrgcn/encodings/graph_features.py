@@ -65,7 +65,7 @@ def setup_features(F, num_nodes, featureless, config):
     X = [np.empty((num_nodes, X_width), dtype=float)]  # dummy
 
     modules_config = list()
-    optimizer_config = list()
+    optimizer_config = dict()
     if not featureless:
         features_enabled = features_included(config)
         logging.debug("Features included: {}".format(", ".join(features_enabled)))
@@ -82,6 +82,16 @@ def setup_features(F, num_nodes, featureless, config):
                                                                                           feature_configs)
         X_width += feat_width
         X.extend(features)
+ 
+        # get optimizer config for gate weights
+        optim_config = dict()
+        if 'model' in config.keys():
+            for k,v in config['model'].items():
+                k = k.split('_')
+                if k[0] == "gates":
+                    optim_config['_'.join(k[1:])] = v
+
+            optimizer_config['gate_weights'] = optim_config
 
     return (X, X_width, modules_config, optimizer_config)
 
@@ -107,7 +117,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
     embeddings_width = 0
     modules_config = list()
     embeddings = list()
-    optimizer_config = list()
+    optimizer_config = dict()
 
     datatypes = list(set.intersection(set(features_enabled),
                                       set(F.keys()),
@@ -129,7 +139,7 @@ def construct_feature_matrix(F, features_enabled, feature_configs):
             param_name = param_name.lstrip('optim_')
             optim_params[param_name] = param_value
 
-        optimizer_config.append((datatype, optim_params))
+        optimizer_config[datatype] = optim_params
         encoding_sets = F.pop(datatype, list())
 
         # by default, the encodings for each modality are stored
