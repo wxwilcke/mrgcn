@@ -5,9 +5,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def optimizer_params(model, optim_config):
-    opt_params = [{"params": list()}, {"params": list()}]
-    opt_params_index = {"default": 0, "gates": 1}
+def optimizer_params(model, optim_config, featureless):
+    opt_params = [{"params": list()}]
+    opt_params_index = {"default": 0}
+    if not featureless:
+        opt_params.append({"params": list()})
+        opt_params_index["gates"] = 1
 
     for param_name, param in model.named_parameters(recurse=True):
         if not param.requires_grad:
@@ -16,17 +19,18 @@ def optimizer_params(model, optim_config):
 
         param_name_lst = param_name.split('.')
         if param_name_lst[0] != 'module_dict':
-            # use default settings
-            if param_name_lst[0] == "gate_weights":
-                # change differently fron default optimizer
+            if not featureless and param_name_lst[0] == "gate_weights":
+                # add separate optimizer for gate weights
                 opt_params[opt_params_index["gates"]]["params"].append(param)
 
                 gate_weights = optim_config['gate_weights']
                 opt_params[opt_params_index["gates"]].update(gate_weights)
             else:
+                # use default settings for everything else
                 opt_params[opt_params_index["default"]]["params"].append(param)
             continue
 
+        # add datatype-specific configuration
         module_name = param_name_lst[1]
         datatype = '.'.join(module_name.split('_')[:2])
         if datatype not in opt_params_index.keys():

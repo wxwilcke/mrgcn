@@ -149,7 +149,7 @@ class MRGCN(nn.Module):
 
         num_gates = i_gate
         self.gate_weights = torch.ones(num_gates)
-        if gated:
+        if gated and num_gates > 0:
             # start with the signal of all encoders heavily reduced
             self.gate_weights = nn.Parameter(torch.mul(self.gate_weights, 0.1))
         else:

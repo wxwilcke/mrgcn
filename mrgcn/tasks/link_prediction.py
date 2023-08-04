@@ -49,7 +49,7 @@ def run(A, X, X_width, data, tsv_writer,
     # get sizes from dataset
     # compile model
     model = build_model(X_width, A, modules_config, config, featureless)
-    opt_params = optimizer_params(model, optimizer_config)
+    opt_params = optimizer_params(model, optimizer_config, featureless)
     optimizer = optim.Adam(opt_params,
                            lr=config['model']['learning_rate'],
                            weight_decay=config['model']['weight_decay'])
